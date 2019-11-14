@@ -408,6 +408,7 @@ class VQE(VQAlgorithm):
                                                 self._parameterized_circuits is not None)
 
         for idx, _ in enumerate(parameter_sets):
+            print(parameter_sets)
             mean, std = self._operator.evaluate_with_result(
                 result=result, statevector_mode=self._quantum_instance.is_statevector,
                 use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,

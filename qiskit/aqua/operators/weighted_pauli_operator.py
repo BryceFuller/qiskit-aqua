@@ -634,17 +634,25 @@ class WeightedPauliOperator(BaseOperator):
         else:
             if not wave_function.has_register(qr):
                 raise AquaError("The provided QuantumRegister (qr) is not in the circuit.")
-
         n_qubits = self.num_qubits
         instructions = self.evaluation_instruction(statevector_mode, use_simulator_snapshot_mode)
-        circuits = []
+        circuits = []  
         if use_simulator_snapshot_mode:
-            circuit = wave_function.copy(name=circuit_name_prefix + 'snapshot_mode')
-            # Add expectation value snapshot instruction
-            instr = instructions.get('expval_snapshot', None)
-            if instr is not None:
-                circuit.append(instr, qr)
-            circuits.append(circuit)
+            snapshot_individual_terms = False
+            if snapshot_individual_terms:
+                circuit = wave_function.copy(name=circuit_name_prefix + 'snapshot_mode')
+                # Add expectation value snapshot instruction
+                for instr in instructions.get('expval_snapshots', []):
+                    circuit.append(instr, qr)
+                circuits.append(circuit)
+            else:
+                circuit = wave_function.copy(name=circuit_name_prefix + 'snapshot_mode')
+                # Add expectation value snapshot instruction
+                instr = instructions.get('expval_snapshot', None)
+                if instr is not None:
+                    circuit.append(instr, qr)
+                circuits.append(circuit)
+            
         elif statevector_mode:
             circuits.append(wave_function.copy(name=circuit_name_prefix + 'psi'))
             for _, pauli in self._paulis:
@@ -692,8 +700,21 @@ class WeightedPauliOperator(BaseOperator):
         if use_simulator_snapshot_mode and self.paulis:
             # pylint: disable=import-outside-toplevel
             from qiskit.providers.aer.extensions import SnapshotExpectationValue
-            snapshot = SnapshotExpectationValue('expval', self.paulis, variance=True)
-            instructions = {'expval_snapshot': snapshot}
+            #snapshot = SnapshotExpectationValue('expval', self.paulis, variance=True)
+            #instructions = {'expval_snapshots': snapshot}
+            
+            snapshot_individual_terms = False
+
+            if snapshot_individual_terms:
+                instructions = {}
+                for i, pauli in enumerate(self.paulis):
+                    snapshot = SnapshotExpectationValue('expval_term_{}'.format(i), [pauli])
+                    print(pauli)
+                    instructions['expval_snapshots_{}'.format(i)] = snapshot
+            else:
+                snapshot = SnapshotExpectationValue('expval', self.paulis)
+                instructions = {'expval_snapshots': [snapshot]}
+            
         elif statevector_mode:
             for _, pauli in self._paulis:
                 tmp_qc = qc.copy(name="Pauli " + pauli.to_label())
@@ -741,12 +762,24 @@ class WeightedPauliOperator(BaseOperator):
         if self.is_empty():
             raise AquaError("Operator is empty, check the operator.")
 
+        print(statevector_mode)
+        print(use_simulator_snapshot_mode)
+
         avg, std_dev, variance = 0.0, 0.0, 0.0
         if use_simulator_snapshot_mode:
-            snapshot_data = result.data(
-                circuit_name_prefix + 'snapshot_mode')['snapshots']
-            expval = snapshot_data['expectation_value']['expval'][0]['value']
-            avg = expval[0] + 1j * expval[1]
+            print(circuit_name_prefix)
+            print(result)
+            snapshot_data = result.data(circuit_name_prefix + 'snapshot_mode')['snapshots']
+            
+            snapshot_individual_terms = True
+            if snapshot_individual_terms:
+                avg = 0
+                for i in range(len(self.paulis)):
+                    expval = snapshot_data['expval_term_{}'.format(i)][0]['value']
+                    avg += expval[0] + 1j * expval[1]
+            else:
+                expval = snapshot_data['expectation_value']['expval'][0]['value']
+                avg = expval[0] + 1j * expval[1]
         elif statevector_mode:
             quantum_state = np.asarray(result.get_statevector(circuit_name_prefix + 'psi'))
             for weight, pauli in self._paulis:
