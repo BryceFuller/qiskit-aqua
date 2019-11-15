@@ -83,7 +83,7 @@ class VQE(VQAlgorithm):
 
     def __init__(self, operator, var_form, optimizer,
                  initial_point=None, max_evals_grouped=1, aux_operators=None, callback=None,
-                 auto_conversion=True):
+                 auto_conversion=True, snapshot_individual_terms=False, simulated_shots=1024):
         """Constructor.
 
         Args:
@@ -113,6 +113,8 @@ class VQE(VQAlgorithm):
                          cost_fn=self._energy_evaluation,
                          initial_point=initial_point)
         self._use_simulator_snapshot_mode = None
+        self._snapshot_individual_terms = snapshot_individual_terms
+        self._simulated_shots = simulated_shots
         self._ret = None
         self._eval_time = None
         self._optimizer.set_max_evals_grouped(max_evals_grouped)
@@ -256,6 +258,7 @@ class VQE(VQAlgorithm):
         circuits = self._operator.construct_evaluation_circuit(
             wave_function, statevector_mode,
             use_simulator_snapshot_mode=use_simulator_snapshot_mode,
+            snapshot_individual_terms=self._snapshot_individual_terms,
             circuit_name_prefix=circuit_name_prefix)
         return circuits
 
@@ -273,6 +276,7 @@ class VQE(VQAlgorithm):
                     wave_function=temp_circuit,
                     statevector_mode=self._quantum_instance.is_statevector,
                     use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
+                    snapshot_individual_terms=self._snapshot_individual_terms,
                     circuit_name_prefix=str(idx))
             else:
                 circuit = None
@@ -290,6 +294,8 @@ class VQE(VQAlgorithm):
                     mean, std = operator.evaluate_with_result(
                         result=result, statevector_mode=self._quantum_instance.is_statevector,
                         use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
+                        snapshot_individual_terms=self._snapshot_individual_terms,
+                        simulated_shots=self._simulated_shots,
                         circuit_name_prefix=str(idx))
 
                 mean = mean.real if abs(mean.real) > threshold else 0.0
@@ -408,10 +414,11 @@ class VQE(VQAlgorithm):
                                                 self._parameterized_circuits is not None)
 
         for idx, _ in enumerate(parameter_sets):
-            print(parameter_sets)
             mean, std = self._operator.evaluate_with_result(
                 result=result, statevector_mode=self._quantum_instance.is_statevector,
                 use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
+                simulated_shots=self._simulated_shots,
+                snapshot_individual_terms=self._snapshot_individual_terms,
                 circuit_name_prefix=str(idx))
             mean_energy.append(np.real(mean))
             std_energy.append(np.real(std))
@@ -419,7 +426,6 @@ class VQE(VQAlgorithm):
             if self._callback is not None:
                 self._callback(self._eval_count, parameter_sets[idx], np.real(mean), np.real(std))
             logger.info('Energy evaluation %s returned %s', self._eval_count, np.real(mean))
-
         return mean_energy if len(mean_energy) > 1 else mean_energy[0]
 
     def get_optimal_cost(self):
