@@ -16,3 +16,5 @@
 
 from .gradient import Gradient
 from .natural_gradient import NaturalGradient
+
+__all__ = ['Gradient', 'NaturalGradient']
