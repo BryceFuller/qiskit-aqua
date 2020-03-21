@@ -43,12 +43,15 @@ class NaturalGradient(Gradient):
         Args:
             parameter: The parameter with respect to which the gradient is computed.
         """
-        # TODO
+        # TODO compute gradient based on the gradient circuits
+        gradient_circuits = self.construct_circuits(parameter)
+
+        # TODO delete this below here
         print('The current circuit is')
         print(self._circuit.draw())
         print('We are computing the derivative with respect to', parameter)
         print('The gradient circuits are:')
-        for circuit in self.construct_circuits(parameter):
+        for circuit in gradient_circuits:
             print(circuit.draw())
 
     def construct_circuits(self, parameter: Parameter, before: bool = True) -> List[QuantumCircuit]:
@@ -80,10 +83,16 @@ class NaturalGradient(Gradient):
             gradient_circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
             gradient_circuit.data = self._circuit.data
 
+            # TODO add pre-operations on the ancilla qubit a
+
             additional_qubits = ([ancilla], [])
             success = NaturalGradient.insert_gate(gradient_circuit, reference_gate, entangler_gate,
                                                   additional_qubits=additional_qubits,
                                                   before=before)
+
+            # TODO trim circuit
+
+            # TODO add post-operation on the ancilla qubit
 
             if not success:
                 raise AquaError('Could not insert the controlled gate, something went wrong!')
