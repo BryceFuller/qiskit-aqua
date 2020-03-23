@@ -76,8 +76,8 @@ class NaturalGradient(Gradient):
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
         for reference_gate in parameterized_gates:
-            # get the entangler gate (raises an error if the parameterized gate is not supported)
-            entangler_gate = NaturalGradient.get_entangler_gate(reference_gate)
+            # get the controlled gate (raises an error if the parameterized gate is not supported)
+            entangler_gate = NaturalGradient.get_controlled_gate(reference_gate)
 
             # create a copy of the original circuit with the same registers
             gradient_circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
@@ -136,8 +136,8 @@ class NaturalGradient(Gradient):
         return False
 
     @staticmethod
-    def get_entangler_gate(gate: Gate) -> ControlledGate:
-        """Get the entangler gate for the natural gradient.
+    def get_controlled_gate(gate: Gate) -> ControlledGate:
+        """Get the controlled gate for the natural gradient.
 
         Currently, only pauli rotation gates are suppported.
 
