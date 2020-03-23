@@ -12,27 +12,9 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-"""
-Chemistry Applications (:mod:`qiskit.chemistry.applications`)
-=============================================================
-These are chemistry applications leveraging quantum algorithms
-from Aqua.
+"""The module for Aqua's gradients."""
 
-.. currentmodule:: qiskit.chemistry.applications
+from .gradient import Gradient
+from .natural_gradient import NaturalGradient
 
-Applications
-============
-
-.. autosummary::
-   :toctree: ../stubs/
-   :nosignatures:
-
-   MolecularGroundStateEnergy
-
-"""
-
-from .molecular_ground_state_energy import MolecularGroundStateEnergy
-
-__all__ = [
-    'MolecularGroundStateEnergy'
-]
+__all__ = ['Gradient', 'NaturalGradient']
