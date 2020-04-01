@@ -386,6 +386,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         Raises:
             AquaError: wrong setting of operator and backend.
         """
+        
         if self.operator is None:
             raise AquaError("Operator was never provided")
 
@@ -421,7 +422,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._eval_count = 0
         vqresult = self.find_minimum(initial_point=self.initial_point,
                                      var_form=self.var_form,
-                                     cost_fn=self._energy_evaluation,
+                                     cost_fn=self.DNN_energy_evaluation,
                                      optimizer=self.optimizer)
 
         # TODO remove all former dictionary logic
@@ -454,6 +455,85 @@ class VQE(VQAlgorithm, MinimumEigensolver):
 
         self.cleanup_parameterized_circuits()
         return result
+
+    # This is the objective function to be passed to the optimizer that is used for evaluation
+    def DNN_energy_evaluation(self, parameters):
+        """
+        Evaluate energy at given parameters for the variational form.
+
+        Args:
+            parameters (numpy.ndarray): parameters for variational form.
+
+        Returns:
+            Union(float, list[float]): energy of the hamiltonian of each parameter.
+        """
+        num_parameter_sets = len(parameters) // self._var_form.num_parameters
+        parameter_sets = np.split(parameters, num_parameter_sets)
+        mean_energy = []
+        std_energy = []
+        print('called DNN :)')
+        def _build_parameterized_circuits():
+            if self._var_form.support_parameterized_circuit and \
+                    self._parameterized_circuits is None:
+                parameterized_circuits = self.construct_circuit(
+                    self._var_form_params,
+                    statevector_mode=self._quantum_instance.is_statevector,
+                    use_simulator_snapshot_mode=self._use_simulator_snapshot_mode)
+
+                self._parameterized_circuits = \
+                    self._quantum_instance.transpile(parameterized_circuits)
+
+        _build_parameterized_circuits()   
+        circuits = []
+        # binding parameters here since the circuits had been transpiled
+        if self._parameterized_circuits is not None:
+            print(parameter_sets)
+            for idx, parameter in enumerate(parameter_sets):
+                curr_param = {self._var_form_params: parameter}
+                for qc in self._parameterized_circuits:
+                    tmp = qc.bind_parameters(curr_param)
+                    tmp.name = str(idx) + tmp.name
+                    circuits.append(tmp)
+            to_be_simulated_circuits = circuits
+            print(len(circuits))
+        else:
+            print("Check 2 activated - BUT WHY")
+            for idx, parameter in enumerate(parameter_sets):
+                circuit = self.construct_circuit(
+                    parameter,
+                    statevector_mode=self._quantum_instance.is_statevector,
+                    use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
+                    circuit_name_prefix=str(idx))
+                circuits.append(circuit)
+            to_be_simulated_circuits = functools.reduce(lambda x, y: x + y, circuits)
+
+        start_time = time()
+        result = self._quantum_instance.execute(to_be_simulated_circuits,
+                                                self._parameterized_circuits is not None)
+
+        for idx, _ in enumerate(parameter_sets):
+            mean, std = self._operator.evaluate_with_result(
+                result=result, statevector_mode=self._quantum_instance.is_statevector,
+                use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
+                circuit_name_prefix=str(idx))
+            end_time = time()
+            mean_energy.append(np.real(mean))
+            std_energy.append(np.real(std))
+            self._eval_count += 1
+            if self._callback is not None:
+                self._callback(self._eval_count, parameter_sets[idx], np.real(mean), np.real(std))
+
+            # If there is more than one parameter set then the calculation of the
+            # evaluation time has to be done more carefully,
+            # therefore we do not calculate it
+            if len(parameter_sets) == 1:
+                logger.info('Energy evaluation %s returned %s - %.5f (ms)',
+                            self._eval_count, np.real(mean), (end_time - start_time) * 1000)
+            else:
+                logger.info('Energy evaluation %s returned %s',
+                            self._eval_count, np.real(mean))
+
+        return mean_energy if len(mean_energy) > 1 else mean_energy[0]
 
     # This is the objective function to be passed to the optimizer that is used for evaluation
     def _energy_evaluation(self, parameters):
@@ -531,6 +611,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
 
         return mean_energy if len(mean_energy) > 1 else mean_energy[0]
 
+    
     def get_optimal_cost(self):
         if 'opt_params' not in self._ret:
             raise AquaError("Cannot return optimal cost before running the "
