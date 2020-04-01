@@ -1,7 +1,11 @@
+abelian
+abstractmethod
 adag
 adam
+adjoints
 ae
 aer
+Aer's
 aerjob
 aij
 al
@@ -23,10 +27,12 @@ appfactory
 arcsin
 args
 asmatrix
+assertEqual
 ast
 atol
 autosummary
 autorecovery
+auxops
 babbush
 backend
 backends
@@ -51,7 +57,9 @@ bpa
 brassard
 bravyi
 broyden
+bstr
 cargs
+cbits
 ccphase
 cct
 ccx
@@ -69,6 +77,7 @@ clopper
 cls
 cnf
 cnot
+cnots
 cnt
 cobyla
 coef
@@ -77,6 +86,7 @@ coeffs
 commutativities
 comparator
 comparators
+composable
 conda
 conf
 config
@@ -95,6 +105,7 @@ cvs
 cx
 cx's
 cz
+dag
 das
 dat
 dataondemand
@@ -108,6 +119,7 @@ deepcopy
 deepcopying
 deregisters
 deriv
+dest
 deutsch
 devs
 devsglobals
@@ -142,7 +154,10 @@ eigs
 eigvecs
 einact
 einsum
+elif
 els
+endian
+endianness
 endif
 entangler
 enum
@@ -157,6 +172,7 @@ eval
 evals
 exc
 excitations
+exp's
 expr
 factorizers
 factr
@@ -168,6 +184,7 @@ fermions
 fileio
 filepath
 fm
+fn
 fock
 formatter
 formulae
@@ -198,6 +215,7 @@ grover
 gset
 gto
 gtol
+hacky
 hadamard
 halfangle
 hamiltonian
@@ -209,8 +227,10 @@ hb
 hhl
 hk
 https
+Hs
 iadd
 idx
+iexp
 ifdef
 ifortvars
 ign
@@ -224,6 +244,7 @@ indice
 indices
 indvar
 init
+inits
 initializer
 initio
 inline
@@ -244,6 +265,7 @@ iso
 isub
 isym
 iteratively
+IZ
 izaac
 jac
 jacobian
@@ -253,17 +275,22 @@ jt
 jth
 jw
 kaicher
+Kandala
 ket
 killoran
 kingma
 kitaev
 kitagawa
+kron
+krons
 kronecker
+kronpower
 kth
 kumar
 kwargs
 labelled
 ldots
+LegacyBaseOperator
 len
 leq
 lhs
@@ -281,6 +308,7 @@ lst
 majorana
 mathbb
 mathsf
+matmul
 matrixoperator
 maxcut
 maxdepth
@@ -363,10 +391,15 @@ ok
 onee
 online
 onwards
+OOM
+OperatorBase
+oplist
+oplist's
 oplus
 optim
 optimizer's
 optimizers
+opv
 orbsym
 org
 outpath
@@ -380,6 +413,7 @@ paulische
 pca
 pdf
 penality
+performant
 ph
 piecewise
 plesset
@@ -408,14 +442,17 @@ qancilla
 qargs
 qasm
 qbit
+qbits
 qc
 qcmatrixio
+QDrift
 qeom
 QFactory
 qft
 qfts
 qgan
 qiskit
+Qiskit's
 qith
 qload
 qmolecule
@@ -441,6 +478,7 @@ readme
 reala
 reddi
 refactor
+reimplement
 renormalize
 renyi
 reparameterizing
@@ -457,6 +495,7 @@ rsgtu
 rtype
 runarsson
 RunConfig
+rx's
 ry
 rz
 sanjiv
@@ -464,6 +503,7 @@ sashank
 satyen
 savefile
 sca
+scalably
 scf
 scikit
 schemas
@@ -484,8 +524,11 @@ sj
 sklearn
 slsqp
 spsa
+spmatrix
 sqrt
 srange
+Ss
+StateFn
 statevector
 statevectors
 stdout
@@ -512,6 +555,8 @@ sysctl
 tbd
 tdg
 temme
+tensored
+tensorpower
 tensorproduct
 terra
 terra's
@@ -534,6 +579,10 @@ transpile
 transpiled
 transpiler
 tranter
+travers
+trotterization
+trotterize
+trotterizing
 trunc
 ub
 uccsd
@@ -594,4 +643,9 @@ zzz
 ucc
 uccd
 UCCS
+vec
+versioning
+vir
+wf
+Ze
 vir

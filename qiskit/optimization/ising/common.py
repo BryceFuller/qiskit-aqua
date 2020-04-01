@@ -2,7 +2,7 @@
 
 # This code is part of Qiskit.
 #
-# (C) Copyright IBM 2018, 2019.
+# (C) Copyright IBM 2018, 2020.
 #
 # This code is licensed under the Apache License, Version 2.0. You may
 # obtain a copy of this license in the LICENSE.txt file in the root directory
@@ -19,6 +19,7 @@ from collections import OrderedDict
 import numpy as np
 
 from qiskit.aqua import aqua_globals
+from qiskit.aqua.operators import StateFn
 
 
 def random_graph(n, weight_range=10, edge_prob=0.3, negative_weight=True,
@@ -44,7 +45,7 @@ def random_graph(n, weight_range=10, edge_prob=0.3, negative_weight=True,
     w = np.zeros((n, n))
     m = 0
     for i in range(n):
-        for j in range(i+1, n):
+        for j in range(i + 1, n):
             if aqua_globals.random.rand() <= edge_prob:
                 w[i, j] = aqua_globals.random.randint(1, weight_range)
                 if aqua_globals.random.rand() >= 0.5 and negative_weight:
@@ -55,7 +56,7 @@ def random_graph(n, weight_range=10, edge_prob=0.3, negative_weight=True,
         with open(savefile, 'w') as outfile:
             outfile.write('{} {}\n'.format(n, m))
             for i in range(n):
-                for j in range(i+1, n):
+                for j in range(i + 1, n):
                     if w[i, j] != 0:
                         outfile.write('{} {} {}\n'.format(i + 1, j + 1, w[i, j]))
     return w
@@ -76,7 +77,7 @@ def random_number_list(n, weight_range=100, savefile=None, seed=None):
     if seed:
         aqua_globals.random_seed = seed
 
-    number_list = aqua_globals.random.randint(low=1, high=(weight_range+1), size=n)
+    number_list = aqua_globals.random.randint(low=1, high=(weight_range + 1), size=n)
     if savefile:
         with open(savefile, 'w') as outfile:
             for i in range(n):
@@ -155,6 +156,10 @@ def sample_most_likely(state_vector):
     if isinstance(state_vector, (OrderedDict, dict)):
         # get the binary string with the largest count
         binary_string = sorted(state_vector.items(), key=lambda kv: kv[1])[-1][0]
+        x = np.asarray([int(y) for y in reversed(list(binary_string))])
+        return x
+    elif isinstance(state_vector, StateFn):
+        binary_string = list(state_vector.sample().keys())[0]
         x = np.asarray([int(y) for y in reversed(list(binary_string))])
         return x
     else:

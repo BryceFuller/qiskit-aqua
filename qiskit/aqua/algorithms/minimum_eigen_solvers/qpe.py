@@ -22,6 +22,7 @@ import warnings
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Pauli
+
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance
 from qiskit.aqua.operators import op_converter
@@ -29,7 +30,7 @@ from qiskit.aqua.utils import get_subsystem_density_matrix
 from qiskit.aqua.algorithms import QuantumAlgorithm
 from qiskit.aqua.circuits import PhaseEstimationCircuit
 from qiskit.aqua.operators import WeightedPauliOperator
-from qiskit.aqua.operators import BaseOperator
+from qiskit.aqua.operators import LegacyBaseOperator
 from qiskit.aqua.components.initial_states import InitialState
 from qiskit.aqua.components.iqfts import IQFT
 from qiskit.aqua.utils.validation import validate_min, validate_in_set
@@ -58,9 +59,10 @@ class QPEMinimumEigensolver(QuantumAlgorithm, MinimumEigensolver):
     """
 
     def __init__(self,
-                 operator: Optional[BaseOperator] = None,
+                 operator: Optional[LegacyBaseOperator] = None,
                  state_in: Optional[InitialState] = None,
                  iqft: Optional[IQFT] = None,
+                 # TODO rename to reps
                  num_time_slices: int = 1,
                  num_ancillae: int = 1,
                  expansion_mode: str = 'trotter',
@@ -104,12 +106,13 @@ class QPEMinimumEigensolver(QuantumAlgorithm, MinimumEigensolver):
         self._phase_estimation_circuit = None
         self._setup(operator)
 
-    def _setup(self, operator: Optional[BaseOperator]) -> None:
+    def _setup(self, operator: Optional[LegacyBaseOperator]) -> None:
         self._operator = None
         self._ret = {}
         self._pauli_list = None
         self._phase_estimation_circuit = None
         if operator:
+            # TODO MatrixToPauli converter
             self._operator = op_converter.to_weighted_pauli_operator(operator.copy())
             self._ret['translation'] = sum([abs(p[0]) for p in self._operator.reorder_paulis()])
             self._ret['stretch'] = 0.5 / self._ret['translation']
@@ -141,23 +144,23 @@ class QPEMinimumEigensolver(QuantumAlgorithm, MinimumEigensolver):
             )
 
     @property
-    def operator(self) -> Optional[BaseOperator]:
+    def operator(self) -> Optional[LegacyBaseOperator]:
         """ Returns operator """
         return self._in_operator
 
     @operator.setter
-    def operator(self, operator: BaseOperator) -> None:
+    def operator(self, operator: LegacyBaseOperator) -> None:
         """ set operator """
         self._in_operator = operator
         self._setup(operator)
 
     @property
-    def aux_operators(self) -> List[BaseOperator]:
+    def aux_operators(self) -> List[LegacyBaseOperator]:
         """ Returns aux operators """
         raise TypeError('aux_operators not supported.')
 
     @aux_operators.setter
-    def aux_operators(self, aux_operators: List[BaseOperator]) -> None:
+    def aux_operators(self, aux_operators: List[LegacyBaseOperator]) -> None:
         """ Set aux operators """
         raise TypeError('aux_operators not supported.')
 
@@ -178,8 +181,8 @@ class QPEMinimumEigensolver(QuantumAlgorithm, MinimumEigensolver):
         return None
 
     def compute_minimum_eigenvalue(
-            self, operator: Optional[BaseOperator] = None,
-            aux_operators: Optional[List[BaseOperator]] = None) -> MinimumEigensolverResult:
+            self, operator: Optional[LegacyBaseOperator] = None,
+            aux_operators: Optional[List[LegacyBaseOperator]] = None) -> MinimumEigensolverResult:
         super().compute_minimum_eigenvalue(operator, aux_operators)
         return self._run()
 
@@ -239,7 +242,7 @@ class QPE(QPEMinimumEigensolver):
     """
 
     def __init__(self,
-                 operator: Optional[BaseOperator] = None,
+                 operator: Optional[LegacyBaseOperator] = None,
                  state_in: Optional[InitialState] = None,
                  iqft: Optional[IQFT] = None,
                  num_time_slices: int = 1,
