@@ -22,7 +22,9 @@ See https://arxiv.org/abs/1304.3061
 import sys
 import os
 sys.path.append(os.path.abspath("DensityMatrixReconstruction/src/"))
-from qiskit.aqua.utils import utils
+sys.path.append('../src/')
+import utils
+#from qiskit.aqua.utils import utils
 from mpi4py import MPI
 import netket as nk
 
@@ -354,7 +356,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._eval_count = 0
         vqresult = self.find_minimum(initial_point=self.initial_point,
                                      var_form=self.var_form,
-                                     cost_fn=self._DNN_energy_evaluation,
+                                     cost_fn=self._energy_evaluation,
                                      optimizer=self.optimizer)
 
         # TODO remove all former dictionary logic
@@ -456,8 +458,12 @@ class VQE(VQAlgorithm, MinimumEigensolver):
             ansatz_circuit_op = CircuitStateFn(
                 self._var_form.construct_circuit(self._var_form_params))
             self._expectation_value.state = ansatz_circuit_op
+
+
+
         param_bindings = {self._var_form_params: parameter_sets}
         
+        #import ipdb; ipdb.set_trace()
         
         #### DNN Additions ####
 
@@ -466,26 +472,32 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         pauli_list = [str(op.primitive) for op in self._operator.oplist]  
         basis_str_list = [utils.SampleBasis(self._operator.num_qubits, 'ham', pauli_list) for basis in range(num_samples)]
         
+        print(str(num_samples)+" Bases were sampled from the Hamiltonian's pauli string decomposition")
+        print(basis_str_list[:5])
+        print("...")
+        print(basis_str_list[-5:])
+
+        print("-\n")
+        print('Generating sampling circuits for training bases...')
         #Get circuits to sample from these bases
         basis_op_list = ListOp([PauliOp(Pauli.from_label(basis)) for basis in basis_str_list])
         conv_op_list = PauliBasisChange(replacement_fn= lambda circuit_op, dest: circuit_op, traverse=True).convert(basis_op_list)
         rotated_trial_states = conv_op_list.compose(self._expectation_value.state).reduce()
 
-        print(str(num_samples)+" Bases were sampled from the Hamiltonian's pauli string decomposition")
-        print(basis_str_list[:5])
-        print("...")
-        print(basis_str_list[-5:])
+        
 
         ham_bases = ([str(op.primitive) for op in self._operator.oplist])
         ham_coeffs = ([np.float(op.coeff) for op in self._operator.oplist])
       
         start_time = time()
 
-        print("-\n")
-        print('Generating sampling circuits for training bases...')
+        
         # Execute the basis sampling circuits. this method will apropriately batch the jobs for our backend.
-        cs = CircuitSampler.factory(backend=BasicAer.get_backend('qasm_simulator'))
-        cs.quantum_instance.run_config.shots = 1
+
+        backend = QuantumInstance(backend=Aer.get_backend('qasm_simulator'))
+
+        cs = CircuitSampler.factory(backend=self._quantum_instance)
+        cs.quantum_instance.run_config.shots = 100
         result = cs.convert(rotated_trial_states, params=param_bindings)[0]
         basis_samples = [[float(bit) for bit in list([* res._primitive][0])] for res in result]
 
