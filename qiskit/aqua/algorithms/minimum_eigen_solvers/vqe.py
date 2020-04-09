@@ -22,7 +22,7 @@ See https://arxiv.org/abs/1304.3061
 import sys
 import os
 sys.path.append(os.path.abspath("DensityMatrixReconstruction/src/"))
-import utils
+from qiskit.aqua.utils import utils
 from mpi4py import MPI
 import netket as nk
 
@@ -32,7 +32,7 @@ import warnings
 from time import time
 
 import numpy as np
-from qiskit import ClassicalRegister
+from qiskit import ClassicalRegister, Aer
 from qiskit.circuit import ParameterVector
 from qiskit import BasicAer
 from qiskit.providers import BaseBackend
@@ -109,7 +109,8 @@ class VQE(VQAlgorithm, MinimumEigensolver):
                  aux_operators: Optional[OperatorBase] = None,
                  callback: Optional[Callable[[int, np.ndarray, float, float], None]] = None,
                  # TODO delete all instances of auto_conversion
-                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
+                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None,
+                 rbm_params = None) -> None:
         """
 
         Args:
@@ -167,6 +168,9 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._eval_time = None
         self._optimizer.set_max_evals_grouped(max_evals_grouped)
         self._callback = callback
+
+        #Temporary fix until I get things cleaned up
+        self._rbm_params = rbm_params
 
         # TODO if we ingest backend we can set expectation through the factory here.
         self._expectation_value = expectation_value
@@ -456,11 +460,13 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         
         
         #### DNN Additions ####
-        num_samples = 15000
+
+        #Sample bases
+        num_samples = self._rbm_params['n_samples_data']
         pauli_list = [str(op.primitive) for op in self._operator.oplist]  
         basis_str_list = [utils.SampleBasis(self._operator.num_qubits, 'ham', pauli_list) for basis in range(num_samples)]
         
-
+        #Get circuits to sample from these bases
         basis_op_list = ListOp([PauliOp(Pauli.from_label(basis)) for basis in basis_str_list])
         conv_op_list = PauliBasisChange(replacement_fn= lambda circuit_op, dest: circuit_op, traverse=True).convert(basis_op_list)
         rotated_trial_states = conv_op_list.compose(self._expectation_value.state).reduce()
@@ -471,23 +477,21 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         print(basis_str_list[-5:])
 
         ham_bases = ([str(op.primitive) for op in self._operator.oplist])
-
         ham_coeffs = ([np.float(op.coeff) for op in self._operator.oplist])
       
         start_time = time()
 
+        print("-\n")
+        print('Generating sampling circuits for training bases...')
+        # Execute the basis sampling circuits. this method will apropriately batch the jobs for our backend.
         cs = CircuitSampler.factory(backend=BasicAer.get_backend('qasm_simulator'))
         cs.quantum_instance.run_config.shots = 1
-        print("-\n")
-        print('Sampling from sampled operators...')
         result = cs.convert(rotated_trial_states, params=param_bindings)[0]
-        #print(result)
         basis_samples = [[float(bit) for bit in list([* res._primitive][0])] for res in result]
+
         print("-\n")
         print("Samples aquired:")
-        print(basis_samples[:5])
-        print("...")
-        print(basis_samples[-5:])
+        print(basis_samples[:5],"\n",basis_samples[-5:])
 
 
         (means, stds)= self._train_and_eval_rbm(num_qubits=self.operator.num_qubits, 
@@ -543,6 +547,29 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         if ham_coeffs is None:
             ham_coeffs = []
 
+
+        if self._rbm_params is not None:
+            if 'alpha' in self._rbm_params:
+                alpha = self._rbm_params['alpha']
+            if 'learning_rate' in self._rbm_params:
+                alpha = self._rbm_params['learning_rate']
+            if 'n_samples' in self._rbm_params:
+                alpha = self._rbm_params['n_samples']
+            if 'n_samples_data' in self._rbm_params:
+                alpha = self._rbm_params['n_samples_data']
+            if 'n_epochs' in self._rbm_params:
+                alpha = self._rbm_params['n_epochs']
+            if 'ham_bases' in self._rbm_params:
+                alpha = self._rbm_params['ham_bases']
+            if 'n_samples' in self._rbm_params:
+                alpha = self._rbm_params['n_samples']
+            if 'n_samples_data' in self._rbm_params:
+                alpha = self._rbm_params['n_samples_data']
+            if 'n_epochs' in self._rbm_params:
+                alpha = self._rbm_params['n_epochs']
+
+        print(alpha)
+
         mpi_rank = nk.MPI.rank()
 
         # Read the total number of qubits
@@ -567,9 +594,6 @@ class VQE(VQAlgorithm, MinimumEigensolver):
 
         rotations, tr_samples, tr_bases = utils.LoadData(hilbert, samples=samples, bases=bases)
 
-        print(tr_samples)
-        print(tr_bases)
-        print("3=====")
         if (n_samples > tr_samples.shape[0]): n_samples = tr_samples.shape[0]
         training_samples, training_bases = utils.SliceData(tr_samples, tr_bases, n_samples)
         ma = nk.machine.RbmSpin(hilbert=hilbert, alpha=alpha)
