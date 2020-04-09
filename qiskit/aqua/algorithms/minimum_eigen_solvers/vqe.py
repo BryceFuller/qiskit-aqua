@@ -16,7 +16,15 @@
 The Variational Quantum Eigensolver algorithm.
 
 See https://arxiv.org/abs/1304.3061
+
 """
+
+import sys
+import os
+sys.path.append(os.path.abspath("DensityMatrixReconstruction/src/"))
+import utils
+from mpi4py import MPI
+import netket as nk
 
 from typing import Optional, List, Callable, Union
 import logging
@@ -26,19 +34,29 @@ from time import time
 import numpy as np
 from qiskit import ClassicalRegister
 from qiskit.circuit import ParameterVector
-
+from qiskit import BasicAer
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.aqua.operators import (OperatorBase, ExpectationBase, CircuitStateFn,
-                                   LegacyBaseOperator, ListOp, I)
+                                   LegacyBaseOperator, ListOp, I, PauliExpectation, PauliOp, MatrixExpectation, PauliBasisChange, CircuitSampler)
 from qiskit.aqua.operators.legacy import (MatrixOperator, WeightedPauliOperator,
                                           TPBGroupedWeightedPauliOperator)
+
 from qiskit.aqua.components.optimizers import Optimizer, SLSQP
 from qiskit.aqua.components.variational_forms import VariationalForm, RY
 from qiskit.aqua.utils.validation import validate_min
 from qiskit.aqua.utils.backend_utils import is_aer_provider
+from qiskit.quantum_info.operators.pauli import Pauli
 from ..vq_algorithm import VQAlgorithm, VQResult
 from .minimum_eigen_solver import MinimumEigensolver, MinimumEigensolverResult
+
+
+
+
+### DNN additions ###
+#import utils
+###
+
 
 logger = logging.getLogger(__name__)
 
@@ -332,7 +350,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._eval_count = 0
         vqresult = self.find_minimum(initial_point=self.initial_point,
                                      var_form=self.var_form,
-                                     cost_fn=self.DNN_energy_evaluation,
+                                     cost_fn=self._DNN_energy_evaluation,
                                      optimizer=self.optimizer)
 
         # TODO remove all former dictionary logic
@@ -389,7 +407,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         return self._run()
 
     # This is the objective function to be passed to the optimizer that is used for evaluation
-    def DNN_energy_evaluation(self, parameters):
+    def _DNN_energy_evaluation(self, parameters):
         """
         Evaluate energy at given parameters for the variational form.
 
@@ -401,72 +419,228 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         """
         num_parameter_sets = len(parameters) // self._var_form.num_parameters
         parameter_sets = np.split(parameters, num_parameter_sets)
-        mean_energy = []
-        std_energy = []
-        print('called DNN :)')
-        def _build_parameterized_circuits():
-            if self._var_form.support_parameterized_circuit and \
-                    self._parameterized_circuits is None:
-                parameterized_circuits = self.construct_circuit(
-                    self._var_form_params,
-                    statevector_mode=self._quantum_instance.is_statevector,
-                    use_simulator_snapshot_mode=self._use_simulator_snapshot_mode)
+        
+        # TODO this is a hack to make AdaptVQE work, but it should fixed in adapt and deleted.
+        if self._expectation_value is None:
+            self._expectation_value = ExpectationBase.factory(operator=self._operator,
+                                                              backend=self._quantum_instance)
 
-                self._parameterized_circuits = \
-                    self._quantum_instance.transpile(parameterized_circuits)
+        
+        '''for i in range(num_samples):                                                           
+            # Sample a basis according to basis_id
+            basis = utils.SampleBasis(N, basis_id, pauli)  
 
-        _build_parameterized_circuits()   
-        circuits = []
-        # binding parameters here since the circuits had been transpiled
-        if self._parameterized_circuits is not None:
-            print(parameter_sets)
-            for idx, parameter in enumerate(parameter_sets):
-                curr_param = {self._var_form_params: parameter}
-                for qc in self._parameterized_circuits:
-                    tmp = qc.bind_parameters(curr_param)
-                    tmp.name = str(idx) + tmp.name
-                    circuits.append(tmp)
-            to_be_simulated_circuits = circuits
-            print(len(circuits))
-        else:
-            print("Check 2 activated - BUT WHY")
-            for idx, parameter in enumerate(parameter_sets):
-                circuit = self.construct_circuit(
-                    parameter,
-                    statevector_mode=self._quantum_instance.is_statevector,
-                    use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
-                    circuit_name_prefix=str(idx))
-                circuits.append(circuit)
-            to_be_simulated_circuits = functools.reduce(lambda x, y: x + y, circuits)
+            # Rotate the wavefunction
+            psi_b = utils.RotateWavefunction(hilbert, psi, basis)                             
 
+            # Measurement outcome probabilities
+            prob = np.multiply(psi_b,np.conj(psi_b)).real
+
+            # Sample a state
+            index = np.random.choice(hilbert.n_states,size=1,p=prob)                        
+            sample = hilbert.number_to_state(index)    
+
+            # Save on file
+            for j in range(N):
+                fout_samples.write("%d " % int(sample[0][j]))                                  
+                fout_bases.write("%s" % basis[j])                                           
+            fout_samples.write('\n')
+            fout_bases.write('\n')'''
+            
+        if not self._expectation_value.state:
+            
+            ansatz_circuit_op = CircuitStateFn(
+                self._var_form.construct_circuit(self._var_form_params))
+            self._expectation_value.state = ansatz_circuit_op
+        param_bindings = {self._var_form_params: parameter_sets}
+        
+        
+        #### DNN Additions ####
+        num_samples = 15000
+        pauli_list = [str(op.primitive) for op in self._operator.oplist]  
+        basis_str_list = [utils.SampleBasis(self._operator.num_qubits, 'ham', pauli_list) for basis in range(num_samples)]
+        
+
+        basis_op_list = ListOp([PauliOp(Pauli.from_label(basis)) for basis in basis_str_list])
+        conv_op_list = PauliBasisChange(replacement_fn= lambda circuit_op, dest: circuit_op, traverse=True).convert(basis_op_list)
+        rotated_trial_states = conv_op_list.compose(self._expectation_value.state).reduce()
+
+        print(str(num_samples)+" Bases were sampled from the Hamiltonian's pauli string decomposition")
+        print(basis_str_list[:5])
+        print("...")
+        print(basis_str_list[-5:])
+
+        ham_bases = ([str(op.primitive) for op in self._operator.oplist])
+
+        ham_coeffs = ([np.float(op.coeff) for op in self._operator.oplist])
+      
         start_time = time()
-        result = self._quantum_instance.execute(to_be_simulated_circuits,
-                                                self._parameterized_circuits is not None)
 
-        for idx, _ in enumerate(parameter_sets):
-            mean, std = self._operator.evaluate_with_result(
-                result=result, statevector_mode=self._quantum_instance.is_statevector,
-                use_simulator_snapshot_mode=self._use_simulator_snapshot_mode,
-                circuit_name_prefix=str(idx))
-            end_time = time()
-            mean_energy.append(np.real(mean))
-            std_energy.append(np.real(std))
-            self._eval_count += 1
-            if self._callback is not None:
-                self._callback(self._eval_count, parameter_sets[idx], np.real(mean), np.real(std))
+        cs = CircuitSampler.factory(backend=BasicAer.get_backend('qasm_simulator'))
+        cs.quantum_instance.run_config.shots = 1
+        print("-\n")
+        print('Sampling from sampled operators...')
+        result = cs.convert(rotated_trial_states, params=param_bindings)[0]
+        #print(result)
+        basis_samples = [[float(bit) for bit in list([* res._primitive][0])] for res in result]
+        print("-\n")
+        print("Samples aquired:")
+        print(basis_samples[:5])
+        print("...")
+        print(basis_samples[-5:])
 
-            # If there is more than one parameter set then the calculation of the
-            # evaluation time has to be done more carefully,
-            # therefore we do not calculate it
-            if len(parameter_sets) == 1:
-                logger.info('Energy evaluation %s returned %s - %.5f (ms)',
-                            self._eval_count, np.real(mean), (end_time - start_time) * 1000)
-            else:
-                logger.info('Energy evaluation %s returned %s',
-                            self._eval_count, np.real(mean))
 
-        return mean_energy if len(mean_energy) > 1 else mean_energy[0]
+        (means, stds)= self._train_and_eval_rbm(num_qubits=self.operator.num_qubits, 
+                                        samples=basis_samples, 
+                                        bases=basis_str_list, 
+                                        ham_bases=ham_bases, 
+                                        ham_coeffs=ham_coeffs)
 
+        ####---------------####
+        print(means)
+        #print(self._expectation_value)
+        means_0 = np.real(self._expectation_value.compute_expectation(params=param_bindings))
+        print(means_0)
+
+        if self._callback is not None:
+            stds = np.real(
+                self._expectation_value.compute_standard_deviation(params=param_bindings))
+            for i, param_set in enumerate(parameter_sets):
+                self._eval_count += 1
+                self._callback(self._eval_count, param_set, means[i], stds[i])
+        # TODO I would like to change the callback to the following, to allow one to access an
+        #  accurate picture of the evaluation steps, and to distinguish between single
+        #  energy and gradient evaluations.
+        if self._callback is not None and False:
+            self._callback(self._eval_count, parameter_sets, means, stds)
+
+        end_time = time()
+        print((end_time - start_time) * 1000)
+        print((end_time - start_time))
+        logger.info('Energy evaluation returned %s - %.5f (ms), eval count: %s',
+                    means, (end_time - start_time) * 1000, self._eval_count)
+
+        return means if len(means) > 1 else means[0]
+
+
+    def _train_and_eval_rbm(self, 
+                            num_qubits,
+                            samples=None,
+                            bases=None,
+                            path_to_sample=None,
+                            path_to_bases=None,
+                            psi=None,
+                            alpha=1,
+                            learning_rate=0.001,
+                            n_samples=10000,
+                            n_samples_data=1000,
+                            n_epochs=10000,
+                            ham_bases=None,
+                            ham_coeffs=None):
+
+        if ham_bases is None:
+            ham_bases = []
+        if ham_coeffs is None:
+            ham_coeffs = []
+
+        mpi_rank = nk.MPI.rank()
+
+        # Read the total number of qubits
+        N = num_qubits
+
+        # Create a 1-dimensional lattice with open boundaries
+        graph = nk.graph.Hypercube(length=N, n_dim=1, pbc=False)
+
+        # Create the Hilbert space
+        hilbert = nk.hilbert.Qubit(graph=graph)
+        assert (N == hilbert.size)
+
+        hamiltonian = utils.GenerateHamiltonian(hilbert, ham_bases, ham_coeffs)
+        # Run exact diagonalization using the Lanczos algorithm for the ground state
+        # eigensystem = nk.exact.lanczos_ed(hamiltonian, first_n=1, compute_eigenvectors=True)
+        hamiltonian_dense = hamiltonian.to_sparse().todense()
+        (eigenvalues, eigenstates) = np.linalg.eigh(hamiltonian_dense)
+        # Ground state wavefunction
+        psi = np.reshape(np.asarray(eigenstates[:, 0]), [eigenstates.shape[0]])
+        # Ground state energy
+        E_0 = eigenvalues[0]
+
+        rotations, tr_samples, tr_bases = utils.LoadData(hilbert, samples=samples, bases=bases)
+
+        print(tr_samples)
+        print(tr_bases)
+        print("3=====")
+        if (n_samples > tr_samples.shape[0]): n_samples = tr_samples.shape[0]
+        training_samples, training_bases = utils.SliceData(tr_samples, tr_bases, n_samples)
+        ma = nk.machine.RbmSpin(hilbert=hilbert, alpha=alpha)
+        ma.init_random_parameters(seed=1234, sigma=0.01)
+
+        # Sampler
+        sa = nk.sampler.ExactSampler(machine=ma)
+        # sa = nk.sampler.MetropolisLocal(machine=ma)
+        # sa = nk.sampler.MetropolisLocalPt(machine=ma,n_replicas=16)
+
+        # Optimizer
+        # op = nk.optimizer.Sgd(learning_rate=learning_rate)
+        # op = nk.optimizer.AdaDelta()
+        op = nk.optimizer.RmsProp(learning_rate=learning_rate, beta=0.9, epscut=1.0e-6)
+
+        print(n_samples)
+
+        qst = nk.Qsr(
+            sampler=sa,
+            optimizer=op,
+            rotations=rotations,
+            samples=training_samples[int(0.1 * len(training_samples)):],
+            bases=training_bases[int(0.1 * len(training_samples)):],
+            n_samples=n_samples,
+            n_samples_data=n_samples_data,
+            sr=nk.optimizer.SR(diag_shift=0.1))
+        qst.add_observable(hamiltonian, "Energy")
+
+        print("-\n")
+        print("Training RBM...")
+    
+        iters = []
+        overlap = []
+        if psi is None: overlap.append("NA")
+        nll = []
+        E_nn = []
+        E_var = []
+        delta_E = []
+        delta_E_rel = []
+        for ep in qst.iter(n_epochs, 50):
+            iters.append(ep)
+            obs = qst.get_observable_stats()
+            print(obs)
+            if (mpi_rank == 0):
+                # Compute fidelity with exact state
+                psi_nn = ma.to_array()
+
+                if psi is not None: overlap.append(utils.Overlap(psi_nn, psi))
+                # Compute NLL on training data
+                import ipdb;
+                #ipdb.set_trace()
+                nll.append(qst.nll(rotations=rotations,
+                                   samples=training_samples[0:int(0.1 * len(training_samples))],
+                                   bases=training_bases[0:int(0.1 * len(training_bases))],
+                                   log_norm=ma.log_norm()))
+                E_nn.append(obs["Energy"].mean.real)
+                E_var.append(obs["Energy"].variance)
+                delta_E.append(abs(obs["Energy"].mean.real - E_0))
+                delta_E_rel.append(abs(obs["Energy"].mean.real - E_0) / abs(E_0))
+                print('Ep = %d   ' % ep, end='')
+                print('NLL = %.5f   ' % nll[-1], end='')
+                print('Ov = %.5f   ' % overlap[-1], end='')
+                print('E = %.5f   ' % E_nn[-1], end='')
+                print('varE = %.2E   ' % E_var[-1], end='')
+                print('d_rel = %.2E   ' % (delta_E_rel[-1]), end='')
+                print('d_abs = %.2E   ' % delta_E[-1], end='')
+                print()
+
+        # TODO: return a more sensible and useful results object.
+        return ([E_nn[-1]], [np.sqrt(E_var[-1])])
+    
     # This is the objective function to be passed to the optimizer that is used for evaluation
     def _energy_evaluation(self, parameters):
         """
