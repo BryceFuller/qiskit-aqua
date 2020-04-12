@@ -27,7 +27,7 @@ from .gradient import Gradient
 
 
 class QuantumFisherInf(Gradient):
-    """Compute the quantum Fisher Information given a parametrized quantum state."""
+    """Compute the quantum Fisher Information given a pure, parametrized quantum state."""
 
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
                  quantum_instance: Optional[QuantumInstance] = None) -> None:
@@ -46,6 +46,8 @@ class QuantumFisherInf(Gradient):
         """
         # TODO compute gradient based on the gradient circuits
         qfi_circuits = self.construct_circuits(parameters)
+
+        # TODO add ancilla to compensate for the potential phase mismatch
 
         # TODO delete this below here
         print('The current circuit is')
