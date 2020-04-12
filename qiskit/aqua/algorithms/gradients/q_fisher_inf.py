@@ -18,47 +18,48 @@ from typing import Optional, Tuple, List
 
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
-from qiskit.extensions.standard import RXGate, RYGate, RZGate, CXGate, CYGate, CZGate
+from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, \
+    CZGate, U1Gate, U2Gate, U3Gate, RXXGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate
 
 from qiskit.aqua import QuantumInstance, AquaError
 
 from .gradient import Gradient
 
 
-class NaturalGradient(Gradient):
-    """Compute the natural gradient of a quantum circuit."""
+class QuantumFisherInf(Gradient):
+    """Compute the quantum Fisher Information given a parametrized quantum state."""
 
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
                  quantum_instance: Optional[QuantumInstance] = None) -> None:
         """
         Args:
-            circuit: The circuit for which the gradient is computed.
+            circuit: The circuit for which the quantum Fisher information is computed.
             quantum_instance: The quantum instance used to execute the circuits.
         """
         super().__init__(circuit, quantum_instance)
 
-    def compute_gradient(self, parameter: Parameter) -> float:
-        """Compute the gradient with respect to the provided parameter.
+    def compute_qfi(self, parameters: Parameter) -> float:
+        """Compute the entry of quantum Fisher Information with respect to the provided parameters.
 
         Args:
-            parameter: The parameter with respect to which the gradient is computed.
+            parameters: The parameters with respect to which the quantum Fisher Information is computed.
         """
         # TODO compute gradient based on the gradient circuits
-        gradient_circuits = self.construct_circuits(parameter)
+        qfi_circuits = self.construct_circuits(parameters)
 
         # TODO delete this below here
         print('The current circuit is')
         print(self._circuit.draw())
-        print('We are computing the derivative with respect to', parameter)
+        print('We are computing the derivative with respect to', parameters)
         print('The gradient circuits are:')
-        for circuit in gradient_circuits:
+        for circuit in qfi_circuits:
             print(circuit.draw())
 
-    def construct_circuits(self, parameter: Parameter) -> List[QuantumCircuit]:
-        """Generate the gradient circuits.
+    def construct_circuits(self, parameters: Parameter) -> List[QuantumCircuit]:
+        """Generate the quantum Fisher Information circuits.
 
         Args:
-            parameter: The parameter with respect to which the gradient is computed.
+            parameters: The parameters with respect to which the quantum Fisher Information is computed.
 
         Returns:
             A list of the circuits with the inserted gates. If a parameter appears multiple times,
@@ -68,14 +69,14 @@ class NaturalGradient(Gradient):
         Raises:
             AquaError: If one of the circuits could not be constructed.
         """
-        parameterized_gates = [element[0] for element in self._circuit._parameter_table[parameter]]
+        parameterized_gates = [element[0] for element in self._circuit._parameter_table[parameters]]
 
         circuits = []
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
         for reference_gate in parameterized_gates:
             # get the controlled gate (raises an error if the parameterized gate is not supported)
-            entangler_gate = NaturalGradient.get_controlled_gate(reference_gate)
+            entangler_gate = QuantumFisherInf.get_controlled_gate(reference_gate)
 
             # create a copy of the original circuit with the same registers
             gradient_circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
@@ -84,7 +85,7 @@ class NaturalGradient(Gradient):
             # TODO add pre-operations on the ancilla qubit a
 
             additional_qubits = ([ancilla], [])
-            success = NaturalGradient.insert_gate(gradient_circuit, reference_gate, entangler_gate,
+            success = QuantumFisherInf.insert_gate(gradient_circuit, reference_gate, entangler_gate,
                                                   additional_qubits=additional_qubits)
 
             # TODO trim circuit
@@ -131,7 +132,7 @@ class NaturalGradient(Gradient):
         return False
 
     @staticmethod
-    def get_controlled_gate(gate: Gate) -> ControlledGate:
+    def get_controlled_gate(gate: Gate) -> Tuple[List[complex], List[Gate]]:
         """Get the controlled gate for the natural gradient.
 
         Currently, only pauli rotation gates are suppported.
@@ -140,16 +141,16 @@ class NaturalGradient(Gradient):
             gate: The gate for which the derivative is being computed.
 
         Returns:
-            The controlled gate used for derivative computation.
+            The coefficients and the gates used for the metric computation.
 
         Raises:
-            TypeError: If the input gate is not a Pauli rotation gate.
+            TypeError: If the input gate is not a supported parametrized gate.
         """
         if isinstance(gate, RXGate):
-            return CXGate()
+            return [CXGate()]
         if isinstance(gate, RYGate):
-            return CYGate()
-        if isinstance(gate, RZGate):
+            return [CYGate()]
+        if isinstance(gate, RZGate) or isinstance(gate, U1Gate):
             return CZGate()
 
-        raise TypeError('Unrecognized Pauli rotation gate, {}'.format(gate))
+        raise TypeError('Unrecognized parametrized gate, {}'.format(gate))

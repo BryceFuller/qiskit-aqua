@@ -79,8 +79,6 @@ class VarQTE(QuantumAlgorithm):
         """
 
 
-
-
     def _get_dt_weights(self, A, C):
         """
         Args:
