@@ -354,9 +354,15 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._quantum_instance.circuit_summary = True
 
         self._eval_count = 0
+
+        if rbm_params is None:
+            cost_fn = self._energy_evaluation
+        else:
+            cost_fn=self._DNN_energy_evaluation
+
         vqresult = self.find_minimum(initial_point=self.initial_point,
                                      var_form=self.var_form,
-                                     cost_fn=self._energy_evaluation,
+                                     cost_fn=cost_fn,
                                      optimizer=self.optimizer)
 
         # TODO remove all former dictionary logic
@@ -430,28 +436,6 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         if self._expectation_value is None:
             self._expectation_value = ExpectationBase.factory(operator=self._operator,
                                                               backend=self._quantum_instance)
-
-        
-        '''for i in range(num_samples):                                                           
-            # Sample a basis according to basis_id
-            basis = utils.SampleBasis(N, basis_id, pauli)  
-
-            # Rotate the wavefunction
-            psi_b = utils.RotateWavefunction(hilbert, psi, basis)                             
-
-            # Measurement outcome probabilities
-            prob = np.multiply(psi_b,np.conj(psi_b)).real
-
-            # Sample a state
-            index = np.random.choice(hilbert.n_states,size=1,p=prob)                        
-            sample = hilbert.number_to_state(index)    
-
-            # Save on file
-            for j in range(N):
-                fout_samples.write("%d " % int(sample[0][j]))                                  
-                fout_bases.write("%s" % basis[j])                                           
-            fout_samples.write('\n')
-            fout_bases.write('\n')'''
             
         if not self._expectation_value.state:
             
@@ -471,13 +455,11 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         num_samples = self._rbm_params['n_samples_data']
         pauli_list = [str(op.primitive) for op in self._operator.oplist]  
         basis_str_list = [utils.SampleBasis(self._operator.num_qubits, 'ham', pauli_list) for basis in range(num_samples)]
-        
         print(str(num_samples)+" Bases were sampled from the Hamiltonian's pauli string decomposition")
-        print(basis_str_list[:5])
-        print("...")
-        print(basis_str_list[-5:])
+        
+        #print(basis_str_list[:5],"...",basis_str_list[-5:])
 
-        print("-\n")
+        print("-")
         print('Generating sampling circuits for training bases...')
         #Get circuits to sample from these bases
         basis_op_list = ListOp([PauliOp(Pauli.from_label(basis)) for basis in basis_str_list])
@@ -493,17 +475,17 @@ class VQE(VQAlgorithm, MinimumEigensolver):
 
         
         # Execute the basis sampling circuits. this method will apropriately batch the jobs for our backend.
-
-        backend = QuantumInstance(backend=Aer.get_backend('qasm_simulator'))
+        print("Evaluating circuits to build dataset:")
 
         cs = CircuitSampler.factory(backend=self._quantum_instance)
         cs.quantum_instance.run_config.shots = 100
+        cs._snapshot = False
         result = cs.convert(rotated_trial_states, params=param_bindings)[0]
         basis_samples = [[float(bit) for bit in list([* res._primitive][0])] for res in result]
 
-        print("-\n")
-        print("Samples aquired:")
-        print(basis_samples[:5],"\n",basis_samples[-5:])
+
+        
+        #print(basis_samples[:5],"\n",basis_samples[-5:])
 
 
         (means, stds)= self._train_and_eval_rbm(num_qubits=self.operator.num_qubits, 
@@ -564,23 +546,15 @@ class VQE(VQAlgorithm, MinimumEigensolver):
             if 'alpha' in self._rbm_params:
                 alpha = self._rbm_params['alpha']
             if 'learning_rate' in self._rbm_params:
-                alpha = self._rbm_params['learning_rate']
+                learning_rate = self._rbm_params['learning_rate']
             if 'n_samples' in self._rbm_params:
-                alpha = self._rbm_params['n_samples']
+                n_samples = self._rbm_params['n_samples']
             if 'n_samples_data' in self._rbm_params:
-                alpha = self._rbm_params['n_samples_data']
+                n_samples_data = self._rbm_params['n_samples_data']
             if 'n_epochs' in self._rbm_params:
-                alpha = self._rbm_params['n_epochs']
-            if 'ham_bases' in self._rbm_params:
-                alpha = self._rbm_params['ham_bases']
-            if 'n_samples' in self._rbm_params:
-                alpha = self._rbm_params['n_samples']
-            if 'n_samples_data' in self._rbm_params:
-                alpha = self._rbm_params['n_samples_data']
-            if 'n_epochs' in self._rbm_params:
-                alpha = self._rbm_params['n_epochs']
+                n_epochs = self._rbm_params['n_epochs']
 
-        print(alpha)
+        
 
         mpi_rank = nk.MPI.rank()
 
@@ -620,8 +594,6 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         # op = nk.optimizer.Sgd(learning_rate=learning_rate)
         # op = nk.optimizer.AdaDelta()
         op = nk.optimizer.RmsProp(learning_rate=learning_rate, beta=0.9, epscut=1.0e-6)
-
-        print(n_samples)
 
         qst = nk.Qsr(
             sampler=sa,
