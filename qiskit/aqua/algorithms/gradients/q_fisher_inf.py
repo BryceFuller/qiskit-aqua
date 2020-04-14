@@ -49,7 +49,7 @@ class QuantumFisherInf(Gradient):
 
         Args:
             parameters: The parameters with respect to which the quantum Fisher Information is computed.
-            
+
         Returns: quantum Fisher Information
         """
 
@@ -161,14 +161,11 @@ class QuantumFisherInf(Gradient):
                 if len(qfi_coeffs[i]) == 1 & len(qfi_coeffs[j]) == 1:
                     if j == i:
                         for coeff in qfi_coeffs[i]:
-                            if np.iscomplex[coeff]:
-                                qfi[i, j] += np.imag(coeff)**2
-                            else:
-                                qfi[i, j] += coeff**2
+                            qfi[i, j] += np.abs(coeff)**2
                     else:
                         for coeff_i in qfi_coeffs[i]:
                             for coeff_j in qfi_coeffs[j]:
-                                qfi[i, j] += coeff_i * coeff_j * qfi_exp_values[counter]
+                                qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
                                 counter += 1
                         qfi[j, i] = qfi[i, j]
                 else:
