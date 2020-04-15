@@ -130,8 +130,8 @@ class LocalSimulatorSampler(CircuitSampler):
 
         # Don't pass circuits if we have in the cache the sampling function knows to use the cache.
         circs = list(self._circuit_ops_cache.values()) if not self._transpiled_circ_cache else None
-        sampled_statefn_dicts, snapshot_data  = self.sample_circuits(op_circuits=circs,
-                                                     param_bindings=param_bindings)
+        sampled_statefn_dicts, snapshot_data = self.sample_circuits(op_circuits=circs,
+                                                                    param_bindings=param_bindings)
 
         def replace_circuits_with_dicts(operator, param_index=0):
             if isinstance(operator, CircuitStateFn):
@@ -143,10 +143,10 @@ class LocalSimulatorSampler(CircuitSampler):
                 return operator
         return_op = None
         if params:
-            return_op =  ListOp([replace_circuits_with_dicts(self._reduced_op_cache, param_index=i)
+            return_op = ListOp([replace_circuits_with_dicts(self._reduced_op_cache, param_index=i)
                                 for i in range(num_parameterizations)])
         else:
-            return_op =  replace_circuits_with_dicts(self._reduced_op_cache, param_index=0)
+            return_op = replace_circuits_with_dicts(self._reduced_op_cache, param_index=0)
 
         if return_snapshots:
             return return_op, snapshot_data
@@ -215,7 +215,7 @@ class LocalSimulatorSampler(CircuitSampler):
                     result_sfn = StateFn(op_c.coeff * results.get_statevector(circ_index))
                     c_statefns.append(result_sfn)
                     continue
-                elif 'snapshots' in results.data(circ_index):
+                if 'snapshots' in results.data(circ_index):
                     snapshots = results.data(circ_index)['snapshots']
                     snapshot_data[i][j] = snapshots
                     print(snapshot_data)
@@ -232,7 +232,7 @@ class LocalSimulatorSampler(CircuitSampler):
                         continue
 
                 result_sfn = StateFn({b: (v * op_c.coeff / self._qi._run_config.shots) ** .5
-                                          for (b, v) in results.get_counts(circ_index).items()})
+                                      for (b, v) in results.get_counts(circ_index).items()})
                 c_statefns.append(result_sfn)
             sampled_statefn_dicts[id(op_c)] = c_statefns
         return sampled_statefn_dicts, snapshot_data
