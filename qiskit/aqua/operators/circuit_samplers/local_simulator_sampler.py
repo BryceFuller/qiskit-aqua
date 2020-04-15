@@ -103,7 +103,8 @@ class LocalSimulatorSampler(CircuitSampler):
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                params: dict = None):
+                params: dict = None,
+                return_snapshots = False):
         if self._last_op is None or not operator == self._last_op:
             # Clear caches
             self._last_op = operator
@@ -129,7 +130,7 @@ class LocalSimulatorSampler(CircuitSampler):
 
         # Don't pass circuits if we have in the cache the sampling function knows to use the cache.
         circs = list(self._circuit_ops_cache.values()) if not self._transpiled_circ_cache else None
-        sampled_statefn_dicts = self.sample_circuits(op_circuits=circs,
+        sampled_statefn_dicts, snapshot_data  = self.sample_circuits(op_circuits=circs,
                                                      param_bindings=param_bindings)
 
         def replace_circuits_with_dicts(operator, param_index=0):
@@ -140,12 +141,17 @@ class LocalSimulatorSampler(CircuitSampler):
                                                  param_index=param_index))
             else:
                 return operator
-
+        return_op = None
         if params:
-            return ListOp([replace_circuits_with_dicts(self._reduced_op_cache, param_index=i)
-                           for i in range(num_parameterizations)])
+            return_op =  ListOp([replace_circuits_with_dicts(self._reduced_op_cache, param_index=i)
+                                for i in range(num_parameterizations)])
         else:
-            return replace_circuits_with_dicts(self._reduced_op_cache, param_index=0)
+            return_op =  replace_circuits_with_dicts(self._reduced_op_cache, param_index=0)
+
+        if return_snapshots:
+            return return_op, snapshot_data
+        else:
+            return return_op
 
     # pylint: disable=inconsistent-return-statements
     def _extract_circuitstatefns(self, operator):
@@ -196,31 +202,40 @@ class LocalSimulatorSampler(CircuitSampler):
         # self._qi._run_config.parameterizations = None
 
         sampled_statefn_dicts = {}
+        snapshot_data = {}
         for i, op_c in enumerate(op_circuits):
             # Taking square root because we're replacing a statevector
             # representation of probabilities.
             reps = len(param_bindings) if param_bindings is not None else 1
             c_statefns = []
+            snapshot_data[i] = {}
             for j in range(reps):
                 circ_index = (i * reps) + j
                 if self._statevector:
                     result_sfn = StateFn(op_c.coeff * results.get_statevector(circ_index))
-                elif self._snapshot:
-                    snapshot_data = results.data(circ_index)['snapshots']
-                    avg = snapshot_data['expectation_value']['expval'][0]['value']
-                    if isinstance(avg, (list, tuple)):
-                        # Aer versions before 0.4 use a list snapshot format
-                        # which must be converted to a complex value.
-                        avg = avg[0] + 1j * avg[1]
-                    # Will be replaced with just avg when eval is called later
-                    num_qubits = op_circuits[0].num_qubits
-                    result_sfn = (Zero ^ num_qubits).adjoint() * avg
-                else:
-                    result_sfn = StateFn({b: (v * op_c.coeff / self._qi._run_config.shots) ** .5
+                    c_statefns.append(result_sfn)
+                    continue
+                elif 'snapshots' in results.data(circ_index):
+                    snapshots = results.data(circ_index)['snapshots']
+                    snapshot_data[i][j] = snapshots
+                    print(snapshot_data)
+                    if 'expectation_value' in snapshots:
+                        avg = snapshots['expectation_value']['expval'][0]['value']
+                        if isinstance(avg, (list, tuple)):
+                            # Aer versions before 0.4 use a list snapshot format
+                            # which must be converted to a complex value.
+                            avg = avg[0] + 1j * avg[1]
+                        # Will be replaced with just avg when eval is called later
+                        num_qubits = op_circuits[0].num_qubits
+                        result_sfn = (Zero ^ num_qubits).adjoint() * avg
+                        c_statefns.append(result_sfn)
+                        continue
+
+                result_sfn = StateFn({b: (v * op_c.coeff / self._qi._run_config.shots) ** .5
                                           for (b, v) in results.get_counts(circ_index).items()})
                 c_statefns.append(result_sfn)
             sampled_statefn_dicts[id(op_c)] = c_statefns
-        return sampled_statefn_dicts
+        return sampled_statefn_dicts, snapshot_data
 
     def _prepare_parameterized_run_config(self, param_bindings: dict):
         pass
