@@ -104,7 +104,7 @@ class LocalSimulatorSampler(CircuitSampler):
     def convert(self,
                 operator: OperatorBase,
                 params: dict = None,
-                return_snapshots = False):
+                return_snapshots: bool = False):
         if self._last_op is None or not operator == self._last_op:
             # Clear caches
             self._last_op = operator
