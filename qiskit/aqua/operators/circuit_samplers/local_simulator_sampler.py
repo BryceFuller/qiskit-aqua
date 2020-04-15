@@ -218,7 +218,6 @@ class LocalSimulatorSampler(CircuitSampler):
                 if 'snapshots' in results.data(circ_index):
                     snapshots = results.data(circ_index)['snapshots']
                     snapshot_data[i][j] = snapshots
-                    print(snapshot_data)
                     if 'expectation_value' in snapshots:
                         avg = snapshots['expectation_value']['expval'][0]['value']
                         if isinstance(avg, (list, tuple)):
