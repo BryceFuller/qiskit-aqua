@@ -20,8 +20,8 @@ import numpy as np
 
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
-from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, \
-    CZGate, U1Gate, U2Gate, U3Gate, RXXGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
+from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
+    U1Gate, U2Gate, U3Gate, RXXGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
 
 from qiskit.aqua.operators import WeightedPauliOperator
 from qiskit.quantum_info import Pauli
@@ -216,7 +216,7 @@ class QuantumFisherInf(Gradient):
                 # create a copy of the original circuit with the same registers
                 circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
                 circuit.data = self._circuit.data
-                qfi_circuit.h(ancilla)
+                circuit.h(ancilla)
 
                 # construct the circuits
 
@@ -226,7 +226,7 @@ class QuantumFisherInf(Gradient):
                         for l, gate_to_insert_j in enumerate(qfi_gates[j]):
                             qfi_circuit = QuantumCircuit(*circuit.qregs)
                             qfi_circuit.data = circuit.data
-
+                            # Fix phase ancilla
                             phase = np.sign(qfi_coeffs[i][k])*np.sign(qfi_coeffs[j][l])
                             if np.iscomplex(qfi_coeffs[i][k]):
                                 if np.iscomplex(qfi_coeffs[j][k]):
@@ -245,24 +245,29 @@ class QuantumFisherInf(Gradient):
                             elif phase == -1:
                                 qfi_circuit.z(ancilla)
 
-                            gradient_circuit.x(ancilla)
-                            success_i = QuantumFisherInf.insert_gate(gradient_circuit, parameterized_gates[i],
+                            qfi_circuit.x(ancilla)
+                            success_i = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
                                                                      gate_to_insert_i,
                                                                      additional_qubits=additional_qubits)
-                            gradient_circuit.x(ancilla)
+                            qfi_circuit.x(ancilla)
                             if not success_i:
                                 raise AquaError('Could not insert the controlled gate, something went wrong!')
 
-                            success_j = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
+                            success_j = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[j],
                                                                      gate_to_insert_j,
                                                                      additional_qubits=additional_qubits)
                             if not success_j:
                                 raise AquaError('Could not insert the controlled gate, something went wrong!')
 
-                                # TODO trim circuit after gate_to_insert
+                            # Remove redundant gates
+                            qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, gate_to_insert_i)
 
-                                qfi_circuit.h(ancilla)
-                                circuits += [qfi_circuit]
+                            if isinstance(parameterized_gates[j], ControlledGate):
+                                QuantumFisherInf.replace_gate(qfi_circuit, parameterized_gates[j],
+                                                              parameterized_gates[j].base_gate)
+
+                            qfi_circuit.h(ancilla)
+                            circuits += [qfi_circuit]
                 else:
                     raise AquaError('Compatibility with gates with more than 1 parameters is not yet given.')
                 j += 1
@@ -303,6 +308,41 @@ class QuantumFisherInf(Gradient):
         return False
 
     @staticmethod
+    def replace_gate(circuit: QuantumCircuit,
+                    gate_to_replace: Gate,
+                    gate_to_insert: Gate,
+                    qubits: Optional[List[Qubit]] = None,
+                    additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
+        """Insert a gate into the circuit.
+
+        Args:
+            circuit: The circuit onto which the gare is added.
+            gate_to_replace: A gate instance which shall be replaced.
+            gate_to_insert: The gate to be inserted instead.
+            qubits: The qubits on which the gate is inserted. If None, the qubits of the
+                reference_gate are used.
+            additional_qubits: If qubits is None and the qubits of the reference_gate are
+                used, this can be used to specify additional qubits before (first list in
+                tuple) or after (second list in tuple) the qubits.
+
+        Returns:
+            True, if the insertion has been successful, False otherwise.
+        """
+        for i, op in enumerate(circuit.data):
+            if op[0] == gate_to_replace:
+                circuit.data = circuit.data.pop(i) # remove gate
+                #TODO check qubits placing
+                qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
+                if additional_qubits:
+                    qubits = additional_qubits[0] + qubits + additional_qubits[1]
+                op_to_insert = (gate_to_insert, qubits, [])
+                insertion_index = i
+                circuit.data.insert(insertion_index, op_to_insert)
+                return True
+
+        return False
+
+    @staticmethod
     def get_coeffs_gates(gate: Gate) -> Tuple[List[List[complex]], List[List[Gate]]]:
         """Get the controlled gate for the quantum Fisher Information.
 
@@ -326,7 +366,8 @@ class QuantumFisherInf(Gradient):
         if isinstance(gate, RZGate) or isinstance(gate, U1Gate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            return [[0.5j, -0.5j]], [[IGate(), CZGate()]]
+            return [[-0.5j]], [[CZGate()]] # Check if this is also right for U1
+            # return [[0.5j, -0.5j]], [[IGate(), CZGate()]]
         if isinstance(gate, U2Gate):
             # theta, phi
             return [[0.5j], [-0.5j]], [[CZGate()], [CZGate()]]
@@ -335,11 +376,53 @@ class QuantumFisherInf(Gradient):
             return [[0.5j], [-0.5j], [0.5j]], [[CZGate()], [CZGate()], [CZGate()]]
         if isinstance(gate, CRXGate):
             # theta
-            return [[0.5j, -0.5j]], [[IGate(), CXGate()]]
+            q = QuantumRegister(2)
+            qc = QuantumCircuit(q)
+            qc.u0(np.pi/2, q)
+            id_ = qc.to_instruction()
+            return [[0.5j, -0.5j]], [[id_, CXGate()]]
 
         if isinstance(gate, CRZGate) or isinstance(gate, CU1Gate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            return [[0.5j, -0.5j]], [[IGate(), CZGate()]]
+            q = QuantumRegister(2)
+            qc = QuantumCircuit(q)
+            qc.u0(np.pi/2, q)
+            id_ = qc.to_instruction()
+            return [[0.5j, -0.5j]], [[id_, CZGate()]]
+
+        r'''
+        TODO multi-controlled-$U(\theta)$ for $m$ controlls:
+        $\frac{1}{2^m}\Bigotimes\limits_i=0^{m-1}(I\-Z)\otimes \frac{\partial U}{\partial\theta} $
+        # for self.num_ctrl_qubits
+        '''
 
         raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
+
+    @staticmethod
+    def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
+        """Trim the given quantum circuit after the reference gate.
+
+
+        Args:
+            circuit: The circuit onto which the gare is added.
+            reference_gate: A gate instance before or after which a gate is inserted.
+
+        Returns:
+            The trimmed circuit.
+
+        Raise:
+            AquaError: If the reference gate is not part of the given circuit.
+        """
+        parameterized_gates = []
+        for param, elements in circuit._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
+
+        for i, op in enumerate(circuit.data):
+            if op[0] == reference_gate:
+                trimmed_circuit = QuantumCircuit(*circuit.qregs)
+                trimmed_circuit.data = circuit.data[:i + 1]
+                return trimmed_circuit
+
+        raise AquaError('The reference gate is not in the given quantum circuit.')
