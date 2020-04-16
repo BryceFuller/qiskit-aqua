@@ -112,7 +112,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
                  callback: Optional[Callable[[int, np.ndarray, float, float], None]] = None,
                  # TODO delete all instances of auto_conversion
                  quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None,
-                 rbm_params = None) -> None:
+                 rbm_params: None = None) -> None:
         """
 
         Args:
@@ -355,7 +355,7 @@ class VQE(VQAlgorithm, MinimumEigensolver):
 
         self._eval_count = 0
 
-        if rbm_params is None:
+        if self._rbm_params is None:
             cost_fn = self._energy_evaluation
         else:
             cost_fn=self._DNN_energy_evaluation
