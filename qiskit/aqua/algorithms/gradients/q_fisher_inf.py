@@ -141,9 +141,6 @@ class QuantumFisherInf(Gradient):
 
         parameterized_gates = [element[0] for element in self._circuit._parameter_table[parameters]]
 
-        circuits = []
-        qr_ancilla = QuantumRegister(1, 'ancilla')
-        ancilla = qr_ancilla[0]
         qfi_coeffs = []
         qfi_gates = []
         for reference_gate in parameterized_gates:
