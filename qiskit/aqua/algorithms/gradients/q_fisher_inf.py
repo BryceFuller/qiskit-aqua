@@ -21,7 +21,7 @@ import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
 from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
-    U1Gate, U2Gate, U3Gate, RXXGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
+    U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
 
 from qiskit.aqua.operators import WeightedPauliOperator
 from qiskit.quantum_info import Pauli
@@ -295,6 +295,8 @@ class QuantumFisherInf(Gradient):
         Returns:
             True, if the insertion has been successful, False otherwise.
         """
+        if isinstance(gate_to_insert, IGate()):
+            return True
         for i, op in enumerate(circuit.data):
             if op[0] == reference_gate:
                 qubits = qubits or op[1]
@@ -307,43 +309,46 @@ class QuantumFisherInf(Gradient):
 
         return False
 
+    # Not needed
+    # @staticmethod
+    # def replace_gate(circuit: QuantumCircuit,
+    #                 gate_to_replace: Gate,
+    #                 gate_to_insert: Gate,
+    #                 qubits: Optional[List[Qubit]] = None,
+    #                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
+    #     """Insert a gate into the circuit.
+    #
+    #     Args:
+    #         circuit: The circuit onto which the gare is added.
+    #         gate_to_replace: A gate instance which shall be replaced.
+    #         gate_to_insert: The gate to be inserted instead.
+    #         qubits: The qubits on which the gate is inserted. If None, the qubits of the
+    #             reference_gate are used.
+    #         additional_qubits: If qubits is None and the qubits of the reference_gate are
+    #             used, this can be used to specify additional qubits before (first list in
+    #             tuple) or after (second list in tuple) the qubits.
+    #
+    #     Returns:
+    #         True, if the insertion has been successful, False otherwise.
+    #     """
+    #     for i, op in enumerate(circuit.data):
+    #         if op[0] == gate_to_replace:
+    #             circuit.data = circuit.data.pop(i) # remove gate
+    #             if isinstance(gate_to_insert, IGate()):
+    #                 return True
+    #             #TODO check qubits placing
+    #             qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
+    #             if additional_qubits:
+    #                 qubits = additional_qubits[0] + qubits + additional_qubits[1]
+    #             op_to_insert = (gate_to_insert, qubits, [])
+    #             insertion_index = i
+    #             circuit.data.insert(insertion_index, op_to_insert)
+    #             return True
+    #
+    #     return False
+
     @staticmethod
-    def replace_gate(circuit: QuantumCircuit,
-                    gate_to_replace: Gate,
-                    gate_to_insert: Gate,
-                    qubits: Optional[List[Qubit]] = None,
-                    additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
-        """Insert a gate into the circuit.
-
-        Args:
-            circuit: The circuit onto which the gare is added.
-            gate_to_replace: A gate instance which shall be replaced.
-            gate_to_insert: The gate to be inserted instead.
-            qubits: The qubits on which the gate is inserted. If None, the qubits of the
-                reference_gate are used.
-            additional_qubits: If qubits is None and the qubits of the reference_gate are
-                used, this can be used to specify additional qubits before (first list in
-                tuple) or after (second list in tuple) the qubits.
-
-        Returns:
-            True, if the insertion has been successful, False otherwise.
-        """
-        for i, op in enumerate(circuit.data):
-            if op[0] == gate_to_replace:
-                circuit.data = circuit.data.pop(i) # remove gate
-                #TODO check qubits placing
-                qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
-                if additional_qubits:
-                    qubits = additional_qubits[0] + qubits + additional_qubits[1]
-                op_to_insert = (gate_to_insert, qubits, [])
-                insertion_index = i
-                circuit.data.insert(insertion_index, op_to_insert)
-                return True
-
-        return False
-
-    @staticmethod
-    def get_coeffs_gates(gate: Gate) -> Tuple[List[List[complex]], List[List[Gate]]]:
+    def get_coeffs_gates(gate: Gate) -> Tuple[List[complex], List[Gate]]:
         """Get the controlled gate for the quantum Fisher Information.
 
         Currently, not all parametrized gates are supported.
@@ -357,39 +362,57 @@ class QuantumFisherInf(Gradient):
         Raises:
             TypeError: If the input gate is not a supported parametrized gate.
         """
+        """
+        (Gate0, Gate1) -> Gate0[q0], Gate1[q1]
+        """
+        if isinstance(gate, U1Gate):
+            # theta
+            return [0.5j, -0.5j], [IGate, CZGate]
+        # TODO Extend to gates with multiple parameters
+        # if isinstance(gate, U2Gate):
+        #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
+        #     # theta, phi
+        #     return [[0.5j], [-0.5j]], [[?], [CZGate]]
+        # if isinstance(gate, U3Gate):
+        #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
+        #     # theta, lambda, phi
+        #     return [[0.5j], [-0.5j], [-0.5j]], [[?], [?], [CZGate]]
         if isinstance(gate, RXGate):
             # theta
-            return [[-0.5j]], [[CXGate()]]
+            return [-0.5j], [CXGate]
         if isinstance(gate, RYGate):
             # theta
-            return [[-0.5j]], [[CYGate()]]
-        if isinstance(gate, RZGate) or isinstance(gate, U1Gate):
+            return [-0.5j], [CYGate]
+        if isinstance(gate, RZGate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            return [[-0.5j]], [[CZGate()]] # Check if this is also right for U1
-            # return [[0.5j, -0.5j]], [[IGate(), CZGate()]]
-        if isinstance(gate, U2Gate):
-            # theta, phi
-            return [[0.5j], [-0.5j]], [[CZGate()], [CZGate()]]
-        if isinstance(gate, U3Gate):
-            # theta, lambda, phi
-            return [[0.5j], [-0.5j], [0.5j]], [[CZGate()], [CZGate()], [CZGate()]]
+            return [-0.5j], [CZGate]
+        if isinstance(gate, RXXGate):
+            # theta
+            return [-0.5j], [(CXGate, CXGate)]
+        if isinstance(gate, RYYGate):
+            # theta
+            return [-0.5j], [CYGate, CYGate]
+        if isinstance(gate, RZZGate):
+            # theta
+            return [-0.5j], [(CZGate, CZGate)]
+        # TODO wait until this gate is fixed
+        # if isinstance(gate, RZXGate):
+        #     # theta
+        #     return [[-0.5j]], [[(CZGate, CXGate)]]
         if isinstance(gate, CRXGate):
             # theta
-            q = QuantumRegister(2)
-            qc = QuantumCircuit(q)
-            qc.u0(np.pi/2, q)
-            id_ = qc.to_instruction()
-            return [[0.5j, -0.5j]], [[id_, CXGate()]]
-
-        if isinstance(gate, CRZGate) or isinstance(gate, CU1Gate):
+            return [-0.25j, +0.25j], [(IGate, CXGate), (CZGate, CXGate)]
+        if isinstance(gate, CRYGate):
+            # theta
+            return [-0.25j, +0.25j], [(IGate, CYGate), (CZGate, CYGate)]
+        if isinstance(gate, CRZGate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            q = QuantumRegister(2)
-            qc = QuantumCircuit(q)
-            qc.u0(np.pi/2, q)
-            id_ = qc.to_instruction()
-            return [[0.5j, -0.5j]], [[id_, CZGate()]]
+            return [-0.25j, +0.25j], [(IGate, CZGate), (CZGate, CZGate)]
+        if isinstance(gate, CU1Gate):
+            # theta
+            return [0.25j, -0.25j, -0.25j, 0.25j], [IGate, (IGate, CZGate), (CZGate, IGate), (CZGate, CZGate)]
 
         r'''
         TODO multi-controlled-$U(\theta)$ for $m$ controlls:
