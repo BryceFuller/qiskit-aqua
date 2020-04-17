@@ -16,5 +16,6 @@
 
 from .gradient import Gradient
 from .natural_gradient import NaturalGradient
+from .q_fisher_inf import QuantumFisherInf
 
-__all__ = ['Gradient', 'NaturalGradient']
+__all__ = ['Gradient', 'NaturalGradient', 'QuantumFisherInf']

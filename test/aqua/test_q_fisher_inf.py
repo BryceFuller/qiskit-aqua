@@ -20,34 +20,115 @@ import unittest
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
-
-from typing import Optional, Tuple, List
-
+from qiskit.aqua.algorithms import QuantumFisherInf
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
-from qiskit.extensions.standard import RXGate, RYGate, RZGate
+from qiskit.extensions.standard import RXGate, RYGate, RZGate, CRZGate
 from copy import deepcopy
 
-from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.aqua import QuantumInstance, aqua_globals
 
 
 # from .gradient import Gradient
+class TestQuantumFisherInf(QiskitAquaTestCase):
+    """ Test Quantum Fisher Information """
+    def setUp(self):
+        super().setUp()
+        aqua_globals.random_seed = 50
+        # Set quantum instance to run the quantum generator
+        self.qi_statevector = QuantumInstance(backend=BasicAer.get_backend('statevector_simulator'),
+                                              seed_simulator=2,
+                                              seed_transpiler=2)
+        self.qi_qasm = QuantumInstance(backend=BasicAer.get_backend('qasm_simulator'),
+                                       shots=1000,
+                                       seed_simulator=2,
+                                       seed_transpiler=2)
+        pass
 
-# p0 = Parameter('p0')
-# p1 = Parameter('p1')
-# p2 = Parameter('p2')
-# p = [p0, p1]
-# q = QuantumRegister(2)
-# qc = QuantumCircuit(q)
-# qc.rx(p[0], q[1])
-# qc.cry(p2, q[1], q[0])
-# qc.rz(p[1], q[1])
-# parameterized_gates = []
-# for param, elements in qc._parameter_table.items():
-#     for element in elements:
-#         parameterized_gates.append(element[0])
-# print(parameterized_gates)
-# reference_gate = parameterized_gates[1]
+    def test_qc_trimming(self):
+        """Test if quantum circuits are correctly trimmed after a reference gate"""
+        p0 = Parameter('p0')
+        p1 = Parameter('p1')
+        p2 = Parameter('p2')
+        p = [p0, p1, p2]
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.rx(p[0], q[1])
+        qc.cry(p[1], q[1], q[0])
+        qc.rz(p[2], q[1])
+        parameterized_gates = []
+        for param, elements in qc._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
+        reference_gate = parameterized_gates[1]
+        trimmed_qc = QuantumFisherInf.trim_circuit(qc, reference_gate)
+
+        self.assertEqual(trimmed_qc.data, qc.data[:2])
+
+    def test_qc_inserting(self):
+        """Test if quantum circuits are correctly trimmed after a reference gate"""
+        p0 = Parameter('p0')
+        p1 = Parameter('p1')
+
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.rx(p0, q[1])
+        qc.cry(p1, q[1], q[0])
+
+        parameterized_gates = []
+        for param, elements in qc._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
+
+        qr_ancilla = QuantumRegister(1, 'ancilla')
+        ancilla = qr_ancilla[0]
+        qc.add_register(qr_ancilla)
+
+        additional_qubits = ([ancilla], [])
+        p_new = Parameter('p')
+        success = QuantumFisherInf.insert_gate(qc, parameterized_gates[0],
+                                     CRZGate(p_new), qubits=[q[1]],
+                                     additional_qubits=additional_qubits)
+        #
+        # q_test = QuantumRegister(3)
+        # qc_test = QuantumCircuit(q_test)
+        # qc_test.rx(p0, q_test[1])
+        # qc_test.crz(p_new, q_test[2], q_test[1])
+        # qc_test.cry(p1, q_test[1], q_test[0])
+        #
+        # print(qc)
+        # print(qc_test)
+
+        self.assertTrue(success)
+        # self.assertEqual(qc.data, qc_test.data)
+
+    def test_construct_circuits(self):
+        #TODO here
+        """Test if quantum circuits are correctly trimmed after a reference gate"""
+        p0 = Parameter('p0')
+        p1 = Parameter('p1')
+        p2 = Parameter('p2')
+        p = [p0, p1, p2]
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.rx(p[0], q[1])
+        qc.cry(p[1], q[1], q[0])
+        qc.rz(p[2], q[1])
+        parameterized_gates = []
+        for param, elements in qc._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
+
+        qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi_statevector)
+        qfi_circuits = qfi.construct_circuits(parameterized_gates)
+        self.assertEqual(len(qfi_circuits), 4)
+
+        """
+        Test construct circuits
+        Ensure that the method returns a list of circuits and that the length of the list is correct.
+        Something else?
+        """
+
 # print(reference_gate)
 # for i, op in enumerate(qc.data):
 #     if op[0] == reference_gate:
@@ -56,26 +137,8 @@ from qiskit.aqua import QuantumInstance, AquaError
 #         circuit.data = qc.data[:i+1]
 #         print(circuit)
 
-"""
-Test trimming
-Construct Quantum Circuit with 3 gates
-Cut after the second gate
-Validate that the first 2 gates are the only ones in qc.data
-"""
-
-"""
-Test inserting
-Construct Quantum Circuit with 2 gates
-Insert another gate after the first gate
-Validate that the all 3 gates are in qc.data
-"""
 
 
-"""
-Test construct circuits
-Ensure that the method returns a list of circuits and that the length of the list is correct.
-Something else?
-"""
 
 
 
@@ -83,3 +146,6 @@ Something else?
 Test qfi
 Use two test cases. Computed by Amira to check if the results are correct
 """
+
+if __name__ == '__main__':
+    unittest.main()
