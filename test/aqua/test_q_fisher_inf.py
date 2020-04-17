@@ -36,13 +36,13 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         super().setUp()
         aqua_globals.random_seed = 50
         # Set quantum instance to run the quantum generator
-        self.qi_statevector = QuantumInstance(backend=BasicAer.get_backend('statevector_simulator'),
-                                              seed_simulator=2,
-                                              seed_transpiler=2)
-        self.qi_qasm = QuantumInstance(backend=BasicAer.get_backend('qasm_simulator'),
-                                       shots=1000,
-                                       seed_simulator=2,
-                                       seed_transpiler=2)
+        self.qi = QuantumInstance(backend=BasicAer.get_backend('statevector_simulator'),
+                                  seed_simulator=2,
+                                  seed_transpiler=2)
+        # self.qi_qasm = QuantumInstance(backend=BasicAer.get_backend('qasm_simulator'),
+        #                                shots=1000,
+        #                                seed_simulator=2,
+        #                                seed_transpiler=2)
         pass
 
     def test_qc_trimming(self):
@@ -60,7 +60,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for param, elements in qc._parameter_table.items():
             for element in elements:
                 parameterized_gates.append(element[0])
-        reference_gate = parameterized_gates[1]
+        reference_gate = parameterized_gates[2]
         trimmed_qc = QuantumFisherInf.trim_circuit(qc, reference_gate)
 
         self.assertEqual(trimmed_qc.data, qc.data[:2])
@@ -103,8 +103,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         # self.assertEqual(qc.data, qc_test.data)
 
     def test_construct_circuits(self):
-        #TODO here
-        """Test if quantum circuits are correctly trimmed after a reference gate"""
+        """Test if quantum circuits to be evaluated are constructed"""
         p0 = Parameter('p0')
         p1 = Parameter('p1')
         p2 = Parameter('p2')
@@ -119,33 +118,17 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             for element in elements:
                 parameterized_gates.append(element[0])
 
-        qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi_statevector)
+        qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
         qfi_circuits = qfi.construct_circuits(parameterized_gates)
-        self.assertEqual(len(qfi_circuits), 4)
 
-        """
-        Test construct circuits
-        Ensure that the method returns a list of circuits and that the length of the list is correct.
-        Something else?
-        """
-
-# print(reference_gate)
-# for i, op in enumerate(qc.data):
-#     if op[0] == reference_gate:
-#         print(op[1])
-#         circuit = QuantumCircuit(*qc.qregs)
-#         circuit.data = qc.data[:i+1]
-#         print(circuit)
+        self.assertEqual(len(qfi_circuits), 5)
 
 
+    def test_qfi(self):
+        """Test if the quantum fisher information calculation is correct"""
+        # TODO
 
-
-
-
-"""
-Test qfi
-Use two test cases. Computed by Amira to check if the results are correct
-"""
+        self.assertListEqual(list1, list2)
 
 if __name__ == '__main__':
     unittest.main()

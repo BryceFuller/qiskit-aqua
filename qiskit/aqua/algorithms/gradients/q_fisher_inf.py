@@ -78,7 +78,7 @@ class QuantumFisherInf(Gradient):
                     Operator used for the expectation value evaluation and the corresponding qubit registers
 
                 """
-                evaluation_qubit = find_regs_by_name(qc, 'q')
+                evaluation_qubit = find_regs_by_name(qc, 'ancilla')
                 if single_qubit_mem:
                     pauli = 'Z'
                     qregs_list = evaluation_qubit
@@ -231,12 +231,12 @@ class QuantumFisherInf(Gradient):
                         # Fix phase ancilla
                         phase = np.sign(qfi_coeffs[i][k])*np.sign(qfi_coeffs[j][l])
                         if np.iscomplex(qfi_coeffs[i][k]):
-                            if np.iscomplex(qfi_coeffs[j][k]):
+                            if np.iscomplex(qfi_coeffs[j][l]):
                                 phase *= (-1)
                             else:
                                 phase *= 1j
                         else:
-                            if np.iscomplex(qfi_coeffs[j][k]):
+                            if np.iscomplex(qfi_coeffs[j][l]):
                                 phase *= 1j
                         if phase == 1j:
                             qfi_circuit.h(ancilla)
@@ -256,7 +256,7 @@ class QuantumFisherInf(Gradient):
                                     qubits = op[1]
                             for p, qubit in enumerate(qubits):
                                 success_i &= QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
-                                                                         gate_to_insert_i[p], qubits = [qubit],
+                                                                         gate_to_insert_i[p], qubits=[qubit],
                                                                          additional_qubits=additional_qubits)
                         else:
                             success_i = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
@@ -283,11 +283,11 @@ class QuantumFisherInf(Gradient):
                             raise AquaError('Could not insert the controlled gate, something went wrong!')
 
                         # Remove redundant gates
-                        qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, gate_to_insert_i)
+                        qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, parameterized_gates[i])
 
-                        if isinstance(parameterized_gates[j], ControlledGate):
-                            QuantumFisherInf.replace_gate(qfi_circuit, parameterized_gates[j],
-                                                          parameterized_gates[j].base_gate)
+                        # if isinstance(parameterized_gates[j], ControlledGate):
+                        #     QuantumFisherInf.replace_gate(qfi_circuit, parameterized_gates[j],
+                        #                                   parameterized_gates[j].base_gate)
 
                         qfi_circuit.h(ancilla)
                         circuits += [qfi_circuit]
@@ -389,7 +389,7 @@ class QuantumFisherInf(Gradient):
 
         if isinstance(gate, U1Gate):
             # theta
-            return [0.5j, -0.5j], [IGate, CZGate]
+            return [0.5j, -0.5j], [IGate(), CZGate()]
         # TODO Extend to gates with multiple parameters
         # if isinstance(gate, U2Gate):
         #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
@@ -401,40 +401,41 @@ class QuantumFisherInf(Gradient):
         #     return [[0.5j], [-0.5j], [-0.5j]], [[?], [?], [CZGate]]
         if isinstance(gate, RXGate):
             # theta
-            return [-0.5j], [CXGate]
+            return [-0.5j], [CXGate()]
         if isinstance(gate, RYGate):
             # theta
-            return [-0.5j], [CYGate]
+            return [-0.5j], [CYGate()]
         if isinstance(gate, RZGate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            return [-0.5j], [CZGate]
+            return [-0.5j], [CZGate()]
         if isinstance(gate, RXXGate):
             # theta
-            return [-0.5j], [CXGate]
+            return [-0.5j], [CXGate()]
         if isinstance(gate, RYYGate):
             # theta
-            return [-0.5j], [CYGate]
+            return [-0.5j], [CYGate()]
         if isinstance(gate, RZZGate):
             # theta
-            return [-0.5j], [(CZGate, CZGate)]
+            return [-0.5j], [(CZGate(), CZGate())]
         # TODO wait until this gate is fixed
         # if isinstance(gate, RZXGate):
         #     # theta
         #     return [[-0.5j]], [[(CZGate, CXGate)]]
         if isinstance(gate, CRXGate):
             # theta
-            return [-0.25j, +0.25j], [(IGate, CXGate), (CZGate, CXGate)]
+            return [-0.25j, +0.25j], [(IGate(), CXGate()), (CZGate(), CXGate())]
         if isinstance(gate, CRYGate):
             # theta
-            return [-0.25j, +0.25j], [(IGate, CYGate), (CZGate, CYGate)]
+            return [-0.25j, +0.25j], [(IGate(), CYGate()), (CZGate(), CYGate())]
         if isinstance(gate, CRZGate):
             # theta
             # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-            return [-0.25j, +0.25j], [(IGate, CZGate), CZGate]
+            return [-0.25j, +0.25j], [(IGate(), CZGate()), CZGate()]
         if isinstance(gate, CU1Gate):
             # theta
-            return [0.25j, -0.25j, -0.25j, 0.25j], [IGate, (IGate, CZGate), (CZGate, IGate), (CZGate, CZGate)]
+            return [0.25j, -0.25j, -0.25j, 0.25j], [IGate(), (IGate(), CZGate()), (CZGate(), IGate()),
+                                                    (CZGate(), CZGate())]
 
         r'''
         TODO multi-controlled-$U(\theta)$ for $m$ controlls:
@@ -446,7 +447,7 @@ class QuantumFisherInf(Gradient):
 
     @staticmethod
     def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
-        """Trim the given quantum circuit after the reference gate.
+        """Trim the given quantum circuit before the reference gate.
 
 
         Args:
@@ -467,7 +468,7 @@ class QuantumFisherInf(Gradient):
         for i, op in enumerate(circuit.data):
             if op[0] == reference_gate:
                 trimmed_circuit = QuantumCircuit(*circuit.qregs)
-                trimmed_circuit.data = circuit.data[:i + 1]
+                trimmed_circuit.data = circuit.data[:i]
                 return trimmed_circuit
 
         raise AquaError('The reference gate is not in the given quantum circuit.')
