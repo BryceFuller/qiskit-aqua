@@ -149,8 +149,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         q = QuantumRegister(2)
         qc = QuantumCircuit(q)
         qc.rx(p[0], q[1])
-        qc.cry(p[1], q[1], q[0])
-        values = [0.1, np.pi/2]
+        qc.cry(p[1], q[0], q[1])
+        values = [0.1, np.pi]
 
         parameterized_gates = []
         for param, elements in qc._parameter_table.items():
@@ -158,10 +158,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                 parameterized_gates.append(element[0])
 
         qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
-
-        print(qfi.compute_qfi(p, values))
-
-        # self.assertListEqual(list1, list2)
+        almost_equal = np.allclose(qfi.compute_qfi(p, values), [[1, 0], [0, 0.5]], atol=1e-10)
+        self.assertTrue(almost_equal)
 
 if __name__ == '__main__':
     unittest.main()
