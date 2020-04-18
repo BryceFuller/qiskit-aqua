@@ -641,7 +641,8 @@ class WeightedPauliOperator(BaseOperator):
                                 "or used `q` as the name in the input circuit.")
         else:
             if not wave_function.has_register(qr):
-                raise AquaError("The provided QuantumRegister (qr) is not in the circuit.")
+                pass
+                # raise AquaError("The provided QuantumRegister (qr) is not in the circuit.")
 
         n_qubits = self.num_qubits
         instructions = self.evaluation_instruction(statevector_mode, use_simulator_snapshot_mode)

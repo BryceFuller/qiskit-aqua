@@ -45,16 +45,20 @@ class QuantumFisherInf(Gradient):
         """
         super().__init__(circuit, quantum_instance)
 
-    def compute_qfi(self, parameters: Parameter) -> np.ndarray:
+    def compute_qfi(self, parameters: Parameter, parameter_values: List) -> np.ndarray:
         """Compute the entry of quantum Fisher Information with respect to the provided parameters.
 
         Args:
             parameters: The parameters with respect to which the quantum Fisher Information is computed.
+            parameter_values: The values of the parameters with respect to which the quantum Fisher Information
+            is computed.
 
         Returns: quantum Fisher Information
         """
+        #TODO circumvent this
+        self._parameters = parameters
 
-        def get_exp_value(self, circuit: QuantumCircuit) -> List[float]:
+        def get_exp_value(circuit: QuantumCircuit) -> List[float]:
             r"""
             Evaluate the expectation value $\langle Z \rangle$ w.r.t. the ancilla qubit (named 'q')
             Args:
@@ -111,8 +115,10 @@ class QuantumFisherInf(Gradient):
             # TODO enable measurement error mitigation when circuitd in qobj use different physical qubits
             for k, circuit_item in enumerate(circuit):
                 qubit_op, qregs_list = prepare(circuit_item, single_qubit_mem=False)
-                qc.extend(
-                    qubit_op.construct_evaluation_circuit(statevector_mode=sv_mode, wave_function=circuit_item,
+                print('I may have done a hacky thing with the construct_evaluation_circuit method of the '
+                              'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
+                              'registers but only full registers. Wait for refactoring of operator.')
+                qc.extend(qubit_op.construct_evaluation_circuit(statevector_mode=sv_mode, wave_function=circuit_item,
                                                           qr=qregs_list, circuit_name_prefix='circuits' + str(k)))
                 qubit_ops.append(qubit_op)
 
@@ -140,7 +146,10 @@ class QuantumFisherInf(Gradient):
 
         qfi = np.zeros((len(parameters), len(parameters)))
 
-        parameterized_gates = [element[0] for element in self._circuit._parameter_table[parameters]]
+        parameterized_gates = []
+        for param, elements in self._circuit._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
 
         qfi_coeffs = []
         qfi_gates = []
@@ -150,7 +159,7 @@ class QuantumFisherInf(Gradient):
                 qfi_coeffs.append(coeffs)
                 qfi_gates.append(gates)
 
-        qfi_circuits = self.construct_circuits(parameterized_gates, qfi_coeffs, qfi_gates)
+        qfi_circuits = self.construct_circuits(parameterized_gates, parameter_values)
         qfi_exp_values = get_exp_value(qfi_circuits)
         counter = 0
         for i in range(len(parameterized_gates)):
@@ -182,11 +191,14 @@ class QuantumFisherInf(Gradient):
         # ---------------------
         return 4*qfi # Add correct pre-factor
 
-    def construct_circuits(self, parameterized_gates: List[Gate]) -> [List[QuantumCircuit]]:
+    def construct_circuits(self, parameterized_gates: List[Gate], parameter_values: Optional[List] = None) -> \
+            [List[QuantumCircuit]]:
         """Generate the quantum Fisher Information circuits.
 
         Args:
             parameterized gates: The list of parameters and gates with respect to which the quantum Fisher Information
+            is computed.
+            parameter_values: The values of the parameters with respect to which the quantum Fisher Information
             is computed.
 
         Returns:
@@ -281,6 +293,11 @@ class QuantumFisherInf(Gradient):
                                                                      additional_qubits=additional_qubits)
                         if not success_j:
                             raise AquaError('Could not insert the controlled gate, something went wrong!')
+
+                        # TODO bind parameters not here but in execute!
+                        if parameter_values is not None:
+                            for q, param in enumerate(self._parameters):
+                                qfi_circuit = qfi_circuit.bind_parameters({param: parameter_values[q]})
 
                         # Remove redundant gates
                         qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, parameterized_gates[i])

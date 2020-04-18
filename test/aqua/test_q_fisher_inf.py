@@ -127,8 +127,26 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct"""
         # TODO
+        """Test if quantum circuits to be evaluated are constructed"""
+        p0 = Parameter('p0')
+        p1 = Parameter('p1')
+        p2 = Parameter('p2')
+        p = [p0, p1, p2]
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.rx(p[0], q[1])
+        qc.cry(p[1], q[1], q[0])
+        qc.rz(p[2], q[1])
+        parameterized_gates = []
+        for param, elements in qc._parameter_table.items():
+            for element in elements:
+                parameterized_gates.append(element[0])
 
-        self.assertListEqual(list1, list2)
+        qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
+        values = [0.1, -0.1, 0.2]
+        print(qfi.compute_qfi(p, values))
+
+        # self.assertListEqual(list1, list2)
 
 if __name__ == '__main__':
     unittest.main()
