@@ -19,6 +19,8 @@ from typing import Optional, Tuple, List
 import numpy as np
 
 from qiskit import QuantumCircuit, QuantumRegister
+from qiskit.compiler import transpile
+
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
 from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
     U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
@@ -44,6 +46,9 @@ class QuantumFisherInf(Gradient):
             quantum_instance: The quantum instance used to execute the circuits.
         """
         super().__init__(circuit, quantum_instance)
+        print('I may have done a hacky thing with the construct_evaluation_circuit method of the '
+              'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
+              'registers but only full registers. Wait for refactoring of operator.')
 
     def compute_qfi(self, parameters: Parameter, parameter_values: List) -> np.ndarray:
         """Compute the entry of quantum Fisher Information with respect to the provided parameters.
@@ -115,15 +120,13 @@ class QuantumFisherInf(Gradient):
             # TODO enable measurement error mitigation when circuitd in qobj use different physical qubits
             for k, circuit_item in enumerate(circuit):
                 qubit_op, qregs_list = prepare(circuit_item, single_qubit_mem=False)
-                print('I may have done a hacky thing with the construct_evaluation_circuit method of the '
-                              'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
-                              'registers but only full registers. Wait for refactoring of operator.')
                 qc.extend(qubit_op.construct_evaluation_circuit(statevector_mode=sv_mode, wave_function=circuit_item,
                                                           qr=qregs_list, circuit_name_prefix='circuits' + str(k)))
                 qubit_ops.append(qubit_op)
 
             success = False
             counter = 0
+
             while not success:
                 # This prevents errors if a hardware call may return an error.
                 try:
@@ -160,34 +163,35 @@ class QuantumFisherInf(Gradient):
                 qfi_gates.append(gates)
 
         qfi_circuits = self.construct_circuits(parameterized_gates, parameter_values)
-        qfi_exp_values = get_exp_value(qfi_circuits)
+        if len(qfi_circuits) > 0:
+            qfi_exp_values = get_exp_value(qfi_circuits)
         counter = 0
         for i in range(len(parameterized_gates)):
             j = 0
             while j <= i:
-                if len(qfi_coeffs[i]) == 1 & len(qfi_coeffs[j]) == 1:
-                    if j == i:
-                        for coeff in qfi_coeffs[i]:
-                            # TODO Check correct summation of derivative
-                            qfi[i, j] += np.abs(coeff)**2
-                    else:
-                        for coeff_i in qfi_coeffs[i]:
-                            for coeff_j in qfi_coeffs[j]:
-                                # TODO Check correct summation of derivative
-                                qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
-                                counter += 1
-                        qfi[j, i] = qfi[i, j]
+                # if len(qfi_coeffs[i]) == 1 & len(qfi_coeffs[j]) == 1:
+                if j == i:
+                    for coeff in qfi_coeffs[i]:
+                        # TODO Check correct summation of derivative
+                        qfi[i, j] += np.abs(coeff)**2
                 else:
-                    raise AquaError('Compatibility with gates with more than 1 parameters is not yet given.')
+                    for coeff_i in qfi_coeffs[i]:
+                        for coeff_j in qfi_coeffs[j]:
+                            # TODO Check correct summation of derivative
+                            qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
+                            counter += 1
+                    qfi[j, i] = qfi[i, j]
+                # else:
+                #     raise AquaError('Compatibility with gates with more than 1 parameters is not yet given.')
                 j += 1
 
         # TODO delete this below here
-        print('The current circuit is')
-        print(self._circuit.draw())
-        print('We are computing the derivative with respect to', parameters)
-        print('The gradient circuits are:')
-        for circuit in qfi_circuits:
-            print(circuit.draw())
+        # print('The current circuit is')
+        # print(self._circuit.draw())
+        # print('We are computing the derivative with respect to', parameters)
+        # print('The gradient circuits are:')
+        # for circuit in qfi_circuits:
+        #     print(circuit.draw())
         # ---------------------
         return 4*qfi # Add correct pre-factor
 
@@ -209,6 +213,11 @@ class QuantumFisherInf(Gradient):
         Raises:
             AquaError: If one of the circuits could not be constructed.
         """
+        if parameter_values is not None:
+            master_dict = {}
+            for q, param in enumerate(self._circuit.parameters):
+                master_dict[param] = parameter_values[q]
+
         qfi_coeffs = []
         qfi_gates = []
         for reference_gate in parameterized_gates:
@@ -294,19 +303,17 @@ class QuantumFisherInf(Gradient):
                         if not success_j:
                             raise AquaError('Could not insert the controlled gate, something went wrong!')
 
-                        # TODO bind parameters not here but in execute!
-                        if parameter_values is not None:
-                            for q, param in enumerate(self._parameters):
-                                qfi_circuit = qfi_circuit.bind_parameters({param: parameter_values[q]})
-
                         # Remove redundant gates
                         qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, parameterized_gates[i])
 
-                        # if isinstance(parameterized_gates[j], ControlledGate):
-                        #     QuantumFisherInf.replace_gate(qfi_circuit, parameterized_gates[j],
-                        #                                   parameterized_gates[j].base_gate)
-
                         qfi_circuit.h(ancilla)
+                        # Transpile
+                        qfi_circuit = transpile(qfi_circuit, backend=self._quantum_instance.backend)
+                        # TODO better bind parameters in compute_qfi
+                        if parameter_values is not None:
+                            new_dict = {param: value for param, value in master_dict.items() if
+                                        param in qfi_circuit.parameters}
+                            qfi_circuit = qfi_circuit.assign_parameters(new_dict)
                         circuits += [qfi_circuit]
                 j += 1
 

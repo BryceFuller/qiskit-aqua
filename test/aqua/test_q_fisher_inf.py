@@ -24,7 +24,7 @@ from qiskit.aqua.algorithms import QuantumFisherInf
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
 from qiskit.extensions.standard import RXGate, RYGate, RZGate, CRZGate
-from copy import deepcopy
+import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
 
@@ -123,27 +123,42 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         self.assertEqual(len(qfi_circuits), 5)
 
-
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct"""
-        # TODO
+        # TODO insert correct values and gates for the computed examples.
         """Test if quantum circuits to be evaluated are constructed"""
+        # p0 = Parameter('p0')
+        # p1 = Parameter('p1')
+        # p2 = Parameter('p2')
+        # p = [p0, p1, p2]
+        # q = QuantumRegister(2)
+        # qc = QuantumCircuit(q)
+        # qc.rx(p[0], q[1])
+        # qc.cry(p[1], q[1], q[0])
+        # qc.rz(p[2], q[1])
+        # p0 = Parameter('p0')
+        # p = [p0]
+        # q = QuantumRegister(1)
+        # qc = QuantumCircuit(q)
+        # qc.ry(p[0], q[0])
+
+
         p0 = Parameter('p0')
         p1 = Parameter('p1')
-        p2 = Parameter('p2')
-        p = [p0, p1, p2]
+        p = [p0, p1]
         q = QuantumRegister(2)
         qc = QuantumCircuit(q)
         qc.rx(p[0], q[1])
         qc.cry(p[1], q[1], q[0])
-        qc.rz(p[2], q[1])
+        values = [0.1, np.pi/2]
+
         parameterized_gates = []
         for param, elements in qc._parameter_table.items():
             for element in elements:
                 parameterized_gates.append(element[0])
 
         qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
-        values = [0.1, -0.1, 0.2]
+
         print(qfi.compute_qfi(p, values))
 
         # self.assertListEqual(list1, list2)
