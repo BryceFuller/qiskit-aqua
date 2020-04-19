@@ -89,21 +89,11 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         success = QuantumFisherInf.insert_gate(qc, parameterized_gates[0],
                                      CRZGate(p_new), qubits=[q[1]],
                                      additional_qubits=additional_qubits)
-        #
-        # q_test = QuantumRegister(3)
-        # qc_test = QuantumCircuit(q_test)
-        # qc_test.rx(p0, q_test[1])
-        # qc_test.crz(p_new, q_test[2], q_test[1])
-        # qc_test.cry(p1, q_test[1], q_test[0])
-        #
-        # print(qc)
-        # print(qc_test)
-
         self.assertTrue(success)
-        # self.assertEqual(qc.data, qc_test.data)
 
     def test_construct_circuits(self):
         """Test if quantum circuits to be evaluated are constructed"""
+
         p0 = Parameter('p0')
         p1 = Parameter('p1')
         p2 = Parameter('p2')
@@ -125,22 +115,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct"""
-        # TODO insert correct values and gates for the computed examples.
-        """Test if quantum circuits to be evaluated are constructed"""
-        # p0 = Parameter('p0')
-        # p1 = Parameter('p1')
-        # p2 = Parameter('p2')
-        # p = [p0, p1, p2]
-        # q = QuantumRegister(2)
-        # qc = QuantumCircuit(q)
-        # qc.rx(p[0], q[1])
-        # qc.cry(p[1], q[1], q[0])
-        # qc.rz(p[2], q[1])
-        # p0 = Parameter('p0')
-        # p = [p0]
-        # q = QuantumRegister(1)
-        # qc = QuantumCircuit(q)
-        # qc.ry(p[0], q[0])
 
         p0 = Parameter('p0')
         p1 = Parameter('p1')
@@ -160,6 +134,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         # print(qfi.compute_qfi(p, values))
         almost_equal = np.allclose(qfi.compute_qfi(p, values), [[1, 0], [0, 0.5]], atol=1e-10)
         self.assertTrue(almost_equal)
+
 
 if __name__ == '__main__':
     unittest.main()
