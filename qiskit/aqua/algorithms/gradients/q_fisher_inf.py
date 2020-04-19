@@ -50,26 +50,26 @@ class QuantumFisherInf(Gradient):
               'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
               'registers but only full registers. Wait for refactoring of operator.')
 
-    def compute_qfi(self, parameters: Parameter, parameter_values: List) -> np.ndarray:
+    def compute_qfi(self, parameters: Parameter, parameter_values: List,
+                    qfi_circuits: Optional[List[QuantumCircuit]] = None) -> np.ndarray:
         """Compute the entry of quantum Fisher Information with respect to the provided parameters.
 
         Args:
             parameters: The parameters with respect to which the quantum Fisher Information is computed.
             parameter_values: The values of the parameters with respect to which the quantum Fisher Information
             is computed.
+            qfi_ciruits:
 
         Returns: quantum Fisher Information
         """
-        #TODO circumvent this
-        self._parameters = parameters
 
-        def get_exp_value(circuit: QuantumCircuit) -> List[float]:
+        def get_exp_value(circuit: List[QuantumCircuit]) -> List[float]:
             r"""
-            Evaluate the expectation value $\langle Z \rangle$ w.r.t. the ancilla qubit (named 'q')
+            Evaluate the expectation value $\langle Z \rangle$ w.r.t. the ancilla qubit (named 'ancilla')
             Args:
-                circuit: with a single qubit QuantumRegister with name 'q'
+                circuit: list of quantum circuits with a single qubit QuantumRegister with name 'ancilla'
 
-            Returns: expectation value $\langle Z \rangle$ w.r.t. the 'q' QuantumRegister
+            Returns: expectation value $\langle Z \rangle$ w.r.t. the 'ancilla' QuantumRegister
 
             """
 
@@ -118,7 +118,17 @@ class QuantumFisherInf(Gradient):
             qc = []
             qubit_ops = []
             # TODO enable measurement error mitigation when circuitd in qobj use different physical qubits
+            # Construct master dictionary for parameter assignment
+            master_dict = {}
+            for q, param in enumerate(self._circuit.parameters):
+                master_dict[param] = parameter_values[q]
             for k, circuit_item in enumerate(circuit):
+                # Transpile & assign parameter values
+                circuit_item = transpile(circuit_item, backend=self._quantum_instance.backend)
+                new_dict = {param: value for param, value in master_dict.items() if
+                            param in circuit_item.parameters}
+                circuit_item = circuit_item.assign_parameters(new_dict)
+                # Construct circuits to evaluate the expectation values
                 qubit_op, qregs_list = prepare(circuit_item, single_qubit_mem=False)
                 qc.extend(qubit_op.construct_evaluation_circuit(statevector_mode=sv_mode, wave_function=circuit_item,
                                                           qr=qregs_list, circuit_name_prefix='circuits' + str(k)))
@@ -161,15 +171,14 @@ class QuantumFisherInf(Gradient):
                 coeffs, gates = QuantumFisherInf.get_coeffs_gates(reference_gate)
                 qfi_coeffs.append(coeffs)
                 qfi_gates.append(gates)
-
-        qfi_circuits = self.construct_circuits(parameterized_gates, parameter_values)
+        if qfi_circuits is None:
+            qfi_circuits = self.construct_circuits(parameterized_gates)
         if len(qfi_circuits) > 0:
             qfi_exp_values = get_exp_value(qfi_circuits)
         counter = 0
         for i in range(len(parameterized_gates)):
             j = 0
             while j <= i:
-                # if len(qfi_coeffs[i]) == 1 & len(qfi_coeffs[j]) == 1:
                 if j == i:
                     for coeff in qfi_coeffs[i]:
                         # TODO Check correct summation of derivative
@@ -181,8 +190,6 @@ class QuantumFisherInf(Gradient):
                             qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
                             counter += 1
                     qfi[j, i] = qfi[i, j]
-                # else:
-                #     raise AquaError('Compatibility with gates with more than 1 parameters is not yet given.')
                 j += 1
 
         # TODO delete this below here
@@ -193,9 +200,10 @@ class QuantumFisherInf(Gradient):
         # for circuit in qfi_circuits:
         #     print(circuit.draw())
         # ---------------------
-        return 4*qfi # Add correct pre-factor
+        # Add correct pre-factor and return
+        return 4*qfi
 
-    def construct_circuits(self, parameterized_gates: List[Gate], parameter_values: Optional[List] = None) -> \
+    def construct_circuits(self, parameterized_gates: List[Gate]) -> \
             [List[QuantumCircuit]]:
         """Generate the quantum Fisher Information circuits.
 
@@ -213,11 +221,6 @@ class QuantumFisherInf(Gradient):
         Raises:
             AquaError: If one of the circuits could not be constructed.
         """
-        if parameter_values is not None:
-            master_dict = {}
-            for q, param in enumerate(self._circuit.parameters):
-                master_dict[param] = parameter_values[q]
-
         qfi_coeffs = []
         qfi_gates = []
         for reference_gate in parameterized_gates:
@@ -307,13 +310,6 @@ class QuantumFisherInf(Gradient):
                         qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, parameterized_gates[i])
 
                         qfi_circuit.h(ancilla)
-                        # Transpile
-                        qfi_circuit = transpile(qfi_circuit, backend=self._quantum_instance.backend)
-                        # TODO better bind parameters in compute_qfi
-                        if parameter_values is not None:
-                            new_dict = {param: value for param, value in master_dict.items() if
-                                        param in qfi_circuit.parameters}
-                            qfi_circuit = qfi_circuit.assign_parameters(new_dict)
                         circuits += [qfi_circuit]
                 j += 1
 
