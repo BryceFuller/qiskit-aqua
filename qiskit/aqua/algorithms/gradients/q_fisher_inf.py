@@ -23,7 +23,8 @@ from qiskit.compiler import transpile
 
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
 from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
-    U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate
+    U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, XGate, \
+    SdgGate, SGate, ZGate
 
 from qiskit.aqua.operators import WeightedPauliOperator
 from qiskit.quantum_info import Pauli
@@ -51,14 +52,14 @@ class QuantumFisherInf(Gradient):
               'registers but only full registers. Wait for refactoring of operator.')
 
     def compute_qfi(self, parameters: Parameter, parameter_values: List,
-                    qfi_circuits: Optional[List[QuantumCircuit]] = None) -> np.ndarray:
+                    qfi_circuits: Optional[Tuple[List[QuantumCircuit], List[QuantumCircuit]]] = None) -> np.ndarray:
         """Compute the entry of quantum Fisher Information with respect to the provided parameters.
 
         Args:
             parameters: The parameters with respect to which the quantum Fisher Information is computed.
             parameter_values: The values of the parameters with respect to which the quantum Fisher Information
             is computed.
-            qfi_ciruits:
+            qfi_circuits: Tuple of lists of quantum circuits needed to compute the quantum Fisher Information.
 
         Returns: quantum Fisher Information
         """
@@ -155,8 +156,6 @@ class QuantumFisherInf(Gradient):
                 avg.append(avg_temp)
             return avg
 
-        # TODO include the term rather than an ancilla?
-
         qfi = np.zeros((len(parameters), len(parameters)))
 
         parameterized_gates = []
@@ -172,39 +171,36 @@ class QuantumFisherInf(Gradient):
                 qfi_coeffs.append(coeffs)
                 qfi_gates.append(gates)
         if qfi_circuits is None:
-            qfi_circuits = self.construct_circuits(parameterized_gates)
+            qfi_circuits, qfi_phase_fix_circuits = self.construct_circuits(parameterized_gates)
+        else:
+            qfi_circuits, qfi_phase_fix_circuits = qfi_circuits
         if len(qfi_circuits) > 0:
             qfi_exp_values = get_exp_value(qfi_circuits)
+        if len(qfi_phase_fix_circuits) > 0:
+            qfi_phase_fix_exp_values = get_exp_value(qfi_phase_fix_circuits)
+
+        phase_fix_values = np.zeros(len(parameterized_gates))
+        counter_phase_fix = 0
         counter = 0
         for i in range(len(parameterized_gates)):
+            for k, coeff in enumerate(qfi_coeffs[i]):
+                phase_fix_values[i] += coeff * qfi_phase_fix_exp_values[counter_phase_fix]
+                counter_phase_fix += 1
             j = 0
             while j <= i:
-                if j == i:
-                    for coeff in qfi_coeffs[i]:
-                        # TODO Check correct summation of derivative
-                        qfi[i, j] += np.abs(coeff)**2
-                else:
-                    for coeff_i in qfi_coeffs[i]:
-                        for coeff_j in qfi_coeffs[j]:
-                            # TODO Check correct summation of derivative
-                            qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
-                            counter += 1
-                    qfi[j, i] = qfi[i, j]
+                qfi[i, j] -= np.real(np.conj(phase_fix_values[i]) * phase_fix_values[j])
+                for coeff_i in qfi_coeffs[i]:
+                    for coeff_j in qfi_coeffs[j]:
+                        qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
+                        counter += 1
+                qfi[j, i] = qfi[i, j]
                 j += 1
 
-        # TODO delete this below here
-        # print('The current circuit is')
-        # print(self._circuit.draw())
-        # print('We are computing the derivative with respect to', parameters)
-        # print('The gradient circuits are:')
-        # for circuit in qfi_circuits:
-        #     print(circuit.draw())
-        # ---------------------
         # Add correct pre-factor and return
         return 4*qfi
 
     def construct_circuits(self, parameterized_gates: List[Gate]) -> \
-            [List[QuantumCircuit]]:
+            Tuple[List[QuantumCircuit], List[QuantumCircuit]]:
         """Generate the quantum Fisher Information circuits.
 
         Args:
@@ -214,9 +210,9 @@ class QuantumFisherInf(Gradient):
             is computed.
 
         Returns:
-            A list of the circuits with the inserted gates. If a parameter appears multiple times,
-            one circuit is created per parameterized gates to be able to compute the
-            product rule.
+            Two lists of quantum circuits which are needed to compute the quantum Fisher Information.
+            If a parameter appears multiple times, one circuit is created per parameterized gates to be able to compute
+            the product rule.
 
         Raises:
             AquaError: If one of the circuits could not be constructed.
@@ -232,28 +228,27 @@ class QuantumFisherInf(Gradient):
         circuits = []
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
+        additional_qubits = ([ancilla], [])
 
         for i in range(len(parameterized_gates)):
             j = 0
             while j <= i:
-                if j == i:
-                    j += 1
-                    continue
-
                 # create a copy of the original circuit with the same registers
                 circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
                 circuit.data = self._circuit.data
-                circuit.h(ancilla)
+                success = QuantumFisherInf.insert_gate(circuit, parameterized_gates[0], HGate(),
+                                                       qubits=[ancilla])
+                if not success:
+                    raise AquaError('Could not insert the controlled gate, something went wrong!')
 
                 # construct the circuits
 
-                additional_qubits = ([ancilla], [])
                 for k, gate_to_insert_i in enumerate(qfi_gates[i]):
                     for l, gate_to_insert_j in enumerate(qfi_gates[j]):
                         qfi_circuit = QuantumCircuit(*circuit.qregs)
                         qfi_circuit.data = circuit.data
                         # Fix phase ancilla
-                        phase = np.sign(qfi_coeffs[i][k])*np.sign(qfi_coeffs[j][l])
+                        phase = np.sign(np.conj(qfi_coeffs[i][k]))*np.sign(qfi_coeffs[j][l])
                         if np.iscomplex(qfi_coeffs[i][k]):
                             if np.iscomplex(qfi_coeffs[j][l]):
                                 phase *= (-1)
@@ -263,15 +258,25 @@ class QuantumFisherInf(Gradient):
                             if np.iscomplex(qfi_coeffs[j][l]):
                                 phase *= 1j
                         if phase == 1j:
-                            qfi_circuit.h(ancilla)
-                            qfi_circuit.s(ancilla)
+                            success = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[0], SGate(),
+                                                                   qubits=[ancilla])
+                            if not success:
+                                raise AquaError('Could not insert the controlled gate, something went wrong!')
                         elif phase == -1j:
-                            qfi_circuit.h(ancilla)
-                            qfi_circuit.sdg(ancilla)
+                            success = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[0], SdgGate(),
+                                                                   qubits=[ancilla])
+                            if not success:
+                                raise AquaError('Could not insert the controlled gate, something went wrong!')
                         elif phase == -1:
-                            qfi_circuit.z(ancilla)
+                            success = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[0], ZGate(),
+                                                                   qubits=[ancilla])
+                            if not success:
+                                raise AquaError('Could not insert the controlled gate, something went wrong!')
 
-                        qfi_circuit.x(ancilla)
+                        success = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[0], XGate(),
+                                                               qubits=[ancilla])
+                        if not success:
+                            raise AquaError('Could not insert the controlled gate, something went wrong!')
                         # (gate0, gate1) -> gate0[q0], gate1[q1]
                         if isinstance(gate_to_insert_i, tuple):
                             success_i = True
@@ -286,9 +291,15 @@ class QuantumFisherInf(Gradient):
                             success_i = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
                                                                      gate_to_insert_i,
                                                                      additional_qubits=additional_qubits)
-                        qfi_circuit.x(ancilla)
+
                         if not success_i:
                             raise AquaError('Could not insert the controlled gate, something went wrong!')
+
+                        success = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i], XGate(),
+                                                               qubits=[ancilla])
+                        if not success:
+                            raise AquaError('Could not insert the controlled gate, something went wrong!')
+
                         # (gate0, gate1) -> gate0[q0], gate1[q1]
                         if isinstance(gate_to_insert_j, tuple):
                             success_j = True
@@ -313,7 +324,47 @@ class QuantumFisherInf(Gradient):
                         circuits += [qfi_circuit]
                 j += 1
 
-        return circuits
+        circuits_phase_fix = []
+        for i in range(len(parameterized_gates)):
+                # create a copy of the original circuit with the same registers
+                circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
+                circuit.data = self._circuit.data
+                success = QuantumFisherInf.insert_gate(circuit, parameterized_gates[0], HGate(),
+                                                               qubits=[ancilla])
+                if not success:
+                    raise AquaError('Could not insert the controlled gate, something went wrong!')
+
+                # construct the phase fix circuits
+
+                for k, gate_to_insert_i in enumerate(qfi_gates[i]):
+                    qfi_circuit = QuantumCircuit(*circuit.qregs)
+                    qfi_circuit.data = circuit.data
+
+                    # (gate0, gate1) -> gate0[q0], gate1[q1]
+                    if isinstance(gate_to_insert_i, tuple):
+                        success_i = True
+                        for op in circuit.data:
+                            if op[0] == parameterized_gates[i]:
+                                qubits = op[1]
+                        for p, qubit in enumerate(qubits):
+                            success_i &= QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
+                                                                      gate_to_insert_i[p], qubits=[qubit],
+                                                                      additional_qubits=additional_qubits)
+                    else:
+                        success_i = QuantumFisherInf.insert_gate(qfi_circuit, parameterized_gates[i],
+                                                                 gate_to_insert_i,
+                                                                 additional_qubits=additional_qubits)
+                    if not success_i:
+                        raise AquaError('Could not insert the controlled gate, something went wrong!')
+                    # (gate0, gate1) -> gate0[q0], gate1[q1]
+
+                        # Remove redundant gates
+                    qfi_circuit = QuantumFisherInf.trim_circuit(qfi_circuit, parameterized_gates[i])
+
+                    qfi_circuit.h(ancilla)
+                    circuits_phase_fix += [qfi_circuit]
+
+        return circuits, circuits_phase_fix
 
     @staticmethod
     def insert_gate(circuit: QuantumCircuit,
