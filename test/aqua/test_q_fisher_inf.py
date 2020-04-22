@@ -22,8 +22,8 @@ from test.aqua import QiskitAquaTestCase
 from qiskit import BasicAer
 from qiskit.aqua.algorithms import QuantumFisherInf
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
-from qiskit.extensions.standard import RXGate, RYGate, RZGate, CRZGate
+from qiskit.circuit import Parameter
+from qiskit.extensions.standard import CRZGate
 import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
@@ -120,11 +120,21 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         p0 = Parameter('p0')
         p1 = Parameter('p1')
         p = [p0, p1]
-        q = QuantumRegister(2)
+
+        q = QuantumRegister(1)
         qc = QuantumCircuit(q)
-        qc.rx(p[0], q[0])
-        qc.cry(p[1], q[0], q[1])
-        values = [0.3, np.pi/2]
+        qc.h(q)
+        qc.rz(p[0], q[0])
+        qc.rx(p[1], q[0])
+        values = [1.2, 2*np.pi]
+
+        # q = QuantumRegister(2)
+        # qc = QuantumCircuit(q)
+        # qc.rx(p[0], q[0])
+        # qc.cry(p[1], q[0], q[1])
+        # values = [0.3, np.pi/2]
+
+        print(qc)
 
         parameterized_gates = []
         for param, elements in qc._parameter_table.items():

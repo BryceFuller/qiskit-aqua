@@ -111,6 +111,8 @@ class QuantumFisherInf(Gradient):
                 qubit_op = WeightedPauliOperator([[1, Pauli.from_label(pauli)]])
                 return qubit_op, qregs_list
 
+            # TODO problem with instruction -> decompose() not optimal RZ -> U1 wrong derivative
+
             sv_mode = False
             if self._quantum_instance.is_statevector:
                 sv_mode = True
@@ -156,7 +158,7 @@ class QuantumFisherInf(Gradient):
                 avg.append(avg_temp)
             return avg
 
-        qfi = np.zeros((len(parameters), len(parameters)))
+        qfi = np.zeros((len(parameters), len(parameters)), dtype=complex)
 
         parameterized_gates = []
         for param, elements in self._circuit._parameter_table.items():
@@ -179,22 +181,36 @@ class QuantumFisherInf(Gradient):
         if len(qfi_phase_fix_circuits) > 0:
             qfi_phase_fix_exp_values = get_exp_value(qfi_phase_fix_circuits)
 
-        phase_fix_values = np.zeros(len(parameterized_gates))
+        phase_fix_values = np.zeros(len(parameterized_gates), dtype=complex)
         counter_phase_fix = 0
         counter = 0
         for i in range(len(parameterized_gates)):
             for k, coeff in enumerate(qfi_coeffs[i]):
+                # print('coeff ', coeff)
+                # print('phase fix value', qfi_phase_fix_exp_values[counter_phase_fix])
+                # print('qfi ', qfi)
+                # print(coeff * qfi_phase_fix_exp_values[counter_phase_fix])
                 phase_fix_values[i] += coeff * qfi_phase_fix_exp_values[counter_phase_fix]
                 counter_phase_fix += 1
+            # print(phase_fix_values)
             j = 0
             while j <= i:
                 qfi[i, j] -= np.real(np.conj(phase_fix_values[i]) * phase_fix_values[j])
+                # print('qfi ', qfi)
                 for coeff_i in qfi_coeffs[i]:
                     for coeff_j in qfi_coeffs[j]:
                         qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
                         counter += 1
                 qfi[j, i] = qfi[i, j]
                 j += 1
+                # print('qfi ', qfi)
+
+        # TODO delete below
+        # for circuit in qfi_phase_fix_circuits:
+            # print(circuit)
+        # print(phase_fix_values)
+        # print(qfi_coeffs)
+        # print(qfi_phase_fix_exp_values)
 
         # Add correct pre-factor and return
         return 4*qfi
