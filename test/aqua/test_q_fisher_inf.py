@@ -115,7 +115,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         self.assertEqual(len(qfi_phase_fix_circuits), 4)
 
     def test_qfi(self):
-        """Test if the quantum fisher information calculation is correct"""
+        """Test if the quantum fisher information calculation is correct
+        QFI = [[1, 0], [0, 1]] - [[0, 0], [0, cos^2(p[0])]]"""
 
         p0 = Parameter('p0')
         p1 = Parameter('p1')
@@ -126,15 +127,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.h(q)
         qc.rz(p[0], q[0])
         qc.rx(p[1], q[0])
-        values = [1.2, 2*np.pi]
-
-        # q = QuantumRegister(2)
-        # qc = QuantumCircuit(q)
-        # qc.rx(p[0], q[0])
-        # qc.cry(p[1], q[0], q[1])
-        # values = [0.3, np.pi/2]
-
-        print(qc)
 
         parameterized_gates = []
         for param, elements in qc._parameter_table.items():
@@ -142,9 +134,13 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                 parameterized_gates.append(element[0])
 
         qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
-        print(qfi.compute_qfi(p, values))
-        almost_equal = np.allclose(qfi.compute_qfi(p, values), [[1, 0], [0, 0.022332]], atol=1e-6)
-        self.assertTrue(almost_equal)
+        values_dict = {p[0]: np.pi / 4, p[1]: 0.1}
+        correct_qfi = np.allclose(qfi.compute_qfi(p, values_dict), [[1, 0], [0, 0.5]], atol=1e-6)
+        values_dict = {p[0]: np.pi, p[1]: 0.1}
+        correct_qfi &= np.allclose(qfi.compute_qfi(p, values_dict), [[1, 0], [0, 0]], atol=1e-6)
+        values_dict = {p[0]: np.pi/2, p[1]: 0.1}
+        correct_qfi &= np.allclose(qfi.compute_qfi(p, values_dict), [[1, 0], [0, 1]], atol=1e-6)
+        self.assertTrue(correct_qfi)
 
 
 if __name__ == '__main__':

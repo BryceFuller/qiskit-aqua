@@ -14,7 +14,7 @@
 
 """The module for Quantum Natural Gradients."""
 
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 import numpy as np
 
@@ -51,7 +51,7 @@ class QuantumFisherInf(Gradient):
               'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
               'registers but only full registers. Wait for refactoring of operator.')
 
-    def compute_qfi(self, parameters: Parameter, parameter_values: List,
+    def compute_qfi(self, parameters: Parameter, parameter_values: Dict,
                     qfi_circuits: Optional[Tuple[List[QuantumCircuit], List[QuantumCircuit]]] = None) -> np.ndarray:
         """Compute the entry of quantum Fisher Information with respect to the provided parameters.
 
@@ -121,10 +121,6 @@ class QuantumFisherInf(Gradient):
             qc = []
             qubit_ops = []
             # TODO enable measurement error mitigation when circuitd in qobj use different physical qubits
-            # Construct master dictionary for parameter assignment
-            master_dict = {}
-            for q, param in enumerate(self._circuit.parameters):
-                master_dict[param] = parameter_values[q]
             for k, circuit_item in enumerate(circuit):
                 # Transpile & assign parameter values
                 circuit_item = transpile(circuit_item, backend=self._quantum_instance.backend)
@@ -158,6 +154,8 @@ class QuantumFisherInf(Gradient):
                 avg.append(avg_temp)
             return avg
 
+        master_dict = parameter_values
+
         qfi = np.zeros((len(parameters), len(parameters)), dtype=complex)
 
         parameterized_gates = []
@@ -186,31 +184,19 @@ class QuantumFisherInf(Gradient):
         counter = 0
         for i in range(len(parameterized_gates)):
             for k, coeff in enumerate(qfi_coeffs[i]):
-                # print('coeff ', coeff)
-                # print('phase fix value', qfi_phase_fix_exp_values[counter_phase_fix])
-                # print('qfi ', qfi)
-                # print(coeff * qfi_phase_fix_exp_values[counter_phase_fix])
                 phase_fix_values[i] += coeff * qfi_phase_fix_exp_values[counter_phase_fix]
                 counter_phase_fix += 1
-            # print(phase_fix_values)
+
             j = 0
             while j <= i:
                 qfi[i, j] -= np.real(np.conj(phase_fix_values[i]) * phase_fix_values[j])
-                # print('qfi ', qfi)
+
                 for coeff_i in qfi_coeffs[i]:
                     for coeff_j in qfi_coeffs[j]:
                         qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
                         counter += 1
                 qfi[j, i] = qfi[i, j]
                 j += 1
-                # print('qfi ', qfi)
-
-        # TODO delete below
-        # for circuit in qfi_phase_fix_circuits:
-            # print(circuit)
-        # print(phase_fix_values)
-        # print(qfi_coeffs)
-        # print(qfi_phase_fix_exp_values)
 
         # Add correct pre-factor and return
         return 4*qfi
