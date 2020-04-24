@@ -15,6 +15,8 @@
 """The module for Quantum Natural Gradients."""
 
 from typing import Optional, Tuple, List, Dict
+import warnings
+import sys
 
 import numpy as np
 
@@ -47,9 +49,11 @@ class QuantumFisherInf(Gradient):
             quantum_instance: The quantum instance used to execute the circuits.
         """
         super().__init__(circuit, quantum_instance)
-        print('I may have done a hacky thing with the construct_evaluation_circuit method of the '
-              'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
-              'registers but only full registers. Wait for refactoring of operator.')
+        warnings.warn('I may have done a hacky thing with the construct_evaluation_circuit method of the '
+                      'weighted pauli operator. I.e. construct circuit did not work with lists of quantum '
+                      'registers but only full registers. Wait for refactoring of operator.')
+
+        warnings.simplefilter("once")
 
     def compute_qfi(self, parameters: Parameter, parameter_values: Dict,
                     qfi_circuits: Optional[Tuple[List[QuantumCircuit], List[QuantumCircuit]]] = None) -> np.ndarray:
@@ -466,6 +470,7 @@ class QuantumFisherInf(Gradient):
         # TODO Extend to gates with multiple parameters
         # if isinstance(gate, U2Gate):
         #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
+        # TODO https://qiskit.org/documentation/_modules/qiskit/aqua/operators/common.html#commutator
         #     # theta, phi
         #     return [[0.5j], [-0.5j]], [[?], [CZGate]]
         # if isinstance(gate, U3Gate):
