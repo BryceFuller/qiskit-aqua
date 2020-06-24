@@ -393,6 +393,7 @@ class QuantumFisherInf(Gradient):
         Returns:
             True, if the insertion has been successful, False otherwise.
         """
+        # TODO add before/after gate again --> @julien sorry
         if isinstance(gate_to_insert, IGate):
             return True
         for i, op in enumerate(circuit.data):
@@ -469,14 +470,14 @@ class QuantumFisherInf(Gradient):
             return [0.5j, -0.5j], [IGate(), CZGate()]
         # TODO Extend to gates with multiple parameters
         # if isinstance(gate, U2Gate):
-        #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
+        #     # TODO encode multiple parameters
         # TODO https://qiskit.org/documentation/_modules/qiskit/aqua/operators/common.html#commutator
         #     # theta, phi
-        #     return [[0.5j], [-0.5j]], [[?], [CZGate]]
+        #     return [[0.5j], [-0.5j]], [[CZGate], [CZGate]]
         # if isinstance(gate, U3Gate):
-        #     # TODO Think a little longer how we can reformulte the derivative suitably. - Commutation Relations
+        #     # TODO encode multiple parameters
         #     # theta, lambda, phi
-        #     return [[0.5j], [-0.5j], [-0.5j]], [[?], [?], [CZGate]]
+        #     return [[0.5j], [-0.5j], [+0.5j]], [[CZGate], [CZGate], [CZGate]]
         if isinstance(gate, RXGate):
             # theta
             return [-0.5j], [CXGate()]
@@ -489,17 +490,17 @@ class QuantumFisherInf(Gradient):
             return [-0.5j], [CZGate()]
         if isinstance(gate, RXXGate):
             # theta
-            return [-0.5j], [CXGate()]
+            return [-0.5j], [CXGate()] # on both XX - CXX
         if isinstance(gate, RYYGate):
             # theta
-            return [-0.5j], [CYGate()]
+            return [-0.5j], [CYGate()] # on both YY - CYY
         if isinstance(gate, RZZGate):
             # theta
-            return [-0.5j], [(CZGate(), CZGate())]
+            return [-0.5j], [CZGate()] # on both ZZ - CZZ
         # TODO wait until this gate is fixed
         # if isinstance(gate, RZXGate):
         #     # theta
-        #     return [[-0.5j]], [[(CZGate, CXGate)]]
+        #     return [[-0.5j]], [[(CZXGate]]
         if isinstance(gate, CRXGate):
             # theta
             return [-0.25j, +0.25j], [(IGate(), CXGate()), (CZGate(), CXGate())]
