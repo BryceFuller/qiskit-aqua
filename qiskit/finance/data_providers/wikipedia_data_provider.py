@@ -12,7 +12,7 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-""" wikipedia data provider """
+""" Wikipedia data provider. """
 
 from typing import Optional, Union, List
 import datetime
@@ -22,24 +22,26 @@ import logging
 import quandl
 from quandl.errors.quandl_error import NotFoundError
 
-from qiskit.finance.data_providers import (BaseDataProvider,
-                                           StockMarket, QiskitFinanceError)
+from ._base_data_provider import BaseDataProvider, StockMarket
+from ..exceptions import QiskitFinanceError
 
 logger = logging.getLogger(__name__)
 
 
 class WikipediaDataProvider(BaseDataProvider):
-    """Python implementation of a Wikipedia data provider.
+    """Wikipedia data provider.
+
     Please see:
-    https://github.com/Qiskit/qiskit-tutorials/qiskit/finance/data_providers/time_series.ipynb
-    for instructions on use."""
+    https://github.com/Qiskit/qiskit-tutorials/blob/stable/0.14.x/qiskit/advanced/aqua/finance/data_providers/time_series.ipynb
+    for instructions on use.
+    """
 
     def __init__(self,
                  token: Optional[str] = None,
                  tickers: Optional[Union[str, List[str]]] = None,
                  stockmarket: StockMarket = StockMarket.NASDAQ,
-                 start: datetime = datetime.datetime(2016, 1, 1),
-                 end: datetime = datetime.datetime(2016, 1, 30)) -> None:
+                 start: datetime.datetime = datetime.datetime(2016, 1, 1),
+                 end: datetime.datetime = datetime.datetime(2016, 1, 30)) -> None:
         """
         Initializer
         Args:
@@ -52,6 +54,7 @@ class WikipediaDataProvider(BaseDataProvider):
             QiskitFinanceError: provider doesn't support stock market input
         """
         super().__init__()
+        self._tickers = None  # type: Optional[Union[str, List[str]]]
         tickers = tickers if tickers is not None else []
         if isinstance(tickers, list):
             self._tickers = tickers

@@ -15,18 +15,20 @@
 """ Test molecular ground state energy application """
 
 import unittest
+
 from test.chemistry import QiskitChemistryTestCase
 import numpy as np
 
 from qiskit import BasicAer
+from qiskit.circuit.library import TwoLocal
 from qiskit.aqua import QuantumInstance
-from qiskit.aqua.algorithms import NumPyMinimumEigensolver, VQE, IQPEMinimumEigensolver
+from qiskit.aqua.algorithms import NumPyMinimumEigensolver, VQE, IQPE
 from qiskit.aqua.components.optimizers import SLSQP
-from qiskit.aqua.components.variational_forms import RY
+from qiskit.chemistry import QiskitChemistryError
 from qiskit.chemistry.applications import MolecularGroundStateEnergy
 from qiskit.chemistry.components.initial_states import HartreeFock
 from qiskit.chemistry.components.variational_forms import UCCSD
-from qiskit.chemistry import QiskitChemistryError
+from qiskit.chemistry.core import QubitMappingType
 from qiskit.chemistry.drivers import PySCFDriver, UnitsType
 
 
@@ -41,13 +43,12 @@ class TestAppMGSE(QiskitChemistryTestCase):
                                       charge=0,
                                       spin=0,
                                       basis='sto3g')
-
         except QiskitChemistryError:
             self.skipTest('PYSCF driver does not appear to be installed')
 
         self.npme = NumPyMinimumEigensolver()
 
-        self.vqe = VQE(var_form=RY(2))
+        self.vqe = VQE(var_form=TwoLocal(rotation_blocks='ry', entanglement_blocks='cz'))
         self.vqe.set_backend(BasicAer.get_backend('statevector_simulator'))
 
         self.reference_energy = -1.137306
@@ -98,11 +99,11 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         def cb_create_solver(num_particles, num_orbitals,
                              qubit_mapping, two_qubit_reduction, z2_symmetries):
-            state_in = HartreeFock(2, num_orbitals, num_particles, qubit_mapping,
-                                   two_qubit_reduction)
-            iqpe = IQPEMinimumEigensolver(None, state_in, num_time_slices=1, num_iterations=6,
-                                          expansion_mode='suzuki', expansion_order=2,
-                                          shallow_circuit_concat=True)
+            state_in = HartreeFock(num_orbitals, num_particles, qubit_mapping,
+                                   two_qubit_reduction, z2_symmetries.sq_list)
+            iqpe = IQPE(None, state_in, num_time_slices=1, num_iterations=6,
+                        expansion_mode='suzuki', expansion_order=2,
+                        shallow_circuit_concat=True)
             iqpe.quantum_instance = QuantumInstance(BasicAer.get_backend('qasm_simulator'),
                                                     shots=100)
             return iqpe
@@ -116,11 +117,9 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         def cb_create_solver(num_particles, num_orbitals,
                              qubit_mapping, two_qubit_reduction, z2_symmetries):
-            sq_list = z2_symmetries.sq_list if z2_symmetries is not None else None
-            initial_state = HartreeFock(2, num_orbitals, num_particles, qubit_mapping,
-                                        two_qubit_reduction, sq_list)
-            var_form = UCCSD(2, depth=1,
-                             num_orbitals=num_orbitals,
+            initial_state = HartreeFock(num_orbitals, num_particles, qubit_mapping,
+                                        two_qubit_reduction, z2_symmetries.sq_list)
+            var_form = UCCSD(num_orbitals=num_orbitals,
                              num_particles=num_particles,
                              initial_state=initial_state,
                              qubit_mapping=qubit_mapping,
@@ -155,6 +154,30 @@ class TestAppMGSE(QiskitChemistryTestCase):
         q_inst = QuantumInstance(BasicAer.get_backend('statevector_simulator'))
         result = mgse.compute_energy(mgse.get_default_solver(q_inst))
         self.assertAlmostEqual(result.energy, self.reference_energy, places=5)
+
+    def test_mgse_callback_vqe_uccsd_z2(self):
+        """ Callback test setting up Hartree Fock with UCCSD and VQE, plus z2 symmetries """
+
+        def cb_create_solver(num_particles, num_orbitals,
+                             qubit_mapping, two_qubit_reduction, z2_symmetries):
+            initial_state = HartreeFock(num_orbitals, num_particles, qubit_mapping,
+                                        two_qubit_reduction, z2_symmetries.sq_list)
+            var_form = UCCSD(num_orbitals=num_orbitals,
+                             num_particles=num_particles,
+                             initial_state=initial_state,
+                             qubit_mapping=qubit_mapping,
+                             two_qubit_reduction=two_qubit_reduction,
+                             z2_symmetries=z2_symmetries)
+            vqe = VQE(var_form=var_form, optimizer=SLSQP(maxiter=500))
+            vqe.quantum_instance = BasicAer.get_backend('statevector_simulator')
+            return vqe
+
+        driver = PySCFDriver(atom='Li .0 .0 -0.8; H .0 .0 0.8')
+        mgse = MolecularGroundStateEnergy(driver, qubit_mapping=QubitMappingType.JORDAN_WIGNER,
+                                          two_qubit_reduction=False, freeze_core=True,
+                                          z2symmetry_reduction='auto')
+        result = mgse.compute_energy(cb_create_solver)
+        self.assertAlmostEqual(result.energy, -7.882, places=3)
 
 
 if __name__ == '__main__':

@@ -12,10 +12,13 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-""" Test of SWAPRZ from core aqua """
+"""Test of ExcitationPreserving from the circuit library."""
 
+import warnings
 from test.chemistry import QiskitChemistryTestCase
+from ddt import ddt, data
 from qiskit import BasicAer
+from qiskit.circuit.library import ExcitationPreserving
 from qiskit.aqua import QuantumInstance, aqua_globals
 from qiskit.aqua.algorithms import VQE
 from qiskit.aqua.components.optimizers import SLSQP
@@ -25,12 +28,13 @@ from qiskit.chemistry.drivers import HDF5Driver
 from qiskit.chemistry.core import Hamiltonian, QubitMappingType
 
 
-class TestSwapRZ(QiskitChemistryTestCase):
-    """
-       SwapRZ was designed to preserve particles. We test it here from
-       chemistry with JORDAN_WIGNER mapping and HartreeFock initial
-       state to set it up. THis facilitates testing SwapRZ using these
-       chemistry components/problem to ensure its correct operation
+@ddt
+class TestExcitationPreserving(QiskitChemistryTestCase):
+    """The ExcitationPresering wavefunction was design to preserve the excitation of the system.
+
+    We test it here from chemistry with JORDAN_WIGNER mapping (then the number of particles
+    is preserved) and HartreeFock initial state to set it up. This facilitates testing
+    ExcitationPreserving using these chemistry components/problem to ensure its correct operation.
     """
 
     def setUp(self):
@@ -39,8 +43,9 @@ class TestSwapRZ(QiskitChemistryTestCase):
         aqua_globals.random_seed = self.seed
         self.reference_energy = -1.137305593252385
 
-    def test_swaprz(self):
-        """ SwapRZ variational form test """
+    @data('library', 'component')
+    def test_excitation_preserving(self, mode):
+        """Test the excitation preserving wavefunction on a chemistry example."""
 
         driver = HDF5Driver(self.get_resource_path('test_driver_hdf5.hdf5'))
         qmolecule = driver.run()
@@ -49,13 +54,20 @@ class TestSwapRZ(QiskitChemistryTestCase):
         qubit_op, _ = operator.run(qmolecule)
 
         optimizer = SLSQP(maxiter=100)
-        initial_state = HartreeFock(qubit_op.num_qubits,
-                                    operator.molecule_info['num_orbitals'],
+        initial_state = HartreeFock(operator.molecule_info['num_orbitals'],
                                     operator.molecule_info['num_particles'],
                                     qubit_mapping=operator._qubit_mapping,
                                     two_qubit_reduction=operator._two_qubit_reduction)
-        var_form = SwapRZ(qubit_op.num_qubits, initial_state=initial_state)
-        algo = VQE(qubit_op, var_form, optimizer)
+
+        if mode == 'component':
+            warnings.filterwarnings('ignore', category=DeprecationWarning)
+            wavefunction = SwapRZ(qubit_op.num_qubits, initial_state=initial_state)
+        else:
+            wavefunction = ExcitationPreserving(qubit_op.num_qubits, initial_state=initial_state)
+        algo = VQE(qubit_op, wavefunction, optimizer)
+        if mode == 'component':
+            warnings.filterwarnings('always', category=DeprecationWarning)
+
         result = algo.run(QuantumInstance(BasicAer.get_backend('statevector_simulator'),
                                           seed_simulator=aqua_globals.random_seed,
                                           seed_transpiler=aqua_globals.random_seed))

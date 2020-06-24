@@ -14,12 +14,13 @@
 
 """ Test Data Providers """
 
+import unittest
 import datetime
 from test.finance import QiskitFinanceTestCase
 import warnings
 import numpy as np
+from qiskit.finance import QiskitFinanceError
 from qiskit.finance.data_providers import (RandomDataProvider,
-                                           QiskitFinanceError,
                                            WikipediaDataProvider,
                                            StockMarket,
                                            DataOnDemandProvider,
@@ -37,7 +38,7 @@ class TestDataProviders(QiskitFinanceTestCase):
 
     def tearDown(self):
         super().tearDown()
-        warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
+        warnings.filterwarnings(action="always", message="unclosed", category=ResourceWarning)
 
     def test_wrong_use(self):
         """ wrong use test """
@@ -63,7 +64,7 @@ class TestDataProviders(QiskitFinanceTestCase):
         rnd = RandomDataProvider(seed=1)
         rnd.run()
         similarity = np.array([[1.00000000e+00, 6.2284804e-04], [6.2284804e-04, 1.00000000e+00]])
-        covariance = np.array([[1.75870991, -0.32842528], [-0.32842528, 2.31429182]])
+        covariance = np.array([[2.08413157, 0.20842107], [0.20842107, 1.99542187]])
         np.testing.assert_array_almost_equal(rnd.get_covariance_matrix(), covariance, decimal=3)
         np.testing.assert_array_almost_equal(rnd.get_similarity_matrix(), similarity, decimal=3)
 
@@ -132,3 +133,7 @@ class TestDataProviders(QiskitFinanceTestCase):
             self.fail("Test of DataOnDemandProvider should have failed due to the lack of a token.")
         except QiskitFinanceError:
             self.skipTest("Test of DataOnDemandProvider skipped due to the lack of a token.")
+
+
+if __name__ == '__main__':
+    unittest.main()

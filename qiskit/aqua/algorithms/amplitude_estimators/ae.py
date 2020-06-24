@@ -11,9 +11,11 @@
 # Any modifications or derivative works of this code must retain this
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
+
 """The Quantum Phase Estimation-based Amplitude Estimation algorithm."""
 
-from typing import Optional, Union, List, Tuple
+from typing import Optional, Union, List, Tuple, Dict, Any
+import warnings
 import logging
 from collections import OrderedDict
 import numpy as np
@@ -21,10 +23,12 @@ from scipy.stats import chi2, norm
 from scipy.optimize import bisect
 
 from qiskit import QuantumCircuit
-from qiskit.aqua import AquaError
+from qiskit.circuit.library import QFT
+from qiskit.providers import BaseBackend
+from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.aqua.utils import CircuitFactory
 from qiskit.aqua.circuits import PhaseEstimationCircuit
-from qiskit.aqua.components.iqfts import IQFT, Standard
+from qiskit.aqua.components.iqfts import IQFT
 from qiskit.aqua.utils.validation import validate_min
 from .ae_algorithm import AmplitudeEstimationAlgorithm
 from .ae_utils import pdf_a, derivative_log_pdf_a, bisect_max
@@ -53,7 +57,8 @@ class AmplitudeEstimation(AmplitudeEstimationAlgorithm):
                  a_factory: Optional[CircuitFactory] = None,
                  q_factory: Optional[CircuitFactory] = None,
                  i_objective: Optional[int] = None,
-                 iqft: Optional[IQFT] = None) -> None:
+                 iqft: Optional[Union[QuantumCircuit, IQFT]] = None,
+                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
         r"""
         Args:
             num_eval_qubits: Number of evaluation qubits, has a min. value of 1.
@@ -64,20 +69,24 @@ class AmplitudeEstimation(AmplitudeEstimationAlgorithm):
                 with the state \|1> and 'bad' solutions with the state \|0>.
             iqft: The Inverse Quantum Fourier Transform component, defaults to using a standard IQFT
                 when None
+            quantum_instance: Quantum Instance or Backend
         """
         validate_min('num_eval_qubits', num_eval_qubits, 1)
-        super().__init__(a_factory, q_factory, i_objective)
+        super().__init__(a_factory, q_factory, i_objective, quantum_instance)
 
         # get parameters
         self._m = num_eval_qubits
         self._M = 2 ** num_eval_qubits
 
-        if iqft is None:
-            iqft = Standard(self._m)
-
-        self._iqft = iqft
+        if isinstance(iqft, IQFT):
+            warnings.warn('The qiskit.aqua.components.iqfts.IQFT module is deprecated as of 0.7.0 '
+                          'and will be removed no earlier than 3 months after the release. '
+                          'You should pass a QuantumCircuit instead, see '
+                          'qiskit.circuit.library.QFT and the .inverse() method.',
+                          DeprecationWarning, stacklevel=2)
+        self._iqft = iqft or QFT(self._m).inverse()
         self._circuit = None
-        self._ret = {}
+        self._ret = {}  # type: Dict[str, Any]
 
     @property
     def _num_qubits(self) -> int:
@@ -128,13 +137,13 @@ class AmplitudeEstimation(AmplitudeEstimationAlgorithm):
                 y measurements with respective probabilities, in this order.
         """
         # map measured results to estimates
-        y_probabilities = OrderedDict()
+        y_probabilities = OrderedDict()  # type: OrderedDict
         for i, probability in enumerate(probabilities):
             b = '{0:b}'.format(i).rjust(self._num_qubits, '0')[::-1]
             y = int(b[:self._m], 2)
             y_probabilities[y] = y_probabilities.get(y, 0) + probability
 
-        a_probabilities = OrderedDict()
+        a_probabilities = OrderedDict()  # type: OrderedDict
         for y, probability in y_probabilities.items():
             if y >= int(self._M / 2):
                 y = self._M - y
@@ -390,8 +399,8 @@ class AmplitudeEstimation(AmplitudeEstimationAlgorithm):
             self._ret['counts'] = ret.get_counts()
 
             # construct probabilities
-            y_probabilities = {}
-            a_probabilities = {}
+            y_probabilities = OrderedDict()
+            a_probabilities = OrderedDict()
             shots = self._quantum_instance._run_config.shots
 
             for state, counts in ret.get_counts().items():

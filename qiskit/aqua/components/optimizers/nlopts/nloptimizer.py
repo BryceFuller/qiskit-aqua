@@ -15,12 +15,6 @@
 """ Minimize using objective function """
 
 from typing import List, Optional, Tuple, Callable
-# below to allow it for python 3.6.1
-try:
-    from typing import NoReturn
-except ImportError:
-    from typing import Any as NoReturn
-
 from enum import Enum
 from abc import abstractmethod
 import logging
@@ -81,7 +75,7 @@ class NLoptOptimizer(Optimizer):
         }
 
     @abstractmethod
-    def get_nlopt_optimizer(self) -> NoReturn:
+    def get_nlopt_optimizer(self) -> NLoptOptimizerType:
         """ return NLopt optimizer enum type """
         raise NotImplementedError
 
@@ -124,7 +118,7 @@ class NLoptOptimizer(Optimizer):
             tuple(float, float, int): Solution at minimum found,
                     value at minimum found, num evaluations performed
         """
-        threshold = 3*np.pi
+        threshold = 3 * np.pi
         low = [(l if l is not None else -threshold) for (l, u) in variable_bounds]
         high = [(u if u is not None else threshold) for (l, u) in variable_bounds]
 

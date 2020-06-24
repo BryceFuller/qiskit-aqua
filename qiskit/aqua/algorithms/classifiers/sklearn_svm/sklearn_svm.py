@@ -13,10 +13,10 @@
 # that they have been altered from the originals.
 
 """
-The Sklearn SVM algorithm.
+The Sklearn SVM algorithm (classical).
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 import logging
 import warnings
 import numpy as np
@@ -36,12 +36,12 @@ logger = logging.getLogger(__name__)
 
 class SklearnSVM(ClassicalAlgorithm):
     """
-    The Sklearn SVM algorithm.
+    The Sklearn SVM algorithm (classical).
 
-    SVM Classical uses a classical approach to experiment with feature map classification
-    problems. See also the quantum classifier :class:`QSVM`.
+    This scikit-learn based SVM algorithm uses a classical approach to experiment with feature map
+    classification problems. See also the quantum classifier :class:`QSVM`.
 
-    Internally, SVM Classical will run the binary classification or multiclass classification
+    Internally, this algorithm will run the binary classification or multiclass classification
     based on how many classes the data has. If the data has more than 2 classes then a
     *multiclass_extension* is required to be supplied. Aqua provides several
     :mod:`~qiskit.aqua.components.multiclass_extensions`.
@@ -82,6 +82,7 @@ class SklearnSVM(ClassicalAlgorithm):
                 logger.warning("Dataset has just two classes. Supplied multiclass "
                                "extension will be ignored")
 
+        svm_instance = None  # type: Optional[Union[_SklearnSVMBinary, _SklearnSVMMulticlass]]
         if multiclass_extension is None:
             svm_instance = _SklearnSVMBinary(training_dataset, test_dataset, datapoints, gamma)
         else:

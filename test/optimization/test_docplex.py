@@ -14,6 +14,7 @@
 
 """ Test Docplex """
 
+import unittest
 from math import fsum, isclose
 from test.optimization import QiskitOptimizationTestCase
 
@@ -24,7 +25,7 @@ from qiskit.quantum_info import Pauli
 
 from qiskit.aqua import AquaError, aqua_globals
 from qiskit.aqua.algorithms import NumPyMinimumEigensolver
-from qiskit.optimization.ising import docplex, tsp
+from qiskit.optimization.applications.ising import docplex, tsp
 from qiskit.aqua.operators import WeightedPauliOperator
 
 # Reference operators and offsets for maxcut and tsp.
@@ -126,7 +127,7 @@ QUBIT_OP_TSP = WeightedPauliOperator(
                             x=[False, False, False, False, False, False, False, False, False])],
             [50000.0, Pauli(z=[False, False, False, False, False, False, False, True, True],
                             x=[False, False, False, False, False, False, False, False, False])]])
-OFFSET_TSP = 600297.0
+OFFSET_TSP = 600279.0
 
 
 class TestDocplex(QiskitOptimizationTestCase):
@@ -163,7 +164,7 @@ class TestDocplex(QiskitOptimizationTestCase):
     def test_auto_define_penalty(self):
         """ Auto define Penalty test """
         # check _auto_define_penalty() for positive coefficients.
-        positive_coefficients = aqua_globals.random.rand(10, 10)
+        positive_coefficients = aqua_globals.random.random((10, 10))
         for i in range(10):
             mdl = Model(name='Positive_auto_define_penalty')
             x = {j: mdl.binary_var(name='x_{0}'.format(j)) for j in range(10)}
@@ -174,7 +175,7 @@ class TestDocplex(QiskitOptimizationTestCase):
             self.assertEqual(isclose(actual, expected), True)
 
         # check _auto_define_penalty() for negative coefficients
-        negative_coefficients = -1 * aqua_globals.random.rand(10, 10)
+        negative_coefficients = -1 * aqua_globals.random.random((10, 10))
         for i in range(10):
             mdl = Model(name='Negative_auto_define_penalty')
             x = {j: mdl.binary_var(name='x_{0}'.format(j)) for j in range(10)}
@@ -185,7 +186,7 @@ class TestDocplex(QiskitOptimizationTestCase):
             self.assertEqual(isclose(actual, expected), True)
 
         # check _auto_define_penalty() for mixed coefficients
-        mixed_coefficients = aqua_globals.random.randint(-100, 100, (10, 10))
+        mixed_coefficients = aqua_globals.random.integers(-100, 100, (10, 10))
         for i in range(10):
             mdl = Model(name='Mixed_auto_define_penalty')
             x = {j: mdl.binary_var(name='x_{0}'.format(j)) for j in range(10)}
@@ -237,8 +238,8 @@ class TestDocplex(QiskitOptimizationTestCase):
         expected_result = ee_expected.run()
 
         # Compare objective
-        self.assertEqual(result.eigenvalue.real + offset,
-                         expected_result.eigenvalue.real + OFFSET_MAXCUT)
+        self.assertAlmostEqual(result.eigenvalue.real + offset,
+                               expected_result.eigenvalue.real + OFFSET_MAXCUT)
 
     def test_docplex_tsp(self):
         """ Docplex tsp test """
@@ -271,8 +272,8 @@ class TestDocplex(QiskitOptimizationTestCase):
         expected_result = ee_expected.run()
 
         # Compare objective
-        self.assertEqual(result.eigenvalue.real +
-                         offset, expected_result.eigenvalue.real + OFFSET_TSP)
+        self.assertAlmostEqual(result.eigenvalue.real + offset,
+                               expected_result.eigenvalue.real + OFFSET_TSP)
 
     def test_docplex_integer_constraints(self):
         """ Docplex Integer Constraints test """
@@ -290,7 +291,7 @@ class TestDocplex(QiskitOptimizationTestCase):
         expected_result = -2
 
         # Compare objective
-        self.assertEqual(result.eigenvalue.real + offset, expected_result)
+        self.assertAlmostEqual(result.eigenvalue.real + offset, expected_result)
 
     def test_docplex_constant_and_quadratic_terms_in_object_function(self):
         """ Docplex Constant and Quadratic terms in Object function test """
@@ -319,4 +320,26 @@ class TestDocplex(QiskitOptimizationTestCase):
         expected_result = -22
 
         # Compare objective
-        self.assertEqual(result.eigenvalue.real + offset, expected_result)
+        self.assertAlmostEqual(result.eigenvalue.real + offset, expected_result)
+
+    def test_constants_in_left_side_and_variables_in_right_side(self):
+        """ Test Constant values on the left-hand side of constraints and
+        variables on the right-hand side of constraints for the DOcplex translator"""
+        mdl = Model('left_constants_and_right_variables')
+        x = mdl.binary_var(name='x')
+        y = mdl.binary_var(name='y')
+        mdl.maximize(mdl.sum(x + y))
+        mdl.add_constraint(x == y)
+
+        qubit_op, offset = docplex.get_operator(mdl)
+        self.log.debug(qubit_op.print_details())
+        e_e = NumPyMinimumEigensolver(qubit_op)
+        result = e_e.run()
+
+        self.assertEqual(result['eigenvalue'] + offset, -2)
+        actual_sol = result['eigenstate'].to_matrix().tolist()
+        self.assertListEqual(actual_sol, [0, 0, 0, 1])
+
+
+if __name__ == '__main__':
+    unittest.main()

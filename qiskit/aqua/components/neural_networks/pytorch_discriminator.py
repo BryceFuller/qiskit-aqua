@@ -16,6 +16,7 @@
 PyTorch Discriminator Neural Network
 """
 
+from typing import Dict, Any
 import os
 import logging
 import numpy as np
@@ -63,7 +64,7 @@ class PyTorchDiscriminator(DiscriminativeNetwork):
         # discriminator network parameters.
         self._optimizer = optim.Adam(self._discriminator.parameters(), lr=1e-5, amsgrad=True)
 
-        self._ret = {}
+        self._ret = {}  # type: Dict[str, Any]
 
     def set_seed(self, seed: int):
         """
@@ -170,7 +171,7 @@ class PyTorchDiscriminator(DiscriminativeNetwork):
             x = Variable(x)
         # pylint: disable=no-member
         delta_ = torch.rand(x.size()) * c
-        z = Variable(x+delta_, requires_grad=True)
+        z = Variable(x + delta_, requires_grad=True)
         o_l = self.get_label(z)
         # pylint: disable=no-member
         d_g = torch.autograd.grad(o_l, z, grad_outputs=torch.ones(o_l.size()),
@@ -178,7 +179,8 @@ class PyTorchDiscriminator(DiscriminativeNetwork):
 
         return lambda_ * ((d_g.norm(p=2, dim=1) - k)**2).mean()
 
-    def train(self, data, weights, penalty=True, quantum_instance=None, shots=None):
+    def train(self, data, weights, penalty=True,
+              quantum_instance=None, shots=None) -> Dict[str, Any]:
         """
         Perform one training step w.r.t. to the discriminator's parameters
 

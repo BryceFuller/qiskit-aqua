@@ -32,16 +32,19 @@ PSI4_APP = which(PSI4)
 
 
 class PSI4Driver(BaseDriver):
-    """Python implementation of a psi4 driver."""
+    """
+    Qiskit chemistry driver using the PSI4 program.
+
+    See http://www.psicode.org/
+    """
 
     def __init__(self,
                  config: Union[str, List[str]] =
                  'molecule h2 {\n  0 1\n  H  0.0 0.0 0.0\n  H  0.0 0.0 0.735\n}\n\n'
                  'set {\n  basis sto-3g\n  scf_type pk\n  reference rhf\n') -> None:
         """
-        Initializer
         Args:
-            config: driver configuration
+            config: A molecular configuration conforming to PSI4 format
         Raises:
             QiskitChemistryError: Invalid Input
         """
@@ -60,9 +63,7 @@ class PSI4Driver(BaseDriver):
         if PSI4_APP is None:
             raise QiskitChemistryError("Could not locate {}".format(PSI4))
 
-    def run(self):
-        """ runs driver """
-        # create input
+    def run(self) -> QMolecule:
         psi4d_directory = os.path.dirname(os.path.realpath(__file__))
         template_file = psi4d_directory + '/_template.txt'
         qiskit_chemistry_directory = os.path.abspath(os.path.join(psi4d_directory, '../..'))
@@ -80,13 +81,13 @@ class PSI4Driver(BaseDriver):
         with open(template_file, 'r') as file:
             input_text += file.read()
 
-        file, input_file = tempfile.mkstemp(suffix='.inp')
-        os.close(file)
+        file_fd, input_file = tempfile.mkstemp(suffix='.inp')
+        os.close(file_fd)
         with open(input_file, 'w') as stream:
             stream.write(input_text)
 
-        file, output_file = tempfile.mkstemp(suffix='.out')
-        os.close(file)
+        file_fd, output_file = tempfile.mkstemp(suffix='.out')
+        os.close(file_fd)
         try:
             PSI4Driver._run_psi4(input_file, output_file)
             if logger.isEnabledFor(logging.DEBUG):

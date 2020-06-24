@@ -16,19 +16,19 @@
 An adaptive VQE implementation.
 """
 
-from typing import Optional, List
+from typing import Optional, List, Union, Dict
 import logging
 import warnings
 import re
 import numpy as np
 
+from qiskit.providers import BaseBackend
 from qiskit import ClassicalRegister
-from qiskit.aqua import AquaError
+from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.aqua.algorithms import VQAlgorithm, VQE, VQEResult
 from qiskit.chemistry.components.variational_forms import UCCSD
-from qiskit.aqua.operators import TPBGroupedWeightedPauliOperator, WeightedPauliOperator
-from qiskit.aqua.utils.backend_utils import is_aer_statevector_backend
-from qiskit.aqua.operators import BaseOperator
+from qiskit.aqua.operators import WeightedPauliOperator
+from qiskit.aqua.operators import LegacyBaseOperator
 from qiskit.aqua.components.optimizers import Optimizer
 from qiskit.aqua.components.variational_forms import VariationalForm
 from qiskit.aqua.utils.validation import validate_min
@@ -44,13 +44,14 @@ class VQEAdapt(VQAlgorithm):
     """
 
     # TODO make re-usable, implement MinimumEignesolver interface
-    def __init__(self, operator: BaseOperator,
+    def __init__(self, operator: LegacyBaseOperator,
                  var_form_base: VariationalForm, optimizer: Optimizer,
                  initial_point: Optional[np.ndarray] = None,
                  excitation_pool: Optional[List[WeightedPauliOperator]] = None,
                  threshold: float = 1e-5,
                  delta: float = 1, max_evals_grouped: int = 1,
-                 aux_operators: Optional[List[BaseOperator]] = None) -> None:
+                 aux_operators: Optional[List[LegacyBaseOperator]] = None,
+                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
         """
         Args:
             operator: Qubit operator
@@ -62,8 +63,8 @@ class VQEAdapt(VQAlgorithm):
             delta: finite difference step size for gradient computation,
                     has a min. value of 1e-5.
             max_evals_grouped: max number of evaluations performed simultaneously
-            aux_operators: Auxiliary operators to be evaluated
-                                                at each eigenvalue
+            aux_operators: Auxiliary operators to be evaluated at each eigenvalue
+            quantum_instance: Quantum Instance or Backend
 
         Raises:
             ValueError: if var_form_base is not an instance of UCCSD.
@@ -73,9 +74,9 @@ class VQEAdapt(VQAlgorithm):
         validate_min('delta', delta, 1e-5)
         super().__init__(var_form=var_form_base,
                          optimizer=optimizer,
-                         initial_point=initial_point)
-        self._use_simulator_snapshot_mode = None
-        self._ret = None
+                         initial_point=initial_point,
+                         quantum_instance=quantum_instance)
+        self._ret = None  # type: Dict
         self._optimizer.set_max_evals_grouped(max_evals_grouped)
         if initial_point is None:
             self._initial_point = var_form_base.preferred_init_points
@@ -105,7 +106,7 @@ class VQEAdapt(VQAlgorithm):
             theta (list): list of (up to now) optimal parameters
             delta (float): finite difference step size (for gradient computation)
             var_form (VariationalForm): current variational form
-            operator (BaseOperator): system Hamiltonian
+            operator (LegacyBaseOperator): system Hamiltonian
             optimizer (Optimizer): classical optimizer algorithm
 
         Returns:
@@ -119,13 +120,11 @@ class VQEAdapt(VQAlgorithm):
             # construct auxiliary VQE instance
             vqe = VQE(operator, var_form, optimizer)
             vqe.quantum_instance = self.quantum_instance
-            vqe._operator = vqe._config_the_best_mode(operator, self.quantum_instance.backend)
-            vqe._use_simulator_snapshot_mode = self._use_simulator_snapshot_mode
             # evaluate energies
             parameter_sets = theta + [-delta] + theta + [delta]
             energy_results = vqe._energy_evaluation(np.asarray(parameter_sets))
             # compute gradient
-            gradient = (energy_results[0] - energy_results[1]) / (2*delta)
+            gradient = (energy_results[0] - energy_results[1]) / (2 * delta)
             res.append((np.abs(gradient), exc))
             # pop excitation from variational form
             var_form.pop_hopping_operator()
@@ -143,11 +142,8 @@ class VQEAdapt(VQAlgorithm):
             AquaError: wrong setting of operator and backend.
         """
         self._ret = {}  # TODO should be eliminated
-        self._operator = VQE._config_the_best_mode(self, self._operator,
-                                                   self._quantum_instance.backend)
-        self._use_simulator_snapshot_mode = \
-            is_aer_statevector_backend(self._quantum_instance.backend) \
-            and isinstance(self._operator, (WeightedPauliOperator, TPBGroupedWeightedPauliOperator))
+        # self._operator = VQE._config_the_best_mode(self, self._operator,
+        #                                            self._quantum_instance.backend)
         self._quantum_instance.circuit_summary = True
 
         cycle_regex = re.compile(r'(.+)( \1)+')
@@ -160,8 +156,8 @@ class VQEAdapt(VQAlgorithm):
         threshold_satisfied = False
         alternating_sequence = False
         prev_op_indices = []
-        theta = []
-        max_grad = ()
+        theta = []  # type: List
+        max_grad = (0, 0)
         iteration = 0
         while not threshold_satisfied and not alternating_sequence:
             iteration += 1

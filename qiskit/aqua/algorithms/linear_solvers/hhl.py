@@ -11,16 +11,17 @@
 # Any modifications or derivative works of this code must retain this
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
-"""
-The HHL algorithm.
-"""
 
-from typing import Optional
+"""The HHL algorithm."""
+
+from typing import Optional, Union, Dict, Any
 import logging
 from copy import deepcopy
 import numpy as np
 
 from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
+from qiskit.providers import BaseBackend
+from qiskit.aqua import QuantumInstance
 from qiskit.aqua.algorithms import QuantumAlgorithm
 from qiskit.ignis.verification.tomography import state_tomography_circuits, \
     StateTomographyFitter
@@ -35,9 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class HHL(QuantumAlgorithm):
-
-    r"""
-    The HHL algorithm.
+    r"""The HHL algorithm.
 
     The HHL algorithm (after the author's surnames Harrow-Hassidim-Lloyd) is a quantum algorithm
     to solve systems of linear equations :math:`A\overrightarrow{x}=\overrightarrow{b}`.
@@ -95,8 +94,8 @@ class HHL(QuantumAlgorithm):
             reciprocal: Optional[Reciprocal] = None,
             num_q: int = 0,
             num_a: int = 0,
-            orig_size: Optional[int] = None
-    ) -> None:
+            orig_size: Optional[int] = None,
+            quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
         """
         Args:
             matrix: The input matrix of linear system of equations
@@ -109,10 +108,11 @@ class HHL(QuantumAlgorithm):
             num_q: Number of qubits required for the matrix Operator instance
             num_a: Number of ancillary qubits for Eigenvalues instance
             orig_size: The original dimension of the problem (if truncate_powerdim)
+            quantum_instance: Quantum Instance or Backend
         Raises:
             ValueError: Invalid input
         """
-        super().__init__()
+        super().__init__(quantum_instance)
         if matrix.shape[0] != matrix.shape[1]:
             raise ValueError("Input matrix must be square!")
         if matrix.shape[0] != len(vector):
@@ -141,7 +141,7 @@ class HHL(QuantumAlgorithm):
         self._ancilla_register = None
         self._success_bit = None
         self._original_dimension = orig_size
-        self._ret = {}
+        self._ret = {}  # type: Dict[str, Any]
 
     @staticmethod
     def matrix_resize(matrix, vector):
@@ -316,7 +316,7 @@ class HHL(QuantumAlgorithm):
         # remove added dimensions
         self._ret['probability_result'] = \
             np.real(self._resize_vector(vec).dot(self._resize_vector(vec).conj()))
-        vec = vec/np.linalg.norm(vec)
+        vec = vec / np.linalg.norm(vec)
         self._hhl_results(vec)
 
     def _state_tomography(self):
@@ -346,7 +346,7 @@ class HHL(QuantumAlgorithm):
                     s += v
                 else:
                     f += v
-            probs.append(s/(f+s))
+            probs.append(s / (f + s))
         probs = self._resize_vector(probs)
         self._ret["probability_result"] = np.real(probs)
 
@@ -354,7 +354,7 @@ class HHL(QuantumAlgorithm):
         # to 1, i.e. c1==1
         results_noanc = self._tomo_postselect(results)
         tomo_data = StateTomographyFitter(results_noanc, tomo_circuits_noanc)
-        rho_fit = tomo_data.fit()
+        rho_fit = tomo_data.fit('lstsq')
         vec = np.sqrt(np.diag(rho_fit))
         self._hhl_results(vec)
 
@@ -378,9 +378,9 @@ class HHL(QuantumAlgorithm):
                 if reg_bits[0] == '1':
                     new_counts[reg_bits[1]] = old_counts[reg_key]
 
+            data_counts = new_results.results[resultidx].data.counts
             new_results.results[resultidx].data.counts = \
-                new_results.results[resultidx]. \
-                data.counts.from_dict(new_counts)
+                new_counts if isinstance(data_counts, dict) else data_counts.from_dict(new_counts)
 
         return new_results
 
@@ -391,10 +391,10 @@ class HHL(QuantumAlgorithm):
         self._ret["output"] = res_vec
         # Rescaling the output vector to the real solution vector
         tmp_vec = matrix.dot(res_vec)
-        f1 = np.linalg.norm(in_vec)/np.linalg.norm(tmp_vec)
+        f1 = np.linalg.norm(in_vec) / np.linalg.norm(tmp_vec)
         # "-1+1" to fix angle error for -0.-0.j
-        f2 = sum(np.angle(in_vec*tmp_vec.conj()-1+1))/(np.log2(matrix.shape[0]))
-        self._ret["solution"] = f1*res_vec*np.exp(-1j*f2)
+        f2 = sum(np.angle(in_vec * tmp_vec.conj() - 1 + 1)) / (np.log2(matrix.shape[0]))
+        self._ret["solution"] = f1 * res_vec * np.exp(-1j * f2)
 
     def _run(self):
         if self._quantum_instance.is_statevector:

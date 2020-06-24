@@ -12,36 +12,30 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-"""
-Python implementation of provider of mock stock-market data, which are generated pseudo-randomly.
-"""
+""" Pseudo-randomly generated mock stock-market data provider """
 
 from typing import Optional, Union, List
 import datetime
 import logging
-import random
 
 import numpy as np
 import pandas as pd
 
-from qiskit.finance.data_providers import (BaseDataProvider,
-                                           StockMarket,
-                                           QiskitFinanceError)
+from ._base_data_provider import BaseDataProvider, StockMarket
+from ..exceptions import QiskitFinanceError
 
 logger = logging.getLogger(__name__)
 
 
 class RandomDataProvider(BaseDataProvider):
-    """
-    Python implementation of provider of mock stock-market data,
-    which are generated pseudo-randomly.
+    """Pseudo-randomly generated mock stock-market data provider.
     """
 
     def __init__(self,
                  tickers: Optional[Union[str, List[str]]] = None,
                  stockmarket: StockMarket = StockMarket.RANDOM,
-                 start: datetime = datetime.datetime(2016, 1, 1),
-                 end: datetime = datetime.datetime(2016, 1, 30),
+                 start: datetime.datetime = datetime.datetime(2016, 1, 1),
+                 end: datetime.datetime = datetime.datetime(2016, 1, 30),
                  seed: Optional[int] = None) -> None:
         """
         Initializer
@@ -82,14 +76,11 @@ class RandomDataProvider(BaseDataProvider):
         """
 
         length = (self._end - self._start).days
-        if self._seed:
-            random.seed(self._seed)
-            np.random.seed(self._seed)
-
+        generator = np.random.default_rng(self._seed)
         self._data = []
         for _ in self._tickers:
             d_f = pd.DataFrame(
-                np.random.randn(length)).cumsum() + random.randint(1, 101)
+                generator.standard_normal(length)).cumsum() + generator.integers(1, 101)
             trimmed = np.maximum(d_f[0].values, np.zeros(len(d_f[0].values)))
             # pylint: disable=no-member
             self._data.append(trimmed.tolist())
