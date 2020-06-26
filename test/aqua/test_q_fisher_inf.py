@@ -20,13 +20,14 @@ import unittest
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
-from qiskit.aqua.algorithms import QuantumFisherInf
+from qiskit.aqua.operators.gradients.q_fisher_inf import QuantumFisherInf
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter
 from qiskit.extensions.standard import CRZGate
 import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
+from qiskit.aqua.operators.gradients.gradients_utils import insert_gate, trim_circuit
 
 
 # from .gradient import Gradient
@@ -61,7 +62,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             for element in elements:
                 parameterized_gates.append(element[0])
         reference_gate = parameterized_gates[2]
-        trimmed_qc = QuantumFisherInf.trim_circuit(qc, reference_gate)
+        trimmed_qc = trim_circuit(qc, reference_gate)
 
         self.assertEqual(trimmed_qc.data, qc.data[:2])
 
@@ -86,8 +87,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         additional_qubits = ([ancilla], [])
         p_new = Parameter('p')
-        success = QuantumFisherInf.insert_gate(qc, parameterized_gates[0],
-                                     CRZGate(p_new), qubits=[q[1]],
+        success = insert_gate(qc, parameterized_gates[0], CRZGate(p_new), qubits=[q[1]],
                                      additional_qubits=additional_qubits)
         self.assertTrue(success)
 
