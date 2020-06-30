@@ -148,14 +148,14 @@ def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction
 
 def insert_gate(circuit: QuantumCircuit,
                 reference_gate: Gate,
-                gate_to_insert: Gate,
+                gate_to_insert: Instruction,
                 qubits: Optional[List[Qubit]] = None,
-                additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
+                additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) :
     """Insert a gate into the circuit.
 
     Args:
         circuit: The circuit onto which the gare is added.
-        reference_gate: A gate instance before or after which a gate is inserted.
+        reference_gate: A gate instance before which a gate is inserted.
         gate_to_insert: The gate to be inserted.
         qubits: The qubits on which the gate is inserted. If None, the qubits of the
             reference_gate are used.
@@ -164,10 +164,10 @@ def insert_gate(circuit: QuantumCircuit,
             tuple) or after (second list in tuple) the qubits.
 
     Returns:
-        True, if the insertion has been successful, False otherwise.
     """
+    success = False
     if isinstance(gate_to_insert, IGate):
-        return True
+        success = True
     for i, op in enumerate(circuit.data):
         if op[0] == reference_gate:
             qubits = qubits or op[1]
@@ -176,9 +176,9 @@ def insert_gate(circuit: QuantumCircuit,
             op_to_insert = (gate_to_insert, qubits, [])
             insertion_index = i
             circuit.data.insert(insertion_index, op_to_insert)
-            return True
-
-    return False
+            success = True
+    if not success:
+        raise AquaError('Could not insert the controlled gate, something went wrong!')
 
 
 def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
