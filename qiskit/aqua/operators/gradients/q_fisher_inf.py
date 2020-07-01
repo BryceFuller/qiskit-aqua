@@ -25,7 +25,7 @@ from qiskit.compiler import transpile
 
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit, Instruction
 
-from qiskit.aqua.operators import PauliOp, Z, I, CircuitSampler, StateFn, AerPauliExpectation, PauliExpectation, ListOp
+from qiskit.aqua.operators import PauliOp, X, Y, Z, I, CircuitSampler, StateFn, OperatorBase, PauliExpectation, ListOp
 from qiskit.quantum_info import Pauli
 from qiskit.aqua.utils.run_circuits import find_regs_by_name
 
@@ -69,11 +69,12 @@ class QuantumFisherInf(Gradient):
         Returns: quantum Fisher Information
         """
 
-        def get_exp_value(circuit: List[QuantumCircuit]) -> List[float]:
+        def get_exp_value(circuit: List[QuantumCircuit], operator: OperatorBase = Z) -> List[float]:
             r"""
             Evaluate the expectation value $\langle Z \rangle$ w.r.t. the ancilla qubit (named 'ancilla')
             Args:
                 circuit: list of quantum circuits with a single qubit QuantumRegister with name 'ancilla'
+                operator: Operator to get the correct expectation value.
 
             Returns: expectation value $\langle Z \rangle$ w.r.t. the 'ancilla' QuantumRegister
 
@@ -86,6 +87,7 @@ class QuantumFisherInf(Gradient):
                     qc: This circuit prepares the state for which we want to evaluate $\langle Z
                     \rangle$ for the QuantumRegister named 'q'
 
+
                 Returns:
                     Operator used for the expectation value evaluation and the corresponding qubit registers
 
@@ -96,14 +98,14 @@ class QuantumFisherInf(Gradient):
                 for i, qreg in enumerate(qregs_list):
                     if i == index_evaluation_qubit:
                         if i == 0:
-                            qubit_op = Z
+                            qubit_op = operator
                         else:
-                            qubit_op = qubit_op ^ Z
+                            qubit_op = operator ^ qubit_op
                     else:
                         if i == 0:
                             qubit_op = I ^ qreg.size
                         else:
-                            qubit_op = qubit_op ^ I ^ qreg.size
+                            qubit_op = I ^ qreg.size ^ qubit_op
 
                 temp = []
                 for element in qregs_list:
@@ -120,6 +122,7 @@ class QuantumFisherInf(Gradient):
                 circuit = [circuit]
             # TODO update CircuitSampler to facilitate circuit batching
             exp_vals = []
+            # test = []
             for k, circuit_item in enumerate(circuit):
                 # Transpile & assign parameter values
                 circuit_item = transpile(circuit_item, backend=self._quantum_instance.backend)
@@ -133,11 +136,16 @@ class QuantumFisherInf(Gradient):
                 # I can already call eval() on expect_op, but it will do the evaluation by matrix multiplication.
                 # Here, convert to Pauli measurement
                 expect_op = PauliExpectation().convert(expect_op)
+                # test.append(expect_op)
                 exp_val = CircuitSampler(self._quantum_instance).convert(expect_op)
                 exp_val = exp_val.eval()
                 exp_vals.append(exp_val)
+
                 # executed_op = CircuitSampler(self._quantum_instance).convert(expect_op)
                 # exp_vals.append(executed_op.eval())
+            # test = ListOp(test)
+            # exp_val = CircuitSampler(self._quantum_instance).convert(test)
+            # exp_vals = exp_val.eval()
             return exp_vals
 
                 # # TODO Do we still need qregs_list? How to get the exp value? - Circuit Sampler?
@@ -201,22 +209,21 @@ class QuantumFisherInf(Gradient):
         if len(qfi_circuits) > 0:
             qfi_exp_values = get_exp_value(qfi_circuits)
         if len(qfi_phase_fix_circuits) > 0:
-            qfi_phase_fix_exp_values = get_exp_value(qfi_phase_fix_circuits)
+            phase_fix_op = (X + 1j*Y) # see https://arxiv.org/pdf/quant-ph/0108146.pdf
+            qfi_phase_fix_exp_values = get_exp_value(qfi_phase_fix_circuits, operator=phase_fix_op)
 
         phase_fix_values = np.zeros(len(gates_to_parameters), dtype=complex)
         counter_phase_fix = 0
         counter = 0
         # weighted sum of the circuit expectation values w.r.t. the coefficients
         for i in range(len(params)):
-            for coeffs in enumerate(qfi_coeffs[params[i]]):
+            for coeffs in qfi_coeffs[params[i]]:
                 for coeff in coeffs:
                     phase_fix_values[i] += coeff * qfi_phase_fix_exp_values[counter_phase_fix]
                     counter_phase_fix += 1
-
             j = 0
             while j <= i:
-                qfi[i, j] -= np.real(np.conj(phase_fix_values[i]) * phase_fix_values[j])
-
+                qfi[i, j] -= np.real(np.conj(phase_fix_values[i]) * phase_fix_values[j]) # Check
                 for coeffs_i in qfi_coeffs[params[i]]:
                     for coeff_i in coeffs_i:
                         for coeffs_j in qfi_coeffs[params[j]]:
@@ -224,8 +231,8 @@ class QuantumFisherInf(Gradient):
                                 # Quantum circuit already considers sign and if complex.
                                 qfi[i, j] += np.abs(coeff_i) * np.abs(coeff_j) * qfi_exp_values[counter]
                                 counter += 1
-                qfi[j, i] = qfi[i, j]
-                j += 1
+                        qfi[j, i] = qfi[i, j]
+                        j += 1
         # Add correct pre-factor and return
         return 4*qfi
 
@@ -258,17 +265,17 @@ class QuantumFisherInf(Gradient):
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
         additional_qubits = ([ancilla], [])
-        # Get the circuits needed to compute A_ij
+        # create a copy of the original circuit with an additional ancilla register
+        circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
+        circuit.data = self._circuit.data
         params = list(parameterized_gates.keys())
+        # apply Hadamard on ancilla
+        insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
+                    qubits=[ancilla])
+        # Get the circuits needed to compute A_ij
         for i in range(len(params)): #loop over parameters
             j = 0
             while j <= i: #loop over parameters
-                # create a copy of the original circuit with an additional ancilla register
-                circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
-                circuit.data = self._circuit.data
-                # apply Hadamard on ancilla
-                insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
-                                      qubits=[ancilla])
 
                 # construct the circuits
                 for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
@@ -303,7 +310,7 @@ class QuantumFisherInf(Gradient):
                                 insert_gate(qfi_circuit, parameterized_gates[params[i]][m], gate_to_insert_i,
                                                                          additional_qubits=additional_qubits)
 
-                                insert_gate(qfi_circuit, gate_to_insert_j, XGate(), qubits=[ancilla])
+                                insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
                                 #
                                 # qfi_circuit.x(ancilla)
                                 insert_gate(qfi_circuit, parameterized_gates[params[j]][n], gate_to_insert_j,
@@ -318,12 +325,10 @@ class QuantumFisherInf(Gradient):
         circuits_phase_fix = []
         for i in range(len(params)):  # loop over parameters
                 # create a copy of the original circuit with the same registers
-                circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
-                circuit.data = self._circuit.data
-                success = insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
-                                                               qubits=[ancilla])
-                if not success:
-                    raise AquaError('Could not insert the controlled gate, something went wrong!')
+                # circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
+                # circuit.data = self._circuit.data
+                # insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
+                #                                                qubits=[ancilla])
 
                 # construct the phase fix circuits
 
@@ -331,14 +336,15 @@ class QuantumFisherInf(Gradient):
                     for k, gate_to_insert_i in enumerate(gates_to_insert_i):
                         qfi_circuit = QuantumCircuit(*circuit.qregs)
                         qfi_circuit.data = circuit.data
-                        success_i = insert_gate(qfi_circuit, parameterized_gates[params[i]][m],
+                        # insert_gate(qfi_circuit, parameterized_gates[params[0]][0], XGate(), qubits=[ancilla])
+                        # Fix ancilla phase
+                        insert_gate(qfi_circuit, parameterized_gates[params[i]][m],
                                                                  gate_to_insert_i,
                                                                  additional_qubits=additional_qubits)
-                        if not success_i:
-                            raise AquaError('Could not insert the controlled gate, something went wrong!')
+                        # insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
                         qfi_circuit = trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
 
-                        qfi_circuit.h(ancilla)
+                        # qfi_circuit.h(ancilla)
                         circuits_phase_fix += [qfi_circuit]
         return circuits, circuits_phase_fix
 

@@ -24,7 +24,7 @@ from itertools import product
 from qiskit import QuantumCircuit, QuantumRegister
 
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit, Instruction
-from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CXGate, CYGate, CZGate, U1Gate, \
+from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CXGate, CYGate, CZGate, U1Gate, \
                                        U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, IGate, HGate, XGate, \
                                        SdgGate, SGate, ZGate
 
@@ -150,34 +150,38 @@ def insert_gate(circuit: QuantumCircuit,
                 reference_gate: Gate,
                 gate_to_insert: Instruction,
                 qubits: Optional[List[Qubit]] = None,
-                additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) :
+                additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None,
+                after: bool = False) :
     """Insert a gate into the circuit.
 
     Args:
         circuit: The circuit onto which the gare is added.
-        reference_gate: A gate instance before which a gate is inserted.
+        reference_gate: A gate instance before or after which a gate is inserted.
         gate_to_insert: The gate to be inserted.
         qubits: The qubits on which the gate is inserted. If None, the qubits of the
             reference_gate are used.
         additional_qubits: If qubits is None and the qubits of the reference_gate are
             used, this can be used to specify additional qubits before (first list in
             tuple) or after (second list in tuple) the qubits.
+        after: If the gate_to_insert should be inserted after the reference_gate set True.
 
     Returns:
     """
-    success = False
     if isinstance(gate_to_insert, IGate):
-        success = True
-    for i, op in enumerate(circuit.data):
-        if op[0] == reference_gate:
-            qubits = qubits or op[1]
-            if additional_qubits:
-                qubits = additional_qubits[0] + qubits + additional_qubits[1]
-            op_to_insert = (gate_to_insert, qubits, [])
-            insertion_index = i
-            circuit.data.insert(insertion_index, op_to_insert)
-            success = True
-    if not success:
+        return
+    else:
+        for i, op in enumerate(circuit.data):
+            if op[0] == reference_gate:
+                qubits = qubits or op[1]
+                if additional_qubits:
+                    qubits = additional_qubits[0] + qubits + additional_qubits[1]
+                op_to_insert = (gate_to_insert, qubits, [])
+                if after:
+                    insertion_index = i+1
+                else:
+                    insertion_index = i
+                circuit.data.insert(insertion_index, op_to_insert)
+                return
         raise AquaError('Could not insert the controlled gate, something went wrong!')
 
 
