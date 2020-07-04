@@ -14,24 +14,20 @@
 
 """Gradient utils"""
 
-from typing import Optional, Tuple, List, Dict
-import warnings
-import sys
-
-import numpy as np
+from typing import Optional, Tuple, List
 from itertools import product
 
-from qiskit import QuantumCircuit, QuantumRegister
+from qiskit import QuantumCircuit
 
-from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit, Instruction
-from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CXGate, CYGate, CZGate, U1Gate, \
-                                       U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, IGate, HGate, XGate, \
-                                       SdgGate, SGate, ZGate
+from qiskit.circuit import Gate, ControlledGate, Qubit, Instruction
+from qiskit.circuit.library.standard_gates import RXGate, RYGate, RZGate, CXGate, CYGate, CZGate, U1Gate, \
+                                       U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, IGate, ZGate
 
-from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.aqua import AquaError
 
 
 def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
+
     """Given a parameterized gate U(theta) with derivative dU(theta)/dtheta = sum_ia_iU(theta)V_i.
        This function returns a:=[a_0, ...] and V=[V_0, ...]
        Suppose U takes multiple parameters, i.e., U(theta^0, ... theta^k).
@@ -47,6 +43,7 @@ def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction
 
        Raises:
             TypeError: If the input gate is not a supported parametrized gate."""
+
     if isinstance(gate, U1Gate):
         # theta
         return [([0.5j, -0.5j], [IGate, CZGate])]
@@ -94,7 +91,7 @@ def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction
         czx = czx_circ.to_instruction()
         return [([-0.5j], [czx])]
     if isinstance(gate, ControlledGate):
-        # TODO support arbitrary controll states
+        # TODO support arbitrary control states
         if gate.ctrl_state != 2**gate.num_ctrl_qubits - 1:
             raise AquaError('Function only support controlled gates with control state `1` on all control qubits.')
         base_coeffs_gates = gate_gradient_dict(gate.base_gate)
@@ -121,28 +118,6 @@ def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction
             coeffs_gates.append((coeffs, gates))
         return coeffs_gates
 
-
-
-    # if isinstance(gate, CRXGate):
-    #     # theta
-    #     return [-0.25j, +0.25j], [(IGate(), CXGate()), (CZGate(), CXGate())]
-    # if isinstance(gate, CRYGate):
-    #     # theta
-    #     return [-0.25j, +0.25j], [(IGate(), CYGate()), (CZGate(), CYGate())]
-    # if isinstance(gate, CRZGate):
-    #     # theta
-    #     # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-    #     return [-0.25j, +0.25j], [(IGate(), CZGate()), CZGate()]
-    # if isinstance(gate, CU1Gate):
-    #     # theta
-    #     return [0.25j, -0.25j, -0.25j, 0.25j], [IGate(), (IGate(), CZGate()), (CZGate(), IGate()),
-    #                                             (CZGate(), CZGate())]
-
-    r'''
-    TODO multi-controlled-$U(\theta)$ for $m$ controlls:
-    $\frac{1}{2^m}\Bigotimes\limits_i=0^{m-1}(I\-Z)\otimes \frac{\partial U}{\partial\theta} $
-    # for self.num_ctrl_qubits
-    '''
     raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
 
 
@@ -151,7 +126,8 @@ def insert_gate(circuit: QuantumCircuit,
                 gate_to_insert: Instruction,
                 qubits: Optional[List[Qubit]] = None,
                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None,
-                after: bool = False) :
+                after: bool = False):
+
     """Insert a gate into the circuit.
 
     Args:
@@ -164,9 +140,8 @@ def insert_gate(circuit: QuantumCircuit,
             used, this can be used to specify additional qubits before (first list in
             tuple) or after (second list in tuple) the qubits.
         after: If the gate_to_insert should be inserted after the reference_gate set True.
-
-    Returns:
     """
+
     if isinstance(gate_to_insert, IGate):
         return
     else:
@@ -210,3 +185,42 @@ def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircui
             return trimmed_circuit
 
     raise AquaError('The reference gate is not in the given quantum circuit.')
+
+# For now not needed
+# @staticmethod
+# def replace_gate(circuit: QuantumCircuit,
+#                 gate_to_replace: Gate,
+#                 gate_to_insert: Gate,
+#                 qubits: Optional[List[Qubit]] = None,
+#                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
+#     """Insert a gate into the circuit.
+#
+#     Args:
+#         circuit: The circuit onto which the gare is added.
+#         gate_to_replace: A gate instance which shall be replaced.
+#         gate_to_insert: The gate to be inserted instead.
+#         qubits: The qubits on which the gate is inserted. If None, the qubits of the
+#             reference_gate are used.
+#         additional_qubits: If qubits is None and the qubits of the reference_gate are
+#             used, this can be used to specify additional qubits before (first list in
+#             tuple) or after (second list in tuple) the qubits.
+#
+#     Returns:
+#         True, if the insertion has been successful, False otherwise.
+#     """
+#     for i, op in enumerate(circuit.data):
+#         if op[0] == gate_to_replace:
+#             circuit.data = circuit.data.pop(i) # remove gate
+#             if isinstance(gate_to_insert, IGate()):
+#                 return True
+#             #TODO check qubits placing
+#             qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
+#             if additional_qubits:
+#                 qubits = additional_qubits[0] + qubits + additional_qubits[1]
+#             op_to_insert = (gate_to_insert, qubits, [])
+#             insertion_index = i
+#             circuit.data.insert(insertion_index, op_to_insert)
+#             return True
+#
+#     return False
+

@@ -14,8 +14,8 @@
 
 """The module for Aqua's gradients."""
 
-from .gradient import Gradient
-from .natural_gradient import NaturalGradient
-from .q_fisher_inf import QuantumFisherInf
+from .grad import Gradient
+from .natural_grad import NaturalGradient
+from .qfi import QFI
 
-__all__ = ['Gradient', 'NaturalGradient', 'QuantumFisherInf']
+__all__ = ['Gradient', 'NaturalGradient', 'QFI']

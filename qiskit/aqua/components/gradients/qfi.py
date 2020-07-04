@@ -12,38 +12,31 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-"""The module for Quantum Natural Gradients."""
+"""The module for Quantum the Fisher Information."""
 
 from typing import Optional, Tuple, List, Dict
 import warnings
-import sys
 
 import numpy as np
 
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.compiler import transpile
 
-from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit, Instruction
+from qiskit.circuit import Parameter, Gate, Qubit, Instruction
 
-from qiskit.aqua.operators import PauliOp, X, Y, Z, I, CircuitSampler, StateFn, OperatorBase, PauliExpectation, ListOp
-from qiskit.quantum_info import Pauli
+from qiskit.aqua.operators import PauliOp, X, Y, Z, I, CircuitSampler, StateFn, OperatorBase, PauliExpectation
 from qiskit.aqua.utils.run_circuits import find_regs_by_name
 
-from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
-    U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, XGate, \
-    SdgGate, SGate, ZGate
+from qiskit.extensions.standard import HGate, XGate, SdgGate, SGate, ZGate
 
-from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.aqua import QuantumInstance
 
-from .gradient import Gradient
-from .gradients_utils import gate_gradient_dict, insert_gate, trim_circuit
+from .grad import Gradient
+from .grad_utils import gate_gradient_dict, insert_gate, trim_circuit
 
 
-class QuantumFisherInf(Gradient):
-    """Compute the quantum Fisher Information given a pure, parametrized quantum state."""
-    # TODO product rule
-
-    # TODO extend to mixed states
+class QFI(Gradient):
+    """Compute the Quantum Fisher Information given a pure, parametrized quantum state."""
 
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
                  quantum_instance: Optional[QuantumInstance] = None) -> None:
@@ -52,7 +45,7 @@ class QuantumFisherInf(Gradient):
             circuit: The circuit for which the quantum Fisher information is computed.
             quantum_instance: The quantum instance used to execute the circuits.
         """
-        super().__init__(circuit, quantum_instance)
+        super().__init__(circuit=circuit, observable=None, quantum_instance=quantum_instance)
 
         warnings.simplefilter("once")
 
@@ -107,22 +100,12 @@ class QuantumFisherInf(Gradient):
                         else:
                             qubit_op = I ^ qreg.size ^ qubit_op
 
-                temp = []
-                for element in qregs_list:
-                    for i in range(element.size):
-                        temp.append(element[i])
-                qregs_list = temp
+                return qubit_op
 
-                return qubit_op, qregs_list
-
-            # sv_mode = False
-            # if self._quantum_instance.is_statevector:
-            #     sv_mode = True
             if not isinstance(circuit, list):
                 circuit = [circuit]
             # TODO update CircuitSampler to facilitate circuit batching
             exp_vals = []
-            # test = []
             for k, circuit_item in enumerate(circuit):
                 # Transpile & assign parameter values
                 circuit_item = transpile(circuit_item, backend=self._quantum_instance.backend)
@@ -130,58 +113,20 @@ class QuantumFisherInf(Gradient):
                             param in circuit_item.parameters}
                 circuit_item = circuit_item.assign_parameters(new_dict)
                 # Construct circuits to evaluate the expectation values
-                qubit_op, qregs_list = prepare(circuit_item)
-                meas = ~StateFn(qubit_op)  # ~ is the same as .adjoint()
+                qubit_op = prepare(circuit_item)
+                meas = ~StateFn(qubit_op)
                 expect_op = meas @ StateFn(circuit_item)
-                # I can already call eval() on expect_op, but it will do the evaluation by matrix multiplication.
                 # Here, convert to Pauli measurement
                 expect_op = PauliExpectation().convert(expect_op)
-                # test.append(expect_op)
                 exp_val = CircuitSampler(self._quantum_instance).convert(expect_op)
                 exp_val = exp_val.eval()
                 exp_vals.append(exp_val)
 
-                # executed_op = CircuitSampler(self._quantum_instance).convert(expect_op)
-                # exp_vals.append(executed_op.eval())
-            # test = ListOp(test)
-            # exp_val = CircuitSampler(self._quantum_instance).convert(test)
-            # exp_vals = exp_val.eval()
             return exp_vals
-
-                # # TODO Do we still need qregs_list? How to get the exp value? - Circuit Sampler?
-                # qc.extend(qubit_op.construct_evaluation_circuit(statevector_mode=sv_mode, wave_function=circuit_item,
-                #                                           qr=qregs_list, circuit_name_prefix='circuits' + str(k)))
-                # qubit_ops.append(qubit_op)
-
-            # success = False
-            # counter = 0
-            #
-            # while not success:
-            #     # This prevents errors if a hardware call may return an error.
-            #     try:
-            #         result = self._quantum_instance.execute(qc)
-            #         success = True
-            #     except Exception:
-            #         counter += 1
-            #     if counter > 10:
-            #         raise AquaError('Get expectation value failed.')
-            #         break
-            #
-            # avg = []
-            # for k, circuit_item in enumerate(circuit):
-            #     avg_temp, _ = qubit_ops[k].evaluate_with_result(statevector_mode=sv_mode, result=result,
-            #                                                     circuit_name_prefix='circuits' + str(k))
-            #     avg.append(avg_temp)
-            # return avg
 
         master_dict = parameter_values
 
         qfi = np.zeros((len(parameters), len(parameters)), dtype=complex)
-
-        # here dictionary w.r.t. params
-        #-----------------
-        # # List with all parameterized gates
-        # parameterized_gates = []
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
         # Dictionary which relates the coefficients needed for the QFI for every parameter
@@ -284,8 +229,10 @@ class QuantumFisherInf(Gradient):
                         for n, gates_to_insert_j in enumerate(qfi_gates[params[j]]):
                             for l, gate_to_insert_j in enumerate(gates_to_insert_j):
                                 coeff_j = qfi_coeffs[params[j]][n][l]
+                                # create a copy of the original circuit with the same registers
                                 qfi_circuit = QuantumCircuit(*circuit.qregs)
                                 qfi_circuit.data = circuit.data
+
                                 # Fix ancilla phase
                                 sign = np.sign(np.conj(coeff_i)*coeff_j)
                                 complex = np.iscomplex(np.conj(coeff_i)*coeff_j)
@@ -293,26 +240,24 @@ class QuantumFisherInf(Gradient):
                                     if complex:
                                         insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SdgGate(),
                                                     qubits=[ancilla])
-                                        # qfi_circuit.sdg(ancilla)
                                     else:
                                         insert_gate(qfi_circuit, parameterized_gates[params[0]][0], ZGate(),
                                                     qubits=[ancilla])
-                                        # qfi_circuit.z(ancilla)
                                 else:
                                     if complex:
                                         insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SGate(),
                                                     qubits=[ancilla])
-                                        # qfi_circuit.s(ancilla)
+
                                 insert_gate(qfi_circuit, parameterized_gates[params[0]][0], XGate(),
                                             qubits=[ancilla])
-                                # qfi_circuit.x(ancilla)
 
+                                # Insert controlled, intercepting gate - controlled by |1>
                                 insert_gate(qfi_circuit, parameterized_gates[params[i]][m], gate_to_insert_i,
                                                                          additional_qubits=additional_qubits)
 
                                 insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
-                                #
-                                # qfi_circuit.x(ancilla)
+
+                                # Insert controlled, intercepting gate - controlled by |0>
                                 insert_gate(qfi_circuit, parameterized_gates[params[j]][n], gate_to_insert_j,
                                                                          additional_qubits=additional_qubits)
 
@@ -324,206 +269,20 @@ class QuantumFisherInf(Gradient):
                 j += 1
         circuits_phase_fix = []
         for i in range(len(params)):  # loop over parameters
-                # create a copy of the original circuit with the same registers
-                # circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
-                # circuit.data = self._circuit.data
-                # insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
-                #                                                qubits=[ancilla])
 
                 # construct the phase fix circuits
-
                 for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
                     for k, gate_to_insert_i in enumerate(gates_to_insert_i):
+                        # create a copy of the original circuit with the same registers
                         qfi_circuit = QuantumCircuit(*circuit.qregs)
                         qfi_circuit.data = circuit.data
-                        # insert_gate(qfi_circuit, parameterized_gates[params[0]][0], XGate(), qubits=[ancilla])
-                        # Fix ancilla phase
+                        # Insert controlled, intercepting gate
                         insert_gate(qfi_circuit, parameterized_gates[params[i]][m],
                                                                  gate_to_insert_i,
                                                                  additional_qubits=additional_qubits)
-                        # insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
+
                         qfi_circuit = trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
 
-                        # qfi_circuit.h(ancilla)
+
                         circuits_phase_fix += [qfi_circuit]
         return circuits, circuits_phase_fix
-
-    # @staticmethod
-    # def insert_gate(circuit: QuantumCircuit,
-    #                 reference_gate: Gate,
-    #                 gate_to_insert: Gate,
-    #                 qubits: Optional[List[Qubit]] = None,
-    #                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
-    #     """Insert a gate into the circuit.
-    #
-    #     Args:
-    #         circuit: The circuit onto which the gare is added.
-    #         reference_gate: A gate instance before or after which a gate is inserted.
-    #         gate_to_insert: The gate to be inserted.
-    #         qubits: The qubits on which the gate is inserted. If None, the qubits of the
-    #             reference_gate are used.
-    #         additional_qubits: If qubits is None and the qubits of the reference_gate are
-    #             used, this can be used to specify additional qubits before (first list in
-    #             tuple) or after (second list in tuple) the qubits.
-    #
-    #     Returns:
-    #         True, if the insertion has been successful, False otherwise.
-    #     """
-    #     # TODO add before/after gate again --> @julien sorry
-    #     if isinstance(gate_to_insert, IGate):
-    #         return True
-    #     for i, op in enumerate(circuit.data):
-    #         if op[0] == reference_gate:
-    #             qubits = qubits or op[1]
-    #             if additional_qubits:
-    #                 qubits = additional_qubits[0] + qubits + additional_qubits[1]
-    #             op_to_insert = (gate_to_insert, qubits, [])
-    #             insertion_index = i
-    #             circuit.data.insert(insertion_index, op_to_insert)
-    #             return True
-    #
-    #     return False
-
-    # Not needed
-    # @staticmethod
-    # def replace_gate(circuit: QuantumCircuit,
-    #                 gate_to_replace: Gate,
-    #                 gate_to_insert: Gate,
-    #                 qubits: Optional[List[Qubit]] = None,
-    #                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
-    #     """Insert a gate into the circuit.
-    #
-    #     Args:
-    #         circuit: The circuit onto which the gare is added.
-    #         gate_to_replace: A gate instance which shall be replaced.
-    #         gate_to_insert: The gate to be inserted instead.
-    #         qubits: The qubits on which the gate is inserted. If None, the qubits of the
-    #             reference_gate are used.
-    #         additional_qubits: If qubits is None and the qubits of the reference_gate are
-    #             used, this can be used to specify additional qubits before (first list in
-    #             tuple) or after (second list in tuple) the qubits.
-    #
-    #     Returns:
-    #         True, if the insertion has been successful, False otherwise.
-    #     """
-    #     for i, op in enumerate(circuit.data):
-    #         if op[0] == gate_to_replace:
-    #             circuit.data = circuit.data.pop(i) # remove gate
-    #             if isinstance(gate_to_insert, IGate()):
-    #                 return True
-    #             #TODO check qubits placing
-    #             qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
-    #             if additional_qubits:
-    #                 qubits = additional_qubits[0] + qubits + additional_qubits[1]
-    #             op_to_insert = (gate_to_insert, qubits, [])
-    #             insertion_index = i
-    #             circuit.data.insert(insertion_index, op_to_insert)
-    #             return True
-    #
-    #     return False
-
-    # @staticmethod
-    # def get_coeffs_gates(gate: Gate) -> Tuple[List[complex], List[Gate]]:
-    #     """Get the ancilla-controlled gates for the quantum Fisher Information.
-    #
-    #     Notably, if gate is a two-qubit gate acting on qubits q0, q1 and the returned gate list consists of a gate
-    #     tuple (gate0, gate1) then gate0 must act on q0 and gate1 on q1.
-    #
-    #     Currently, not all parametrized gates are supported.
-    #
-    #     Args:
-    #         gate: The gate for which the derivative is being computed.
-    #
-    #     Returns:
-    #         The coefficients and the gates used for the metric computation for each parameter of the respective gates.
-    #
-    #     Raises:
-    #         TypeError: If the input gate is not a supported parametrized gate.
-    #     """
-    #
-    #     if isinstance(gate, U1Gate):
-    #         # theta
-    #         return [0.5j, -0.5j], [IGate(), CZGate()]
-    #     # TODO Extend to gates with multiple parameters
-    #     # if isinstance(gate, U2Gate):
-    #     #     # TODO encode multiple parameters
-    #     # TODO https://qiskit.org/documentation/_modules/qiskit/aqua/operators/common.html#commutator
-    #     #     # theta, phi
-    #     #     return [[0.5j], [-0.5j]], [[CZGate], [CZGate]]
-    #     # if isinstance(gate, U3Gate):
-    #     #     # TODO encode multiple parameters
-    #     #     # theta, lambda, phi
-    #     #     return [[0.5j], [-0.5j], [+0.5j]], [[CZGate], [CZGate], [CZGate]]
-    #     if isinstance(gate, RXGate):
-    #         # theta
-    #         return [-0.5j], [CXGate()]
-    #     if isinstance(gate, RYGate):
-    #         # theta
-    #         return [-0.5j], [CYGate()]
-    #     if isinstance(gate, RZGate):
-    #         # theta
-    #         # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-    #         return [-0.5j], [CZGate()]
-    #     if isinstance(gate, RXXGate):
-    #         # theta
-    #         return [-0.5j], [CXGate()] # on both XX - CXX
-    #     if isinstance(gate, RYYGate):
-    #         # theta
-    #         return [-0.5j], [CYGate()] # on both YY - CYY
-    #     if isinstance(gate, RZZGate):
-    #         # theta
-    #         return [-0.5j], [CZGate()] # on both ZZ - CZZ
-    #     # TODO wait until this gate is fixed
-    #     # if isinstance(gate, RZXGate):
-    #     #     # theta
-    #     #     return [[-0.5j]], [[(CZXGate]]
-    #     if isinstance(gate, CRXGate):
-    #         # theta
-    #         return [-0.25j, +0.25j], [(IGate(), CXGate()), (CZGate(), CXGate())]
-    #     if isinstance(gate, CRYGate):
-    #         # theta
-    #         return [-0.25j, +0.25j], [(IGate(), CYGate()), (CZGate(), CYGate())]
-    #     if isinstance(gate, CRZGate):
-    #         # theta
-    #         # Note that the implemented RZ gate is not an actual RZ gate but [[1, 0], [0, e^i\theta]]
-    #         return [-0.25j, +0.25j], [(IGate(), CZGate()), CZGate()]
-    #     if isinstance(gate, CU1Gate):
-    #         # theta
-    #         return [0.25j, -0.25j, -0.25j, 0.25j], [IGate(), (IGate(), CZGate()), (CZGate(), IGate()),
-    #                                                 (CZGate(), CZGate())]
-    #
-    #     r'''
-    #     TODO multi-controlled-$U(\theta)$ for $m$ controlls:
-    #     $\frac{1}{2^m}\Bigotimes\limits_i=0^{m-1}(I\-Z)\otimes \frac{\partial U}{\partial\theta} $
-    #     # for self.num_ctrl_qubits
-    #     '''
-    #
-    #     raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
-    #
-    # @staticmethod
-    # def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
-    #     """Trim the given quantum circuit before the reference gate.
-    #
-    #
-    #     Args:
-    #         circuit: The circuit onto which the gare is added.
-    #         reference_gate: A gate instance before or after which a gate is inserted.
-    #
-    #     Returns:
-    #         The trimmed circuit.
-    #
-    #     Raise:
-    #         AquaError: If the reference gate is not part of the given circuit.
-    #     """
-    #     parameterized_gates = []
-    #     for param, elements in circuit._parameter_table.items():
-    #         for element in elements:
-    #             parameterized_gates.append(element[0])
-    #
-    #     for i, op in enumerate(circuit.data):
-    #         if op[0] == reference_gate:
-    #             trimmed_circuit = QuantumCircuit(*circuit.qregs)
-    #             trimmed_circuit.data = circuit.data[:i]
-    #             return trimmed_circuit
-    #
-    #     raise AquaError('The reference gate is not in the given quantum circuit.')

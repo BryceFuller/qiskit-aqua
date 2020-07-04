@@ -20,23 +20,27 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance
+from qiskit.aqua.operators import OperatorBase
 
 
 class Gradient:
     """The base interface for Aqua's gradients."""
 
-    def __init__(self, circuit: Optional[QuantumCircuit] = None,
+    def __init__(self, circuit: QuantumCircuit,
+                 observable: Optional[OperatorBase] = None,
                  quantum_instance: Optional[Union[BaseBackend, QuantumInstance]] = None) -> None:
         """
         Args:
             circuit: The circuit for which the gradient is computed.
+            observable: The observable of the expectation value underlying the gradient.
             quantum_instance: The quantum instance used to execute the circuits.
         """
-        self.circuit = circuit
-        self.quantum_instance = quantum_instance
+        self._circuit = circuit
+        self._observable = observable
+        self._quantum_instance = quantum_instance
 
     @property
-    def circuit(self) -> Optional[QuantumCircuit]:
+    def circuit(self) -> QuantumCircuit:
         """Return the circuit for which the gradient is computed.
 
         Returns:
@@ -52,6 +56,24 @@ class Gradient:
             circuit: The circuit for which the gradient is computed.
         """
         self._circuit = circuit
+
+    @property
+    def observable(self) -> OperatorBase:
+        """Return the observable for the expectation value w.r.t. which the gradient is computed.
+
+        Returns:
+            The observable underlying the gradient.
+        """
+        return self._observable
+
+    @observable.setter
+    def observable(self, observable: OperatorBase) -> None:
+        """Set the observable for the expectation value w.r.t. which the gradient is computed.
+
+        Args:
+            The observable underlying the gradient.
+        """
+        self._observable = observable
 
     @property
     def quantum_instance(self) -> Optional[QuantumInstance]:

@@ -22,14 +22,14 @@ from qiskit.extensions.standard import RXGate, RYGate, RZGate, CXGate, CYGate, C
 
 from qiskit.aqua import QuantumInstance, AquaError
 
-from .gradient import Gradient
+from .grad import Gradient
 
 
 class NaturalGradient(Gradient):
     """Compute the natural gradient of a quantum circuit."""
 
     # TODO get gradient
-    # TODO
+    # TODO get Fisher
 
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
                  quantum_instance: Optional[QuantumInstance] = None) -> None:

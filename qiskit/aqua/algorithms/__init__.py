@@ -194,7 +194,7 @@ from .minimum_eigen_solvers import (VQE, VQEResult, QAOA, IQPE, IQPEResult, QPE,
                                     ClassicalCPLEX, CPLEX_Ising, NumPyMinimumEigensolver,
                                     MinimumEigensolver, MinimumEigensolverResult)
 from .education import EOH, Simon, DeutschJozsa, BernsteinVazirani
-from qiskit.aqua.operators.gradients import Gradient, NaturalGradient, QuantumFisherInf
+from qiskit.aqua.components.gradients import Gradient, NaturalGradient, QFI
 
 __all__ = [
     'AlgorithmResult',
@@ -236,5 +236,5 @@ __all__ = [
     'Shor',
     'Gradient',
     'NaturalGradient',
-    'QuantumFisherInf'
+    'QFI'
 ]

@@ -20,14 +20,13 @@ import unittest
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
-from qiskit.aqua.operators.gradients.q_fisher_inf import QuantumFisherInf
+from qiskit.aqua.components.gradients.qfi import QFI
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter
-from qiskit.extensions.standard import CRZGate
 import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
-from qiskit.aqua.operators.gradients.gradients_utils import insert_gate, trim_circuit
+from qiskit.aqua.components.gradients.grad_utils import trim_circuit
 
 
 # from .gradient import Gradient
@@ -128,12 +127,12 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.rz(p[0], q[0])
         qc.rx(p[1], q[0])
 
-        parameterized_gates = []
-        for param, elements in qc._parameter_table.items():
-            for element in elements:
-                parameterized_gates.append(element[0])
+        # parameterized_gates = []
+        # for param, elements in qc._parameter_table.items():
+        #     for element in elements:
+        #         parameterized_gates.append(element[0])
 
-        qfi = QuantumFisherInf(circuit=qc, quantum_instance=self.qi)
+        qfi = QFI(circuit=qc, quantum_instance=self.qi)
         values_dict = {p[0]: np.pi / 4, p[1]: 0.1}
         qfi_value=qfi.compute_qfi(p, values_dict)
         correct_qfi = np.allclose(qfi_value, [[1, 0], [0, 0.5]], atol=1e-6)
