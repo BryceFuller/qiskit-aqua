@@ -20,7 +20,8 @@ import unittest
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
-from qiskit.aqua.components.gradients.qfi import QFI
+from qiskit.aqua.components.gradients import QFI, AncillaProbGradient, AncillaStateGradient
+from qiskit.aqua.operators import X, Z
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter
 import numpy as np
@@ -113,19 +114,84 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
     #     self.assertEqual(len(qfi_circuits), 11)
     #     self.assertEqual(len(qfi_phase_fix_circuits), 4)
 
-    def test_qfi(self):
-        """Test if the quantum fisher information calculation is correct
-        QFI = [[1, 0], [0, 1]] - [[0, 0], [0, cos^2(p[0])]]"""
+    def test_state_prob_grad(self):
+        """Test the ancilla state gradient
+        Tr(|psi><psi|Z) = sin^2(a)sin^2(b) / 2
+        Tr(|psi><psi|X) = cos(a)
+        d<H>/da = - 0.5 sin(a) - 1 sin(a)cos(a)sin^2(b)
+        d<H>/db = - 1 sin^2(a)sin(b)cos(b)
+        """
 
-        p0 = Parameter('p0')
-        p1 = Parameter('p1')
-        p = [p0, p1]
+        H = 0.5 * X - 1 * Z
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
 
         q = QuantumRegister(1)
         qc = QuantumCircuit(q)
         qc.h(q)
-        qc.rz(p[0], q[0])
-        qc.rx(p[1], q[0])
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        state_grad = AncillaStateGradient(circuit=qc, observable=H, quantum_instance=self.qi)
+        values_dict = {params[0]: np.pi / 4, params[1]: np.pi}
+        grad_value = state_grad.compute_grad(params, values_dict)
+        correct_grad = np.allclose(grad_value, [-0.5/np.sqrt(2), 0], atol=1e-6)
+        values_dict = {params[0]: np.pi / 4, params[1]: np.pi / 4}
+        grad_value = state_grad.compute_grad(params, values_dict)
+        correct_grad &= np.allclose(grad_value, [-0.5/np.sqrt(2) - 1/8., -1/8.], atol=1e-6)
+        values_dict = {params[0]: np.pi / 2, params[1]: np.pi / 4}
+        grad_value = state_grad.compute_grad(params, values_dict)
+        correct_grad &= np.allclose(grad_value, [-0.5, 0], atol=1e-6)
+        self.assertTrue(correct_grad)
+
+    def test_ancilla_prob_grad(self):
+        """Test the ancilla probability gradient
+        dp0/da = -cos(a)sin(b) / 2
+        dp1/da = cos(a)sin(b) / 2
+        dp0/db = - sin(a)cos(b)
+        dp1/db =  sin(a)cos(b)
+        """
+
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        prob_grad = AncillaProbGradient(circuit=qc, quantum_instance=self.qi)
+        values_dict = {params[0]: np.pi / 4, params[1]: 0}
+        grad_value = prob_grad.compute_grad(params, values_dict)
+        correct_grad = np.allclose(grad_value, [[0, 0], [0, 0]], atol=1e-6)
+        values_dict = {params[0]: np.pi/4, params[1]: np.pi/4}
+        grad_value = prob_grad.compute_grad(params, values_dict)
+        correct_grad &= np.allclose(grad_value, [[-1/4, 1/4], [-1/2, 1/2]], atol=1e-6)
+        values_dict = {params[0]: np.pi/2, params[1]: np.pi/4}
+        grad_value = prob_grad.compute_grad(params, values_dict)
+        correct_grad &= np.allclose(grad_value, [[0, 0], [-1/np.sqrt(2), 1/np.sqrt(2)]], atol=1e-6)
+        self.assertTrue(correct_grad)
+
+    def test_product_rule(self):
+        # TODO
+        return
+
+    def test_qfi(self):
+        """Test if the quantum fisher information calculation is correct
+        QFI = [[1, 0], [0, 1]] - [[0, 0], [0, cos^2(a)]]"""
+
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
 
         # parameterized_gates = []
         # for param, elements in qc._parameter_table.items():
@@ -133,14 +199,14 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         #         parameterized_gates.append(element[0])
 
         qfi = QFI(circuit=qc, quantum_instance=self.qi)
-        values_dict = {p[0]: np.pi / 4, p[1]: 0.1}
-        qfi_value=qfi.compute_qfi(p, values_dict)
+        values_dict = {params[0]: np.pi / 4, params[1]: 0.1}
+        qfi_value=qfi.compute_qfi(params, values_dict)
         correct_qfi = np.allclose(qfi_value, [[1, 0], [0, 0.5]], atol=1e-6)
-        values_dict = {p[0]: np.pi, p[1]: 0.1}
-        qfi_value = qfi.compute_qfi(p, values_dict)
+        values_dict = {params[0]: np.pi, params[1]: 0.1}
+        qfi_value = qfi.compute_qfi(params, values_dict)
         correct_qfi &= np.allclose(qfi_value, [[1, 0], [0, 0]], atol=1e-6)
-        values_dict = {p[0]: np.pi/2, p[1]: 0.1}
-        qfi_value = qfi.compute_qfi(p, values_dict)
+        values_dict = {params[0]: np.pi/2, params[1]: 0.1}
+        qfi_value = qfi.compute_qfi(params, values_dict)
         correct_qfi &= np.allclose(qfi_value, [[1, 0], [0, 1]], atol=1e-6)
         self.assertTrue(correct_qfi)
 

@@ -26,10 +26,10 @@ from qiskit.compiler import transpile
 from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit, Instruction
 
 from qiskit.aqua.operators import PauliOp, X, Y, Z, I, CircuitSampler, StateFn, OperatorBase, PauliExpectation, ListOp
-from qiskit.quantum_info import Pauli
+from qiskit.quantum_info import partial_trace
 from qiskit.aqua.utils.run_circuits import find_regs_by_name
 
-from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
+from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
     U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, XGate, \
     SdgGate, SGate, ZGate
 
@@ -64,10 +64,10 @@ class AncillaProbGradient(Gradient):
             is computed.
             grad_circuits: Tuple of lists of quantum circuits needed to compute the gradient.
 
-        Returns: gradient
+        Returns: probability gradient array of shape (num params, num qubits)
         """
 
-        def get_exp_value(circuit: List[QuantumCircuit], operator: OperatorBase = Z) -> List[float]:
+        def get_prob_value(circuit: List[QuantumCircuit], operator: OperatorBase = Z) -> List[List[float]]:
             r"""
             Evaluate the expectation value $\langle Z \rangle$ w.r.t. the ancilla qubit (named 'ancilla')
             Args:
@@ -105,33 +105,30 @@ class AncillaProbGradient(Gradient):
                         else:
                             qubit_op = I ^ qreg.size ^ qubit_op
 
-                return qubit_op
+                return qubit_op, index_evaluation_qubit
 
             if not isinstance(circuit, list):
                 circuit = [circuit]
-            # TODO update CircuitSampler to facilitate circuit batching
-            exp_vals = []
+            results = []
             for k, circuit_item in enumerate(circuit):
                 # Transpile & assign parameter values
                 circuit_item = transpile(circuit_item, backend=self._quantum_instance.backend)
                 new_dict = {param: value for param, value in master_dict.items() if
                             param in circuit_item.parameters}
                 circuit_item = circuit_item.assign_parameters(new_dict)
+                # Get operator for partial expectation value
+                op, index_evaluation_qubit = prepare(circuit_item)
+                op = op.to_matrix()
                 # Construct circuits to evaluate the expectation values
-                qubit_op = prepare(circuit_item)
-                meas = ~StateFn(qubit_op)
-                expect_op = meas @ StateFn(circuit_item)
-                # Here, convert to Pauli measurement
-                expect_op = PauliExpectation().convert(expect_op)
-                exp_val = CircuitSampler(self._quantum_instance).convert(expect_op)
-                exp_val = exp_val.eval()
-                exp_vals.append(exp_val)
-
-            return exp_vals
+                sampler = CircuitSampler(self._quantum_instance).convert(StateFn(circuit_item))
+                result = sampler.to_density_matrix()
+                prob_grad = partial_trace(op.dot(result), [index_evaluation_qubit])
+                results.append(list(prob_grad.probabilities()))
+            return results
 
         master_dict = parameter_values
 
-        grad = np.zeros(len(parameters), dtype=complex)
+        grad = np.zeros((len(parameters), 2**self.circuit.num_qubits), dtype=complex)
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
         # Dictionary which relates the coefficients needed for the QFI for every parameter
@@ -157,7 +154,7 @@ class AncillaProbGradient(Gradient):
         else:
             grad_circuits = grad_circuits
         if len(grad_circuits) > 0:
-            grad_exp_values = get_exp_value(grad_circuits)
+            grad_prob_values = np.array(get_prob_value(grad_circuits))
 
         counter = 0
         # weighted sum of the circuit expectation values w.r.t. the coefficients
@@ -165,7 +162,7 @@ class AncillaProbGradient(Gradient):
             for coeffs_i in grad_coeffs[params[i]]:
                 for coeff_i in coeffs_i:
                     # Quantum circuit already considers sign and if complex.
-                    grad[i] += np.abs(coeff_i) * grad_exp_values[counter]
+                    grad[i] += np.abs(coeff_i) * grad_prob_values[counter]
                     counter += 1
         # Add correct pre-factor and return
         return 2*grad
@@ -233,8 +230,6 @@ class AncillaProbGradient(Gradient):
                     insert_gate(grad_circuit, parameterized_gates[params[i]][m],
                                                              gate_to_insert_i,
                                                              additional_qubits=additional_qubits)
-
-                    grad_circuit = trim_circuit(grad_circuit, parameterized_gates[params[i]][m])
                     grad_circuit.h(ancilla)
                     circuits += [grad_circuit]
         return circuits

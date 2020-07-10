@@ -17,5 +17,7 @@
 from .grad import Gradient
 from .natural_grad import NaturalGradient
 from .qfi import QFI
+from .ancilla_prob_grad import AncillaProbGradient
+from .ancilla_state_grad import AncillaStateGradient
 
 __all__ = ['Gradient', 'NaturalGradient', 'QFI']

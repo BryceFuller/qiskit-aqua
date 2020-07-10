@@ -29,7 +29,7 @@ from qiskit.aqua.operators import PauliOp, X, Y, Z, I, CircuitSampler, StateFn, 
 from qiskit.quantum_info import Pauli
 from qiskit.aqua.utils.run_circuits import find_regs_by_name
 
-from qiskit.extensions.standard import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
+from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
     U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, XGate, \
     SdgGate, SGate, ZGate
 
@@ -133,8 +133,7 @@ class AncillaStateGradient(Gradient):
 
         master_dict = parameter_values
 
-        # TODO decompose observable into unitaries which we can controll & integrate summing logic
-        # if self._observable
+        # TODO convert observable into summed op
 
         grad = np.zeros(len(parameters), dtype=complex)
         # Dictionary with the information which parameter is used in which gate
@@ -166,14 +165,15 @@ class AncillaStateGradient(Gradient):
 
         counter = 0
         # weighted sum of the circuit expectation values w.r.t. the coefficients
-        for i in range(len(params)):
-            for coeffs_i in grad_coeffs[params[i]]:
-                for coeff_i in coeffs_i:
-                    # Quantum circuit already considers sign and if complex.
-                    grad[i] += np.abs(coeff_i) * grad_exp_values[counter]
-                    counter += 1
+        for j, op in enumerate(self._observable):
+            for i in range(len(params)):
+                for coeffs_i in grad_coeffs[params[i]]:
+                    for coeff_i in coeffs_i:
+                        # Quantum circuit already considers sign and if complex.
+                        grad[i] += op.coeff * np.abs(coeff_i) * grad_exp_values[counter]
+                        counter += 1
         # Add correct pre-factor and return
-        return 2*grad
+        return 2 * grad
 
     def construct_circuits(self, parameterized_gates: Dict[Parameter, List[Gate]],
                            grad_coeffs: Dict[Parameter, List[List[complex]]],
@@ -204,6 +204,7 @@ class AncillaStateGradient(Gradient):
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
         additional_qubits = ([ancilla], [])
+        circ_qregs = self._circuit.qregs
         # create a copy of the original circuit with an additional ancilla register
         circuit = QuantumCircuit(*self._circuit.qregs, qr_ancilla)
         circuit.data = self._circuit.data
@@ -211,46 +212,39 @@ class AncillaStateGradient(Gradient):
         # apply Hadamard on ancilla
         insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
                     qubits=[ancilla])
-        # Get the circuits needed to compute A_ij
-        for i in range(len(params)): #loop over parameters
-            # construct the circuits
-            for m, gates_to_insert_i in enumerate(grad_gates[params[i]]):
-                for k, gate_to_insert_i in enumerate(gates_to_insert_i):
-                    grad_circuit = QuantumCircuit(*circuit.qregs)
-                    grad_circuit.data = circuit.data
+        # Get the circuits needed to compute the gradient
+        for j, op in enumerate(self._observable):
+            for i in range(len(params)): #loop over parameters
+                # construct the circuits
+                for m, gates_to_insert_i in enumerate(grad_gates[params[i]]):
+                    for k, gate_to_insert_i in enumerate(gates_to_insert_i):
+                        grad_circuit = QuantumCircuit(*circuit.qregs)
+                        grad_circuit.data = circuit.data
 
-                    # Fix ancilla phase
-                    coeff_i = grad_coeffs[params[i]][m][k]
-                    sign = np.sign(coeff_i)
-                    complex = np.iscomplex(coeff_i)
-                    if sign == -1:
-                        if complex:
-                            insert_gate(grad_circuit, parameterized_gates[params[0]][0], SdgGate(),
-                                        qubits=[ancilla])
+                        # Fix ancilla phase
+                        coeff_i = grad_coeffs[params[i]][m][k]
+                        sign = np.sign(coeff_i)
+                        complex = np.iscomplex(coeff_i)
+                        if sign == -1:
+                            if complex:
+                                insert_gate(grad_circuit, parameterized_gates[params[0]][0], SdgGate(),
+                                            qubits=[ancilla])
+                            else:
+                                insert_gate(grad_circuit, parameterized_gates[params[0]][0], ZGate(),
+                                            qubits=[ancilla])
                         else:
-                            insert_gate(grad_circuit, parameterized_gates[params[0]][0], ZGate(),
-                                        qubits=[ancilla])
-                    else:
-                        if complex:
-                            insert_gate(grad_circuit, parameterized_gates[params[0]][0], SGate(),
-                                        qubits=[ancilla])
-                    # Insert controlled, intercepting gate - controlled by |0>
-                    insert_gate(grad_circuit, parameterized_gates[params[i]][m],
-                                                             gate_to_insert_i,
-                                                             additional_qubits=additional_qubits)
-                    # TODO below
-                    # Go through the string and if something is not I then apply a controlled gate on the index
-                    k = 0
-                    # ----------Reversed bc IX applies X to qubit 0------------------
-                    # ((Plus^One)^2).to_circuit_op())
-                    for pauli_term in reversed(pauli.to_label()):
-                        if pauli_term == 'Z':
-                            qc_C.cz(q_anc, q_state[k])
-                        if pauli_term == 'Y':
-                            qc_C.cy(q_anc, q_state[k])
-                        if pauli_term == 'X':
-                            qc_C.cx(q_anc, q_state[k])
-                        k += 1
-                    grad_circuit.h(ancilla)
-                    circuits += [grad_circuit]
+                            if complex:
+                                insert_gate(grad_circuit, parameterized_gates[params[0]][0], SGate(),
+                                            qubits=[ancilla])
+                        # Insert controlled, intercepting gate - controlled by |0>
+                        insert_gate(grad_circuit, parameterized_gates[params[i]][m],
+                                                                 gate_to_insert_i,
+                                                                 additional_qubits=additional_qubits)
+                        # TODO if to_instruction not supported - warning
+                        op_gate = op.to_instruction()
+                        controlled_op_gate = op_gate.control()
+                        # operator is controlled by ancilla
+                        grad_circuit.append(controlled_op_gate, [ancilla, circ_qregs])
+                        grad_circuit.h(ancilla)
+                        circuits += [grad_circuit]
         return circuits
