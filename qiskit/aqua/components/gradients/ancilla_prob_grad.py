@@ -123,7 +123,7 @@ class AncillaProbGradient(Gradient):
                 sampler = CircuitSampler(self._quantum_instance).convert(StateFn(circuit_item))
                 result = sampler.to_density_matrix()
                 prob_grad = partial_trace(op.dot(result), [index_evaluation_qubit])
-                results.append(list(prob_grad.probabilities()))
+                results.append(list(np.diag(prob_grad.data)))
             return results
 
         master_dict = parameter_values
@@ -226,6 +226,9 @@ class AncillaProbGradient(Gradient):
                         if complex:
                             insert_gate(grad_circuit, parameterized_gates[params[0]][0], SGate(),
                                         qubits=[ancilla])
+                    # if complex:
+                    #     insert_gate(grad_circuit, parameterized_gates[params[0]][0], SGate(),
+                    #                         qubits=[ancilla])
                     # Insert controlled, intercepting gate - controlled by |0>
                     insert_gate(grad_circuit, parameterized_gates[params[i]][m],
                                                              gate_to_insert_i,

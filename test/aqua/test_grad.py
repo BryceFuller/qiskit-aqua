@@ -116,10 +116,10 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
     def test_state_prob_grad(self):
         """Test the ancilla state gradient
-        Tr(|psi><psi|Z) = sin^2(a)sin^2(b) / 2
+        Tr(|psi><psi|Z) = sin(a)sin(b)
         Tr(|psi><psi|X) = cos(a)
-        d<H>/da = - 0.5 sin(a) - 1 sin(a)cos(a)sin^2(b)
-        d<H>/db = - 1 sin^2(a)sin(b)cos(b)
+        d<H>/da = - 0.5 sin(a) - 1 cos(a)sin(b)
+        d<H>/db = - 1 sin(a)cos(b)
         """
 
         H = 0.5 * X - 1 * Z
@@ -136,21 +136,21 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         state_grad = AncillaStateGradient(circuit=qc, observable=H, quantum_instance=self.qi)
         values_dict = {params[0]: np.pi / 4, params[1]: np.pi}
         grad_value = state_grad.compute_grad(params, values_dict)
-        correct_grad = np.allclose(grad_value, [-0.5/np.sqrt(2), 0], atol=1e-6)
+        correct_grad = np.allclose(grad_value, [-0.5/np.sqrt(2), 1/np.sqrt(2)], atol=1e-6)
         values_dict = {params[0]: np.pi / 4, params[1]: np.pi / 4}
         grad_value = state_grad.compute_grad(params, values_dict)
-        correct_grad &= np.allclose(grad_value, [-0.5/np.sqrt(2) - 1/8., -1/8.], atol=1e-6)
+        correct_grad &= np.allclose(grad_value, [-1/2 * (1/np.sqrt(2) + 1.), -1/2.], atol=1e-6)
         values_dict = {params[0]: np.pi / 2, params[1]: np.pi / 4}
         grad_value = state_grad.compute_grad(params, values_dict)
-        correct_grad &= np.allclose(grad_value, [-0.5, 0], atol=1e-6)
+        correct_grad &= np.allclose(grad_value, [-0.5, -1/np.sqrt(2)], atol=1e-6)
         self.assertTrue(correct_grad)
 
     def test_ancilla_prob_grad(self):
         """Test the ancilla probability gradient
-        dp0/da = -cos(a)sin(b) / 2
-        dp1/da = cos(a)sin(b) / 2
-        dp0/db = - sin(a)cos(b)
-        dp1/db =  sin(a)cos(b)
+        dp0/da = cos(a)sin(b) / 2
+        dp1/da = - cos(a)sin(b) / 2
+        dp0/db = sin(a)cos(b) / 2
+        dp1/db = - sin(a)cos(b) / 2
         """
 
         a = Parameter('a')
@@ -166,13 +166,13 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         prob_grad = AncillaProbGradient(circuit=qc, quantum_instance=self.qi)
         values_dict = {params[0]: np.pi / 4, params[1]: 0}
         grad_value = prob_grad.compute_grad(params, values_dict)
-        correct_grad = np.allclose(grad_value, [[0, 0], [0, 0]], atol=1e-6)
+        correct_grad = np.allclose(grad_value, [[0, 0], [1/(2*np.sqrt(2)), - 1/(2*np.sqrt(2))]], atol=1e-6)
         values_dict = {params[0]: np.pi/4, params[1]: np.pi/4}
         grad_value = prob_grad.compute_grad(params, values_dict)
-        correct_grad &= np.allclose(grad_value, [[-1/4, 1/4], [-1/2, 1/2]], atol=1e-6)
-        values_dict = {params[0]: np.pi/2, params[1]: np.pi/4}
+        correct_grad &= np.allclose(grad_value, [[1/4, - 1/4], [1/4, - 1/4]], atol=1e-6)
+        values_dict = {params[0]: np.pi/2, params[1]: np.pi}
         grad_value = prob_grad.compute_grad(params, values_dict)
-        correct_grad &= np.allclose(grad_value, [[0, 0], [-1/np.sqrt(2), 1/np.sqrt(2)]], atol=1e-6)
+        correct_grad &= np.allclose(grad_value, [[0, 0], [- 1/2, 1/2]], atol=1e-6)
         self.assertTrue(correct_grad)
 
     def test_product_rule(self):

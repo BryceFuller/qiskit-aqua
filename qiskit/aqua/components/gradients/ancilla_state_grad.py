@@ -241,10 +241,12 @@ class AncillaStateGradient(Gradient):
                                                                  gate_to_insert_i,
                                                                  additional_qubits=additional_qubits)
                         # TODO if to_instruction not supported - warning
-                        op_gate = op.to_instruction()
+                        op_gate = op.to_circuit().to_gate()
                         controlled_op_gate = op_gate.control()
                         # operator is controlled by ancilla
-                        grad_circuit.append(controlled_op_gate, [ancilla, circ_qregs])
+                        append_regs = [ancilla]
+                        append_regs.extend(circ_qregs)
+                        grad_circuit.append(controlled_op_gate, append_regs)
                         grad_circuit.h(ancilla)
                         circuits += [grad_circuit]
         return circuits
