@@ -14,10 +14,25 @@
 
 """The module for Aqua's gradients."""
 
-from .grad import Gradient
-from .natural_grad import NaturalGradient
+
+
+
+from .gradient_base import GradientBase
+from .state_gradient import StateGradient
+from .probability_gradient import ProbabilityGradient
+from .operator_gradient import OperatorGradient
+from .gradient import Gradient
+from .hessian import Hessian
 from .qfi import QFI
 from .ancilla_prob_grad import AncillaProbGradient
 from .ancilla_state_grad import AncillaStateGradient
 
-__all__ = ['Gradient', 'NaturalGradient', 'QFI']
+
+__all__ = ['GradientBase',
+           'StateGradient',
+           'ProbabilityGradient',
+           'OperatorGradient',
+           'Gradient',
+           'Hessian',
+           'QFI']
+

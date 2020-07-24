@@ -21,7 +21,7 @@ from test.aqua import QiskitAquaTestCase
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
-from qiskit.aqua.components.gradients import NaturalGradient
+from qiskit.aqua.operators.gradients import NaturalGradient
 
 
 class TestNaturalGradient(QiskitAquaTestCase):

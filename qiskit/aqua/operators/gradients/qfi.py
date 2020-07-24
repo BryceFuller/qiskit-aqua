@@ -31,7 +31,7 @@ from qiskit.extensions.standard import HGate, XGate, SdgGate, SGate, ZGate
 
 from qiskit.aqua import QuantumInstance
 
-from .grad import Gradient
+from .gradient import Gradient
 from .grad_utils import gate_gradient_dict, insert_gate, trim_circuit
 
 

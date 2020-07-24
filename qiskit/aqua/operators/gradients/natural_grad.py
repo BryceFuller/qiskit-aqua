@@ -22,7 +22,7 @@ from qiskit.extensions.standard import RXGate, RYGate, RZGate, CXGate, CYGate, C
 
 from qiskit.aqua import QuantumInstance, AquaError
 
-from .grad import Gradient
+from .gradient import Gradient
 
 
 class NaturalGradient(Gradient):

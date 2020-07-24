@@ -20,14 +20,14 @@ import unittest
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
-from qiskit.aqua.components.gradients import QFI, AncillaProbGradient, AncillaStateGradient
+from qiskit.aqua.operators.gradients import QFI, AncillaProbGradient, AncillaStateGradient
 from qiskit.aqua.operators import X, Z
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter
 import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
-from qiskit.aqua.components.gradients.grad_utils import trim_circuit
+from qiskit.aqua.operators.gradients.grad_utils import trim_circuit
 
 
 # from .gradient import Gradient
