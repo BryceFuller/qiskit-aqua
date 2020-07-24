@@ -25,6 +25,7 @@ from qiskit.circuit.library.standard_gates import RXGate, RYGate, RZGate, CXGate
 
 from qiskit.aqua import AquaError
 
+#Todo move to gradient base class
 
 def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
 
