@@ -31,11 +31,11 @@ from qiskit.extensions.standard import HGate, XGate, SdgGate, SGate, ZGate
 
 from qiskit.aqua import QuantumInstance
 
-from .gradient import Gradient
-from .grad_utils import gate_gradient_dict, insert_gate, trim_circuit
+from .gradient_base import GradientBase
 
 
-class QFI(Gradient):
+
+class QFI(GradientBase):
     """Compute the Quantum Fisher Information given a pure, parametrized quantum state."""
 
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
@@ -142,7 +142,7 @@ class QFI(Gradient):
             qfi_gates[param] = []
             for element in elements:
                 # get the coefficients and controlled gates (raises an error if the parameterized gate is not supported)
-                coeffs_gates = gate_gradient_dict(element[0])
+                coeffs_gates = self.gate_gradient_dict(element[0])
                 gates_to_parameters[param].append(element[0])
                 for c_g in coeffs_gates:
                     qfi_coeffs[param].append(c_g[0])
@@ -215,7 +215,7 @@ class QFI(Gradient):
         circuit.data = self._circuit.data
         params = list(parameterized_gates.keys())
         # apply Hadamard on ancilla
-        insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
+        self.insert_gate(circuit, parameterized_gates[params[0]][0], HGate(),
                     qubits=[ancilla])
         # Get the circuits needed to compute A_ij
         for i in range(len(params)): #loop over parameters
@@ -238,31 +238,31 @@ class QFI(Gradient):
                                 complex = np.iscomplex(np.conj(coeff_i)*coeff_j)
                                 if sign == -1:
                                     if complex:
-                                        insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SdgGate(),
+                                        self.insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SdgGate(),
                                                     qubits=[ancilla])
                                     else:
-                                        insert_gate(qfi_circuit, parameterized_gates[params[0]][0], ZGate(),
+                                        self.insert_gate(qfi_circuit, parameterized_gates[params[0]][0], ZGate(),
                                                     qubits=[ancilla])
                                 else:
                                     if complex:
-                                        insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SGate(),
+                                        self.insert_gate(qfi_circuit, parameterized_gates[params[0]][0], SGate(),
                                                     qubits=[ancilla])
 
-                                insert_gate(qfi_circuit, parameterized_gates[params[0]][0], XGate(),
+                                self.insert_gate(qfi_circuit, parameterized_gates[params[0]][0], XGate(),
                                             qubits=[ancilla])
 
                                 # Insert controlled, intercepting gate - controlled by |1>
-                                insert_gate(qfi_circuit, parameterized_gates[params[i]][m], gate_to_insert_i,
+                                self.insert_gate(qfi_circuit, parameterized_gates[params[i]][m], gate_to_insert_i,
                                                                          additional_qubits=additional_qubits)
 
-                                insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
+                                self.insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
 
                                 # Insert controlled, intercepting gate - controlled by |0>
-                                insert_gate(qfi_circuit, parameterized_gates[params[j]][n], gate_to_insert_j,
+                                self.insert_gate(qfi_circuit, parameterized_gates[params[j]][n], gate_to_insert_j,
                                                                          additional_qubits=additional_qubits)
 
                                 # Remove redundant gates
-                                qfi_circuit = trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
+                                qfi_circuit = self.trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
 
                                 qfi_circuit.h(ancilla)
                                 circuits += [qfi_circuit]
@@ -277,11 +277,11 @@ class QFI(Gradient):
                         qfi_circuit = QuantumCircuit(*circuit.qregs)
                         qfi_circuit.data = circuit.data
                         # Insert controlled, intercepting gate
-                        insert_gate(qfi_circuit, parameterized_gates[params[i]][m],
+                        self.insert_gate(qfi_circuit, parameterized_gates[params[i]][m],
                                                                  gate_to_insert_i,
                                                                  additional_qubits=additional_qubits)
 
-                        qfi_circuit = trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
+                        qfi_circuit = self.trim_circuit(qfi_circuit, parameterized_gates[params[i]][m])
 
 
                         circuits_phase_fix += [qfi_circuit]

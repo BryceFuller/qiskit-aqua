@@ -14,91 +14,37 @@
 
 """The base interface for Aqua's gradients."""
 
-from typing import Optional, Union
+from typing import Optional, Union, Tuple, List
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance
+from qiskit.aqua.operators.gradients import GradientBase
 from qiskit.aqua.operators import OperatorBase
 
+class Gradiemt(GradientBase):
+    r"""
+    Converter for changing parameterized circuits into operators
+    whose evaluation yields the first-order gradient with respect to the circuit parameters.
+    """
 
-class Gradient:
-    """The base interface for Aqua's gradients."""
+    # pylint: disable=too-many-return-statements
+    def convert(self,
+        operator: OperatorBase = None,
+        params: Optional[List] = None,
+        method: str = 'param_shift') -> OperatorBase:
 
-    def __init__(self, circuit: QuantumCircuit,
-                 observable: Optional[OperatorBase] = None,
-                 quantum_instance: Optional[Union[BaseBackend, QuantumInstance]] = None) -> None:
-        """
+        r"""
         Args:
-            circuit: The circuit for which the gradient is computed.
-            observable: The observable of the expectation value underlying the gradient.
-            quantum_instance: The quantum instance used to execute the circuits.
-        """
-        self._circuit = circuit
-        self._observable = observable
-        self._quantum_instance = quantum_instance
-
-    @property
-    def circuit(self) -> QuantumCircuit:
-        """Return the circuit for which the gradient is computed.
-
+            operator: The measurement operator we are taking the gradient of
+            state_operator:  The operator corresponding to our state preparation circuit
+            parameters: The parameters we are taking the gradient with respect to
+            method: The method used to compute the gradient. Either 'param_shift' or 'ancilla'
         Returns:
-            The circuit stored internally or None, if none is stored.
+            gradient_operator: An operator whose evaluation yeild the Hessian
         """
-        return self._circuit
-
-    @circuit.setter
-    def circuit(self, circuit: QuantumCircuit) -> None:
-        """Set the circuit for which the gradient is computed.
-
-        Args:
-            circuit: The circuit for which the gradient is computed.
-        """
-        self._circuit = circuit
-
-    @property
-    def observable(self) -> OperatorBase:
-        """Return the observable for the expectation value w.r.t. which the gradient is computed.
-
-        Returns:
-            The observable underlying the gradient.
-        """
-        return self._observable
-
-    @observable.setter
-    def observable(self, observable: OperatorBase) -> None:
-        """Set the observable for the expectation value w.r.t. which the gradient is computed.
-
-        Args:
-            The observable underlying the gradient.
-        """
-        self._observable = observable
-
-    @property
-    def quantum_instance(self) -> Optional[QuantumInstance]:
-        """Get the quantum instance of the gradient.
-
-        Returns:
-            The quantum instance stored internally or None, if none is stored.
-        """
-
-    @quantum_instance.setter
-    def quantum_instance(self, quantum_instance: Union[BaseBackend, QuantumInstance]) -> None:
-        """Set the quantum instance.
-
-        Args:
-            quantum_instance: The quantum instance used to execute the circuits.
-        """
-        if isinstance(quantum_instance, BaseBackend):
-            self._quantum_instance = QuantumInstance(quantum_instance)
-        else:
-            self._quantum_instance = quantum_instance
-
-    def compute_gradient(self, parameter: Parameter) -> float:
-        """Compute the gradient with respect to the provided parameter.
-
-        Args:
-            parameter: The parameter with respect to which the gradient is computed.
-        """
-        raise NotImplementedError
+        if method == 'param_shift':
+            return self.parameter_shift(operator, params)
+        if method == 'ancilla':
+            return self.ancilla_hessian(params)
