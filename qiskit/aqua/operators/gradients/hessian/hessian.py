@@ -23,15 +23,15 @@ import numpy as np
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
 
-from ..operator_base import OperatorBase
-from ..primitive_ops.primitive_op import PrimitiveOp
-from ..primitive_ops.pauli_op import PauliOp
-from ..primitive_ops.circuit_op import CircuitOp
-from ..list_ops.list_op import ListOp
-from ..list_ops.composed_op import ComposedOp
-from ..state_fns.state_fn import StateFn
-from ..operator_globals import H, S, I
-from .gradient_base import GradientBase
+from qiskit.aqua.operators.operator_base import OperatorBase
+from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
+from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
+from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
+from qiskit.aqua.operators.list_ops.list_op import ListOp
+from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
+from qiskit.aqua.operators.state_fns.state_fn import StateFn
+from qiskit.aqua.operators.operator_globals import H, S, I
+from qiskit.aqua.operators.gradients import GradientBase
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 logger = logging.getLogger(__name__)

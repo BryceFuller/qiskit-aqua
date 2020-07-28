@@ -34,10 +34,10 @@ class ADAM(Optimizer):
 
     Adam [1] is a gradient-based optimization algorithm that is relies on adaptive estimates of
     lower-order moments. The algorithm requires little memory and is invariant to diagonal
-    rescaling of the gradients. Furthermore, it is able to cope with non-stationary objective
-    functions and noisy and/or sparse gradients.
+    rescaling of the gradient. Furthermore, it is able to cope with non-stationary objective
+    functions and noisy and/or sparse gradient.
 
-    AMSGRAD [2] (a variant of Adam) uses a 'long-term memory' of past gradients and, thereby,
+    AMSGRAD [2] (a variant of Adam) uses a 'long-term memory' of past gradient and, thereby,
     improves convergence properties.
 
     References:

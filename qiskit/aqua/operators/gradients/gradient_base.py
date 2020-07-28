@@ -14,13 +14,14 @@
 
 """ GradientBase Class """
 
-from typing import Optional, Callable, Union, List
+from typing import Optional, Callable, Union, List, Tuple
 import logging
 from functools import partial, reduce
 import numpy as np
 
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
+from qiskit.circuit import Gate, Instruction, Qubit
 
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
@@ -42,7 +43,7 @@ class GradientBase(ConverterBase):
     Converter for changing parameterized circuits into operators
     whose evaluation yields the gradient with respect to the circuit parameters.
     """
-    #todo remove
+    # Todo remove
     def decompose_to_two_unique_eigenval(self,
                                         operator: OperatorBase,
                                         params: Union[Parameter, ParameterVector, List])-> OperatorBase:

@@ -22,24 +22,24 @@ import numpy as np
 from qiskit.quantum_info import Pauli
 from qiskit import Aer, QuantumCircuit
 from qiskit.providers import BaseBackend
-from qiskit.aqua import QuantumInstance
+from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from ..operator_base import OperatorBase
-from ..primitive_ops.primitive_op import PrimitiveOp
-from ..primitive_ops.pauli_op import PauliOp
-from ..primitive_ops.circuit_op import CircuitOp
-from ..list_ops.list_op import ListOp
-from ..list_ops.composed_op import ComposedOp
-from ..state_fns.state_fn import StateFn
-from ..operator_globals import H, S, I
-from ..converters.circuit_sampler import CircuitSampler
-from .state_gradient import StateGradient
+from qiskit.aqua.operators.operator_base import OperatorBase
+from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
+from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
+from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
+from qiskit.aqua.operators.list_ops.list_op import ListOp
+from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
+from qiskit.aqua.operators.state_fns.state_fn import StateFn
+from qiskit.aqua.operators.operator_globals import H, S, I
+from qiskit.aqua.operators.converters.circuit_sampler import CircuitSampler
+from .state_gradient_param_shift import StateGradientParamShift
 
 logger = logging.getLogger(__name__)
 
 
-class ProbabilityGradient(StateGradient):
+class ProbabilityGradientParamShift(StateGradientParamShift):
     r"""
     Special Case of the StateGradient where the gradient_operator is the identity
     (Actually there are some more nuanced differences on how this is computed in practice!)
@@ -52,13 +52,20 @@ class ProbabilityGradient(StateGradient):
     def convert(self,
                 operator: OperatorBase = None,
                 params: Union[Parameter, ParameterVector, List] = None,
-                param_bindings: Dict = None,
-                backend: Union[QuantumInstance, BaseBackend] = None) -> OperatorBase:
+                param_bindings = None,
+                backend = None,
+                analytic: bool = True) -> OperatorBase:
         r"""
         Args
             state_operator: |ψ(ω)〉, The operator corresponding to our quantum state we are taking the gradient of ()
             params: The parameters we are taking the gradient with respect to
+            analytic: If true compute an analytic gradient, else compute a finite difference approximations
         """
+        # TODO add finite differences
+        # TODO backend and param bindings?
+        if operator.is_measurement:
+            raise AquaError('Probability gradients are computed with respect to states instead of expectation values.'
+                            'Please remove the measurement operator.')
 
         operator = super().convert(operator, params)
 

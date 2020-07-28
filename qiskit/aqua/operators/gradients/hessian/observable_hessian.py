@@ -23,25 +23,25 @@ from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from ..operator_base import OperatorBase
-from ..primitive_ops.primitive_op import PrimitiveOp
-from ..primitive_ops.pauli_op import PauliOp
-from ..primitive_ops.circuit_op import CircuitOp
-from ..list_ops.list_op import ListOp
-from ..list_ops.composed_op import ComposedOp
-from ..list_ops.summed_op import SummedOp
-from ..state_fns.state_fn import StateFn
-from ..expectations import PauliExpectation
-from ..operator_globals import H, S, I
-from .gradient_base import GradientBase
+from qiskit.aqua.operators.operator_base import OperatorBase
+from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
+from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
+from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
+from qiskit.aqua.operators.list_ops.list_op import ListOp
+from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
+from qiskit.aqua.operators.list_ops.summed_op import SummedOp
+from qiskit.aqua.operators.state_fns.state_fn import StateFn
+from qiskit.aqua.operators.expectations import PauliExpectation
+from qiskit.aqua.operators.operator_globals import H, S, I
+from qiskit.aqua.operators.gradients.gradient_base import GradientBase
 
 logger = logging.getLogger(__name__)
 
 
-class OperatorGradient(GradientBase):
+class ObservableHessian(GradientBase):
     r"""
     We are interested in computing:
-    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for θ in params
+    d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dθidθj  for θ in params
     """
 
     def convert(self,
@@ -55,6 +55,8 @@ class OperatorGradient(GradientBase):
         Returns
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
+
+        #TODO 2nd order derivative here
 
         def contains_param(operator, param):
             if isinstance(operator.coeff, (Parameter, ParameterExpression)):

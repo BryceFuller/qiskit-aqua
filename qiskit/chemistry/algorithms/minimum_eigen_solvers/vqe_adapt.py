@@ -59,7 +59,7 @@ class VQEAdapt(VQAlgorithm):
             optimizer: the classical optimizer algorithm
             initial_point: optimizer initial point
             excitation_pool: list of excitation operators
-            threshold: absolute threshold value for gradients, has a min. value of 1e-15.
+            threshold: absolute threshold value for gradient, has a min. value of 1e-15.
             delta: finite difference step size for gradient computation,
                     has a min. value of 1e-5.
             max_evals_grouped: max number of evaluations performed simultaneously
@@ -99,7 +99,7 @@ class VQEAdapt(VQAlgorithm):
     def _compute_gradients(self, excitation_pool, theta, delta,
                            var_form, operator, optimizer):
         """
-        Computes the gradients for all available excitation operators.
+        Computes the gradient for all available excitation operators.
 
         Args:
             excitation_pool (list): pool of excitation operators
@@ -113,7 +113,7 @@ class VQEAdapt(VQAlgorithm):
             list: List of pairs consisting of gradient and excitation operator.
         """
         res = []
-        # compute gradients for all excitation in operator pool
+        # compute gradient for all excitation in operator pool
         for exc in excitation_pool:
             # push next excitation to variational form
             var_form.push_hopping_operator(exc)
@@ -162,7 +162,7 @@ class VQEAdapt(VQAlgorithm):
         while not threshold_satisfied and not alternating_sequence:
             iteration += 1
             logger.info('--- Iteration #%s ---', str(iteration))
-            # compute gradients
+            # compute gradient
             cur_grads = self._compute_gradients(self._excitation_pool, theta, self._delta,
                                                 self._var_form_base, self._operator,
                                                 self._optimizer)
@@ -171,7 +171,7 @@ class VQEAdapt(VQAlgorithm):
                                            key=lambda item: np.abs(item[1][0]))
             # store maximum gradient's index for cycle detection
             prev_op_indices.append(max_grad_index)
-            # log gradients
+            # log gradient
             gradlog = "\nGradients in iteration #{}".format(str(iteration))
             gradlog += "\nID: Excitation Operator: Gradient  <(*) maximum>"
             for i, grad in enumerate(cur_grads):
@@ -184,7 +184,7 @@ class VQEAdapt(VQAlgorithm):
                             str(np.abs(max_grad[0])))
                 threshold_satisfied = True
                 break
-            # check indices of picked gradients for cycles
+            # check indices of picked gradient for cycles
             if cycle_regex.search(' '.join(map(str, prev_op_indices))) is not None:
                 logger.info("Alternating sequence found. Finishing.")
                 logger.info("Final maximum gradient: %s", str(np.abs(max_grad[0])))
