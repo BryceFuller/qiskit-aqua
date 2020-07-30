@@ -18,12 +18,13 @@ from typing import Optional, Callable, Union, List, Dict
 import logging
 from functools import partial, reduce
 import numpy as np
+from copy import deepcopy
 
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Instruction, Gate
 
-from qiskit.aqua.operators import OperatorBase, ListOp
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
@@ -57,52 +58,36 @@ class StateGradientAncilla(GradientBase):
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
 
-        # TODO split operator in state and observable
+        if isinstance(operator, ListOp):
+            for op in operator.oplist:
+                if op.is_measurement:
+                    # TODO traverse through operator and tensor Z and multiply by two to each measurement
+                    op *= 2 # Prefactor needed for correction
+                    op ^= Z
+                else:
+                    # TODO traverse
+                    # TODO inplace
+                    # TODO Do this for every independent circuit, rest of product rule to be handled here
+                    op = self._ancilla_grad_states(op)
 
-
-        grad_op = StateFn(2 * observable_operator ^ Z).adjoint() # Prefactor needed for correction
-        # Dictionary with the information which parameter is used in which gate
-        gates_to_parameters = {}
-        # Dictionary which relates the coefficients needed for the QFI for every parameter
-        grad_coeffs = {}
-        # Dictionary which relates the gates needed for the QFI for every parameter
-        grad_gates = {}
-        # Loop throuh the parameters in the circuit
-        params = []
-        if isinstance(state_operator, CircuitStateFn):
-            state_qc = state_operator.primitive
-        elif isinstance(state_operator, DictStateFn) or isinstance(state_operator, VectorStateFn):
-            state_qc = DictToCircuitSum.convert(state_operator).primitive
+            # TODO iterate through params and check if in op - create list/dict to store the params locations
         else:
-            raise TypeError('Ancilla gradients only support operators whose states are either '
-                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
-        for param, elements in state_qc._parameter_table.items():
-            params.append(param)
-            gates_to_parameters[param] = []
-            grad_coeffs[param] = []
-            grad_gates[param] = []
-            for element in elements:
-                # get the coefficients and controlled gates (raises an error if the parameterized gate is not supported)
-                coeffs_gates = self.gate_gradient_dict(element[0])
-                gates_to_parameters[param].append(element[0])
-                for c_g in coeffs_gates:
-                    grad_coeffs[param].append(c_g[0])
-                    grad_gates[param].append(c_g[1])
-
-        states = self._ancilla_grad_states(gates_to_parameters, grad_coeffs, grad_gates)
-
-        return grad_op @ states
+            if not operator.is_measurement:
+                state_given = True
+        return operator
 
     def _ancilla_grad_states(self,
+                             op: OperatorBase,
                              state_qc: QuantumCircuit,
-                             parameterized_gates: Dict[Parameter, List[Gate]],
+                             gates_to_parameters: Dict[Parameter, List[Gate]],
                              grad_coeffs: Dict[Parameter, List[List[complex]]],
                              grad_gates: Dict[Parameter, List[List[Instruction]]]) -> ListOp[CircuitStateFn]:
         """Generate the gradient states.
 
         Args:
+            op: The operator representing the quantum state for which we compute the gradient.
             state_qc: The quantum circuit representing the state for which we compute the grad.
-            parameterized_gates: The dictionary of parameters and gates with respect to which the quantum Fisher
+            gates_to_parameters: The dictionary of parameters and gates with respect to which the quantum Fisher
             Information is computed.
             grad_coeffs: The values needed to compute the gradient for the parameterized gates.
                     For each parameter, the dict holds a list of all coeffs for all gates which are parameterized by
@@ -119,6 +104,35 @@ class StateGradientAncilla(GradientBase):
         Raises:
             AquaError: If one of the circuits could not be constructed.
         """
+        # Dictionary with the information which parameter is used in which gate
+        gates_to_parameters = {}
+        # Dictionary which relates the coefficients needed for the QFI for every parameter
+        grad_coeffs = {}
+        # Dictionary which relates the gates needed for the QFI for every parameter
+        grad_gates = {}
+        # Loop throuh the parameters in the circuit
+        params = []
+
+        if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
+            pass
+        elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
+            op = DictToCircuitSum.convert(op) #Todo inplace
+        else:
+            raise TypeError('Ancilla gradients only support operators whose states are either '
+                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
+        state_qc = deepcopy(op.primitive)
+        for param, elements in state_qc._parameter_table.items():
+            params.append(param)
+            gates_to_parameters[param] = []
+            grad_coeffs[param] = []
+            grad_gates[param] = []
+            for element in elements:
+                # get the coefficients and controlled gates (raises an error if the parameterized gate is not supported)
+                coeffs_gates = self.gate_gradient_dict(element[0])
+                gates_to_parameters[param].append(element[0])
+                for c_g in coeffs_gates:
+                    grad_coeffs[param].append(c_g[0])
+                    grad_gates[param].append(c_g[1])
 
         states = []
         qr_ancilla = QuantumRegister(1, 'ancilla')
@@ -127,9 +141,9 @@ class StateGradientAncilla(GradientBase):
         # create a copy of the original state with an additional ancilla register
         state = QuantumCircuit(*state_qc.qregs, qr_ancilla)
         state.data = state_qc.data
-        params = list(parameterized_gates.keys())
+        params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
-        self.insert_gate(state, parameterized_gates[params[0]][0], HGate(),
+        self.insert_gate(state, gates_to_parameters[params[0]][0], HGate(),
                     qubits=[ancilla])
         # Get the states needed to compute the gradient
         for i in range(len(params)):  # loop over parameters
@@ -145,17 +159,17 @@ class StateGradientAncilla(GradientBase):
                     complex = np.iscomplex(coeff_i)
                     if sign == -1:
                         if complex:
-                            self.insert_gate(grad_state, parameterized_gates[params[0]][0], SdgGate(),
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
                                         qubits=[ancilla])
                         else:
-                            self.insert_gate(grad_state, parameterized_gates[params[0]][0], ZGate(),
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
                                         qubits=[ancilla])
                     else:
                         if complex:
-                            self.insert_gate(grad_state, parameterized_gates[params[0]][0], SGate(),
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
                                         qubits=[ancilla])
                     # Insert controlled, intercepting gate - controlled by |0>
-                    self.insert_gate(grad_state, parameterized_gates[params[i]][m],
+                    self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
                                 gate_to_insert_i,
                                 additional_qubits=additional_qubits)
                     grad_state.h(ancilla)
@@ -164,5 +178,6 @@ class StateGradientAncilla(GradientBase):
                     else:
                         state += np.abs(coeff_i) * CircuitStateFn(grad_state)
             states += [state]
-        return ListOp(states)
+            #  TODO check that all properties of op are carried over but I think so
+        return ListOp(states) * op.coeff
 
