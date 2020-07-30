@@ -19,9 +19,9 @@ from typing import Optional, Union, Tuple, List
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter
 from qiskit.providers import BaseBackend
-from qiskit.aqua import QuantumInstance
+from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.aqua.operators.gradients.gradient_base import GradientBase
-from qiskit.aqua.operators import OperatorBase
+from qiskit.aqua.operators import OperatorBase, ListOp
 
 class Gradient(GradientBase):
     r"""
@@ -44,9 +44,29 @@ class Gradient(GradientBase):
             method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
                     Deprecated for observable gradient
         Returns:
-            gradient_operator: An operator whose evaluation yeild the Hessian
+            gradient_operator: An operator whose evaluation yields the Gradient
         """
-        if operator.is_measurement:
+
+        # TODO: Check if operator includes a state else throw an error/ or warning?
+        measurement = False
+        state_given = False
+        if isinstance(operator, ListOp):
+            for op in operator.oplist:
+                if op.is_measurement:
+                    measurement = True
+                else:
+                    state_given = True
+            # TODO iterate through params and check if in op - create list/dict to store the params locations
+        else:
+            if not operator.is_measurement:
+                state_given = True
+
+        if not state_given:
+            raise TypeError('Currently the gradient framework only supports gradient evaluation with respect to '
+                            'expectation values and sampling probabilities of quantum states. '
+                            'Please define an operator which includes a quantum state.')
+
+        if measurement:
             # TODO: if params in observable return observable_gradient else return state_gradient depending on method
             pass
         else:

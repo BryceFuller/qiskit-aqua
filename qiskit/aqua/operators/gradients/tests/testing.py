@@ -13,6 +13,6 @@ op = Z ^ Z
 
 list = ListOp(oplist=list)
 
-exp = op @ list
+exp = ~op @ list
 
 print(exp.eval())
