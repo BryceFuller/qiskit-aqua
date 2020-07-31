@@ -15,9 +15,10 @@
 """The base interface for Aqua's gradient."""
 
 from typing import Optional, Union, Tuple, List
+import sympy as sy
 
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter
+from qiskit.circuit import ParameterExpression, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from qiskit.aqua.operators.gradients.gradient_base import GradientBase
@@ -52,11 +53,12 @@ class Gradient(GradientBase):
         state_given = False
         if isinstance(operator, ListOp):
             for op in operator.oplist:
+                # TODO check which param is in which op - create list/dict to store the params locations.
+                # TODO Then the gradients must be computed for the different ops and summed up accordingly.
                 if op.is_measurement:
                     measurement = True
                 else:
                     state_given = True
-            # TODO iterate through params and check if in op - create list/dict to store the params locations
         else:
             if not operator.is_measurement:
                 state_given = True
@@ -72,3 +74,34 @@ class Gradient(GradientBase):
         else:
             # TODO: return probability gradient
             pass
+
+    # TODO get ParameterExpression in the different gradients
+    # Working title
+    def _chain_rule_wrapper_sympy_grad(self,
+                                  param: ParameterExpression) -> List[Union[sy.Expr, float]]:
+        """
+        Get the derivative of a parameter expression w.r.t. the underlying parameter keys
+        :param param: Parameter Expression
+        :return: List of derivatives of the parameter expression w.r.t. all keys
+        """
+        expr = param._symbol_expr
+        keys = param._parameter_symbols.keys()
+        grad = []
+        for key in keys:
+            grad.append(sy.Derivative(expr, key).doit())
+        return grad
+
+    def _get_gates_for_param(self,
+                             param: ParameterExpression,
+                             qc: QuantumCircuit) -> List[Instruction]:
+        """
+        Check if a parameter is used more often than once in a quantum circuit and return a list of quantum circuits
+        which enable independent adding of pi/2 factors without affecting all gates in which the parameters is used.
+        :param param:
+        :param qc:
+        :return:
+        """
+        # TODO check if param appears in multiple gates of the quantum circuit.
+        # TODO deepcopy qc and replace the parameters by independent parameters such that they can be shifted
+        # independently by pi/2
+        return qc._parameter_table[param]
