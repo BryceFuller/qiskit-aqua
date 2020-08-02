@@ -63,17 +63,16 @@ class StateGradientAncilla(GradientBase):
                 if op.is_measurement:
                     # TODO traverse through operator and tensor Z and multiply by two to each measurement
                     op *= 2 # Prefactor needed for correction
-                    op ^= Z
+                    op ^= Z # change this inplace
                 else:
                     # TODO traverse
                     # TODO inplace
                     # TODO Do this for every independent circuit, rest of product rule to be handled here
-                    op = self._ancilla_grad_states(op)
+                    op = self._ancilla_grad_states(op) # change this inplace
 
             # TODO iterate through params and check if in op - create list/dict to store the params locations
         else:
-            if not operator.is_measurement:
-                state_given = True
+            opperator = self._ancilla_grad_states(operator)
         return operator
 
     def _ancilla_grad_states(self,
