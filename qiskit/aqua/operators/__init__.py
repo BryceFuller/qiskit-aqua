@@ -151,7 +151,11 @@ from .expectations import (ExpectationBase, ExpectationFactory, PauliExpectation
 from .evolutions import (EvolutionBase, EvolutionFactory, EvolvedOp, PauliTrotterEvolution,
                          MatrixEvolution, TrotterizationBase, TrotterizationFactory, Trotter,
                          Suzuki, QDrift)
-
+#More import errors for GradientBase
+"""
+from .gradients import (GradientBase, StateGradient, ProbabilityGradient, 
+                        OperatorGradient, Hessian, QFI)
+"""
 # Convenience immutable instances
 from .operator_globals import (EVAL_SIG_DIGITS,
                                X, Y, Z, I,
@@ -180,4 +184,8 @@ __all__ = [
     'TrotterizationBase', 'TrotterizationFactory', 'Trotter', 'Suzuki', 'QDrift',
     # Convenience immutable instances
     'X', 'Y', 'Z', 'I', 'CX', 'S', 'H', 'T', 'Swap', 'CZ', 'Zero', 'One', 'Plus', 'Minus'
+    
+    #Gradients
+    #'GradientBase', 'StateGradient', 'ProbabilityGradient', 'OperatorGradient', 'Hessian', 'QFI'
+  
 ]

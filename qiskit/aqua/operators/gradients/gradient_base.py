@@ -274,6 +274,58 @@ class GradientBase(ConverterBase):
 
         raise AquaError('The reference gate is not in the given quantum circuit.')
 
+    def unroll_operator(self, operator):
+        
+        def unroll_traverse(operator):
+            if isinstance(operator, ListOp):
+                #Traverse the elements in the ListOp
+                res = [op.traverse(unroll_traverse) for op in operator]
+                #Separate out the lists from non-list elements
+                lists = [l for l in res if isinstance(l, (list, ListOp))]
+                not_lists = [r for r in res if not isinstance(r, (list,ListOp))]
+                #unroll the list elements and recombine everything
+                unrolled = [y for x in lists for y in x]
+                res = not_lists + unrolled
+                return res
+            return operator
+        
+        #When unroll_traverse terminates, there will still be 
+        # one last layer of nested lists to unroll. (computational tree will be depth <=2)
+        unrolled_op = operator.traverse(unroll_traverse)
+        lists = [l for l in unrolled_op if isinstance(l, (list, ListOp))]
+        not_lists = [r for r in unrolled_op if not isinstance(r, (list,ListOp))]
+        #unroll the list elements and recombine everything
+        unrolled = [y for x in lists for y in x]
+        return not_lists + unrolled
+
+    def get_unique_circuits(self, operator):
+        
+        def get_circuit(op):
+            if isinstance(op, (CircuitStateFn, CircuitOp)):
+                return op.primitive
+        
+        unrolled_op = self.unroll_operator(operator)
+        circs = [get_circuit(op) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
+        
+        no_duplicates = []
+        [no_duplicates.append(i) for i in circs if i not in no_duplicates]
+        return no_duplicates
+
+    def append_Z_measurement(self, operator):
+        if isinstance(operator, ListOp):
+            return operator.traverse(self.append_Z_measurement)
+        elif isinstance(operator,StateFn):
+            if operator.is_measurement == True:
+                return operator.traverse(self.append_Z_measurement)      
+        elif isinstance(operator, PauliOp):
+            return (Z^operator)
+        if isinstance(operator,(QuantumCircuit,CircuitStateFn, CircuitOp)):
+            #print((operator))
+            
+            operator.primitive.add_register(QuantumRegister(1, name="ancilla"))   
+        
+        return operator
+
     # For now not needed
     # @staticmethod
     # def replace_gate(circuit: QuantumCircuit,

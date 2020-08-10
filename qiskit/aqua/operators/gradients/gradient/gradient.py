@@ -21,7 +21,7 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterExpression, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
-from qiskit.aqua.operators.gradients.gradient_base import GradientBase
+from ..gradient_base import GradientBase
 from qiskit.aqua.operators import OperatorBase, ListOp
 
 class Gradient(GradientBase):

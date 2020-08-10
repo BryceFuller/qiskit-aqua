@@ -14,28 +14,36 @@
 
 """The module for Quantum the Fisher Information."""
 
-from typing import Optional, Tuple, List, Dict, Union
+from typing import Optional, Tuple, List, Dict, Union, Callable
 import warnings
 
 import numpy as np
+import copy
 from copy import deepcopy
+from functools import partial, reduce, cmp_to_key
 
 from qiskit import QuantumCircuit, QuantumRegister
 
-from qiskit.circuit import Parameter, ParameterVector
+from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
+from ...expectations import PauliExpectation 
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
-from qiskit.aqua.operators.operator_globals import H, S, I, Z
+from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, Zero, One
 
 
 from qiskit.extensions.standard import HGate, XGate, SdgGate, SGate, ZGate
 
 from qiskit.aqua import QuantumInstance
+from qiskit.converters import dag_to_circuit, circuit_to_dag
+from qiskit.circuit.library import RYGate, RZGate, RXGate
+from qiskit.dagcircuit  import DAGCircuit
+from qiskit.quantum_info import Pauli
 
-from qiskit.aqua.operators.gradients import GradientBase
+from ..gradient_base import GradientBase
+
 
 
 class QFI(GradientBase):
@@ -189,3 +197,249 @@ class QFI(GradientBase):
                 qfi_ops += [qfi_op]
             qfi_operators.append(qfi_ops)
         return ~qfi_observable @ ListOp(qfi_operators)
+
+    def old_convert(self, operator: OperatorBase,
+                approximation: str = 'diagonal',
+                method: str = 'no_ancilla') -> OperatorBase:
+        r"""
+        Args:
+            operator: The operator for which we are generating the Quantum Fisher Information Metric Tensor
+            parameters: The parameters over which the metric tensor is being evaluated
+
+        Returns:
+            metric_operator: An operator whose evaluation yeilds the QFI metric tensor
+        """
+
+        if approximation == 'block_diagonal' and method == 'no_ancilla':
+
+            if not isinstance(operator, (CircuitOp,CircuitStateFn)):
+                raise NotImplementedError
+
+            circuit = operator.primitive
+
+            #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
+            layers = self.partition_circuit(circuit)
+            if layers[-1].num_parameters == 0:
+                layers.pop(-1)
+                
+            psis = [CircuitOp(layer) for layer in layers]
+            for i, psi in enumerate(psis):
+                if i == 0:  continue
+                psis[i] = psi@psis[i-1]
+
+            #Get generators
+            #TODO: make this work for other types of rotations
+            #NOTE: This assumes that each parameter only affects one rotation.
+            # we need to think more about what happens if multiple rotations 
+            # are controlled with a single parameter. 
+            params = circuit.ordered_parameters
+            generators = self.get_generators(params,circuit)
+
+            blocks = []
+
+            for l, psi_l in enumerate(psis):
+
+                params = self.sort_params(psi_l.primitive.parameters)
+
+                block = np.zeros((len(params),len(params))).tolist()
+                
+
+                #calculate all single-operator terms <psi_l|K_i|psi_l>
+                single_terms = np.zeros(len(params)).tolist()
+                for i, pi in enumerate(params):
+                    K = generators[pi]
+                    psi_Ki = ~StateFn(K) @ psi_l @ Zero
+                    psi_Ki = PauliExpectation().convert(psi_Ki)
+                    single_terms[i] = psi_Ki
+
+
+                
+                #Calculate all double-operator terms <psi_l|K_j @ K_i|psi_l>
+                # and build composite operators for each matrix entry
+                for i, pi in enumerate(params):
+                    Ki = generators[pi]
+                    for j, pj in enumerate(params):
+
+                        if i == j:
+                            block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: [1-y**2 for y in x])
+                            continue
+
+                        Kj = generators[pj]
+                        K = ~Kj @ Ki
+
+                        psi_KjKi = ~StateFn(K) @ psi_l @ Zero
+                        psi_KjKi = PauliExpectation().convert(psi_KjKi)
+                        cross_term = ListOp(oplist = [single_terms[i],single_terms[j]], combo_fn= lambda x: np.prod(x))
+                        block[i][j] = psi_KjKi - cross_term
+
+                blocks.append(block)
+
+            qfi = blocks[0]
+            if len(blocks) > 1:
+                for block in blocks[1:]:
+                    qfi = block_diag(qfi, block)
+
+            #for i, row in enumerate(qfi):
+            #    qfi[i] = ListOp(row)
+            #qfi = ListOp(qfi)
+
+            return qfi
+
+        # layers = partition_circuit()
+        elif approximation == 'diagonal' and method == 'no_ancilla':
+
+            if not isinstance(operator, (CircuitOp,CircuitStateFn)):
+                raise NotImplementedError
+
+            circuit = operator.primitive
+
+            #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
+            layers = self.partition_circuit(circuit)
+            if layers[-1].num_parameters == 0:
+                layers.pop(-1)
+                
+            psis = [CircuitOp(layer) for layer in layers]
+            for i, psi in enumerate(psis):
+                if i == 0:  continue
+                psis[i] = psi@psis[i-1]
+
+            #Get generators
+            #TODO: make this work for other types of rotations
+            #NOTE: This assumes that each parameter only affects one rotation.
+            # we need to think more about what happens if multiple rotations 
+            # are controlled with a single parameter. 
+            params = circuit.ordered_parameters
+            generators = self.get_generators(params,circuit)
+
+            diag = []
+            for param in params:
+                K = generators[param]
+                meas_op = ~StateFn(K)
+                
+                #get appropriate psi_l
+                psi = [(psi) for psi in psis if param in psi.primitive.parameters][0]
+                
+                op = meas_op @ psi @ Zero
+                rotated_op = PauliExpectation().convert(op)
+                diag.append(rotated_op)
+                
+            grad_op = ListOp(oplist=diag, combo_fn=lambda x: [1-y**2 for y in x])
+            return grad_op
+
+
+
+        return grad_op
+
+    def partition_circuit(self, circuit):
+        dag = circuit_to_dag(circuit)
+        dag_layers = ([i['graph'] for i in dag.serial_layers()])
+        num_qubits = circuit.num_qubits
+        layers = list(zip(dag_layers, [{x:False for x in range(0,num_qubits)} for layer in dag_layers]))
+
+        #initialize the ledger
+        # The ledger tracks which qubits in each layer are available to have 
+        # gates from subsequent layers shifted backward.
+        # The idea being that all parameterized gates should have 
+        # no descendants within their layer
+        for i,(layer,ledger) in enumerate(layers):
+            op_node = layer.op_nodes()[0]
+            is_param = op_node.op.is_parameterized()
+            qargs = op_node.qargs
+            indices = [qarg.index for qarg in qargs]   
+            if is_param:
+                for index in indices:
+                    ledger[index] = True
+
+        
+        def apply_node_op(node, dag, back=True):
+            op = copy.copy(node.op)
+            qa = copy.copy(node.qargs)
+            ca = copy.copy(node.cargs)
+            co = copy.copy(node.condition)
+            if back:
+                dag.apply_operation_back(op, qa, ca, co)
+            else:
+                dag.apply_operation_front(op, qa, ca, co)
+
+        converged = False
+        
+        
+        
+        for x in range(dag.depth()):  
+            if converged: 
+                break
+
+            converged = True
+
+            for i,(layer,ledger) in enumerate(layers):
+                if i == len(layers)-1: continue
+
+                (next_layer, next_ledger) = layers[i+1]
+                for next_node in next_layer.op_nodes():
+                    is_param = next_node.op.is_parameterized()
+                    qargs = next_node.qargs
+                    indices = [qarg.index for qarg in qargs]   
+
+                    #If the next_node can be moved back a layer without conflicting 
+                    # without becoming the descendant of a parameterized gate, then do it.
+                    if not any([ledger[x] for x in indices]):
+
+                        apply_node_op(next_node, layer)
+                        next_layer.remove_op_node(next_node)
+
+                        if is_param:
+                            for index in indices:
+                                ledger[index] = True
+                                next_ledger[index] = False
+
+                        converged = False
+
+                #clean up empty layers left behind.
+                if len(next_layer.op_nodes()) == 0:
+                    layers.pop(i+1)
+
+        partitioned_circs = [dag_to_circuit(layer[0]) for layer in layers]
+        return partitioned_circs
+
+    def get_generators(self, params, circuit):
+        dag = circuit_to_dag(circuit)
+        layers = list(dag.serial_layers())
+
+        generators = {}
+        num_qubits = dag.num_qubits()
+
+        for layer in layers:
+            instr = layer['graph'].op_nodes()[0].op
+            for param in params:
+                if param in instr.params:
+
+                    if isinstance(instr, RYGate):
+                        K = Y
+                    elif isinstance(instr, RZGate):
+                        K = Z
+                    elif isinstance(instr, RXGate):
+                        K = X
+                    else:
+                        raise NotImplementedError 
+
+                    #get all qubit indices in this layer where the param parameterizes
+                    # an operation.
+                    indices = [[q.index for q in qreg] for qreg in layer['partition']]
+                    indices = [item for sublist in indices for item in sublist]
+
+                    if len(indices) > 1:
+                        raise NoteImplementedError
+                    index = indices[0]
+                    K = (I^(index))^K^(I^(num_qubits-index-1))
+                    generators[param] = K
+
+        return generators
+
+    def sort_params(self, params):
+        def compare_params(p1, p2):
+            s1 = p1.name
+            s2 = p2.name
+            v1= s1[s1.find("[")+1:s1.find("]")]
+            v2= s2[s2.find("[")+1:s2.find("]")]
+            return int(v1) - int(v2)
+        return sorted(params, key=cmp_to_key(compare_params),reverse=False)
