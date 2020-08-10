@@ -281,8 +281,8 @@ class GradientBase(ConverterBase):
                 #Traverse the elements in the ListOp
                 res = [op.traverse(unroll_traverse) for op in operator]
                 #Separate out the lists from non-list elements
-                lists = [l for l in res if isinstance(l, (list, ListOp))]
-                not_lists = [r for r in res if not isinstance(r, (list,ListOp))]
+                lists = [l for l in res if isinstance(l, (List, ListOp))]
+                not_lists = [r for r in res if not isinstance(r, (List,ListOp))]
                 #unroll the list elements and recombine everything
                 unrolled = [y for x in lists for y in x]
                 res = not_lists + unrolled
@@ -292,8 +292,8 @@ class GradientBase(ConverterBase):
         #When unroll_traverse terminates, there will still be 
         # one last layer of nested lists to unroll. (computational tree will be depth <=2)
         unrolled_op = operator.traverse(unroll_traverse)
-        lists = [l for l in unrolled_op if isinstance(l, (list, ListOp))]
-        not_lists = [r for r in unrolled_op if not isinstance(r, (list,ListOp))]
+        lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
+        not_lists = [r for r in unrolled_op if not isinstance(r, (List,ListOp))]
         #unroll the list elements and recombine everything
         unrolled = [y for x in lists for y in x]
         return not_lists + unrolled
