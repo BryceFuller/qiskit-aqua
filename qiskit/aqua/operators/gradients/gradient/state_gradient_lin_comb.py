@@ -24,7 +24,7 @@ from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Instruction, Gate
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
@@ -33,9 +33,9 @@ from qiskit.aqua.operators.expectations import PauliExpectation
 from ..gradient_base import GradientBase
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, CZGate,\
-    U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, XGate, \
-    SdgGate, SGate, ZGate
+from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, \
+    CZGate,U1Gate, U2Gate, U3Gate, RXXGate, RYYGate, RZZGate, RZXGate, CU1Gate, MCU1Gate, CU3Gate, IGate, HGate, \
+    XGate, SdgGate, SGate, ZGate
 
 logger = logging.getLogger(__name__)
 
@@ -51,40 +51,39 @@ class StateGradientAncilla(GradientBase):
                 params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
         r"""
         Args
-            state_operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
-            observable_operator: The measurement operator we are taking the gradient of: O(θ)
+            operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
         Returns
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
 
-        if isinstance(operator, ListOp):
-            for op in operator.oplist:
-                if op.is_measurement:
-                    # TODO traverse through operator and tensor Z and multiply by two to each measurement
-                    op *= 2 # Prefactor needed for correction
-                    op ^= Z # change this inplace
-                else:
-                    # TODO traverse
-                    # TODO inplace
-                    # TODO Do this for every independent circuit, rest of product rule to be handled here
-                    op = self._ancilla_grad_states(op) # change this inplace
+        return self._prepare_operator(operator, params)
 
-            # TODO iterate through params and check if in op - create list/dict to store the params locations
-        else:
-            opperator = self._ancilla_grad_states(operator)
+    def _prepare_operator(self, operator, params):
+        if isinstance(operator, ListOp):
+            return operator.traverse(self.prepare_operator)
+        elif isinstance(operator, StateFn):
+            if operator.is_measurement == True:
+                return operator.traverse(self.prepare_operator)
+        elif isinstance(operator, PrimitiveOp):
+            return 2 * (operator ^ Z)  # Z needs to be at the end
+        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
+            # TODO avoid duplicate transformations
+            operator = self._grad_states(operator, params)
         return operator
 
-    def _ancilla_grad_states(self,
-                             op: OperatorBase,
-                             state_qc: QuantumCircuit,
-                             gates_to_parameters: Dict[Parameter, List[Gate]],
-                             grad_coeffs: Dict[Parameter, List[List[complex]]],
-                             grad_gates: Dict[Parameter, List[List[Instruction]]]) -> ListOp[CircuitStateFn]:
+    def _grad_states(self,
+                     op: OperatorBase,
+                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp[CircuitStateFn]:
+                             # state_qc: QuantumCircuit,
+                             # gates_to_parameters: Dict[Parameter, List[Gate]],
+                             # grad_coeffs: Dict[Parameter, List[List[complex]]],
+                             # grad_gates: Dict[Parameter, List[List[Instruction]]])
         """Generate the gradient states.
 
         Args:
             op: The operator representing the quantum state for which we compute the gradient.
+            target_params: The parameters we are taking the gradient wrt: ω
             state_qc: The quantum circuit representing the state for which we compute the grad.
             gates_to_parameters: The dictionary of parameters and gates with respect to which the quantum Fisher
             Information is computed.
@@ -121,6 +120,8 @@ class StateGradientAncilla(GradientBase):
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
+            if param not in target_params:
+                continue
             params.append(param)
             gates_to_parameters[param] = []
             grad_coeffs[param] = []

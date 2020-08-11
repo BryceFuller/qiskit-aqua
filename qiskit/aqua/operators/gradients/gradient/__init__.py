@@ -16,9 +16,9 @@
 
 from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
 from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
-from qiskit.aqua.operators.gradients.gradient.probability_gradient_ancilla import ProbabilityGradientAncilla
-from qiskit.aqua.operators.gradients.gradient.probability_gradient_param_shift import ProbabilityGradientParamShift
-from qiskit.aqua.operators.gradients.gradient.state_gradient_ancilla import StateGradientAncilla
+from qiskit.aqua.operators.gradients.gradient.prob_gradient_lin_comb import ProbabilityGradientAncilla
+from qiskit.aqua.operators.gradients.gradient.prob_gradient_param_shift import ProbabilityGradientParamShift
+from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientAncilla
 from qiskit.aqua.operators.gradients.gradient.state_gradient_param_shift import StateGradientParamShift
 
 __all__ = ['Gradient',

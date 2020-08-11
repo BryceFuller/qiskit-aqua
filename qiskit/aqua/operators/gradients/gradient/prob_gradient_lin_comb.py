@@ -93,7 +93,7 @@ class ProbabilityGradientAncilla(StateGradientAncilla):
                     grad_coeffs[param].append(c_g[0])
                     grad_gates[param].append(c_g[1])
 
-        states = self._ancilla_grad_states(gates_to_parameters, grad_coeffs, grad_gates)
+        states = self._grad_states(gates_to_parameters, grad_coeffs, grad_gates)
         grad_op = I ^ state_qc.num_qubits ^ Z
 
         # TODO fix eval

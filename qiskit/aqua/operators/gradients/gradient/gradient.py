@@ -47,6 +47,8 @@ class Gradient(GradientBase):
         Returns:
             gradient_operator: An operator whose evaluation yields the Gradient
         """
+        self._operator = operator
+        self._params = params
 
         # TODO: Check if operator includes a state else throw an error/ or warning?
         measurement = False

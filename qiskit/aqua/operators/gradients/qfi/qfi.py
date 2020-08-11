@@ -26,7 +26,7 @@ from qiskit import QuantumCircuit, QuantumRegister
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from ...expectations import PauliExpectation 
 from qiskit.aqua.operators.converters import DictToCircuitSum
@@ -61,26 +61,30 @@ class QFI(GradientBase):
         Returns
             ListOp[ListOp] where the operator at position k,l corresponds to [QFI]kl
         """
-        # TODO choose for which parameters we want the QFI
         # TODO integrate diagonal without ancilla
+
+        return self._prepare_operator(operator)
+
+    def _prepare_operator(self, operator, params):
         if isinstance(operator, ListOp):
-            for op in operator.oplist:
-                # TODO traverse through operator and get the states to compute the QFI for
-                # TODO inplace
-                # TODO Do this for every independent circuit, rest of product rule to be handled here
-                op = self._ancilla_grad_states(op) # TODO change this inplace
-
-            # TODO iterate through params and check if in op - create list/dict to store the params locations
-        else:
-            operator = self._ancilla_grad_states(operator) # change this inplace
-
+            return operator.traverse(self.prepare_operator)
+        elif isinstance(operator, StateFn):
+            if operator.is_measurement == True:
+                return operator.traverse(self.prepare_operator)
+        elif isinstance(operator, PrimitiveOp):
+            return 4 * ((I ^ operator.num_qubits) ^ Z - operator ^ Z)  # Z needs to be at the end
+        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
+            # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
+            operator = self._qfi_states(operator, params)
         return operator
 
-    def _ancilla_qfi(self, op: OperatorBase) -> ListOp:
+    def _qfi_states(self, op: OperatorBase,
+                    target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
             op: The operator representing the quantum state for which we compute the QFI.
+            target_params: The parameters we are computing the QFI wrt: ω
 
         Returns:
             Operators which give the QFI.
@@ -91,7 +95,7 @@ class QFI(GradientBase):
             AquaError: If one of the circuits could not be constructed.
         """
         # QFI & phase fix observable
-        qfi_observable = 4 * ((I ^ op.num_qubits) ^ Z - op ^ Z)
+        # qfi_observable = 4 * ((I ^ op.num_qubits) ^ Z - op ^ Z)
         # phase_fix_observable = (I ^ op.num_qubits) ^ (X + 1j * Y)  # see https://arxiv.org/pdf/quant-ph/0108146.pdf
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
@@ -105,12 +109,14 @@ class QFI(GradientBase):
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
         elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum.convert(op)  # Todo inplace
+            op = DictToCircuitSum.convert(op)
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
+            if param not in target_params:
+                continue
             params.append(param)
             gates_to_parameters[param] = []
             qfi_coeffs[param] = []
@@ -196,7 +202,7 @@ class QFI(GradientBase):
                                     qfi_op += np.abs(coeff_i) * np.abs(coeff_j) * CircuitStateFn(qfi_circuit)
                 qfi_ops += [qfi_op]
             qfi_operators.append(qfi_ops)
-        return ~qfi_observable @ ListOp(qfi_operators)
+        return ListOp(qfi_operators)
 
     def old_convert(self, operator: OperatorBase,
                 approximation: str = 'diagonal',
