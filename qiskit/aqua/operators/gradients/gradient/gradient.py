@@ -94,14 +94,18 @@ class Gradient(GradientBase):
     #                             'expectation values and sampling probabilities of quantum states. '
     #                             'Please define an operator which includes a quantum state.')
                                 p_grad = 0
+                                # p_grad = ObservableGradient(w.r.t. op_param)
                             else:
                                 # Check if the state operator is part of an expectation value and compute either
                                 # state_gradient or probability_gradient
                                 p_grad = 0
+                                # p_grad = StateGradient(w.r.t. op_param)
                             if not param_grad:
                                 param_grad = p_grad * param_expr_grad
                             else:
-                                param_grad += p_grad * param_expr_grad # TODO this should respect the comboFn!!! not only plus what if param in observable and state
+                                param_grad += p_grad * param_expr_grad
+                                # TODO this should respect the comboFn!!! not only plus what if param in observable and state
+
                     else:
                         if param == op_param:
                             if operator.is_measurement:
@@ -118,7 +122,8 @@ class Gradient(GradientBase):
                             if not param_grad:
                                 param_grad = p_grad
                             else:
-                                param_grad += p_grad # TODO this should respect the comboFn!!! not only plus what if param in observable and state
+                                param_grad += p_grad
+                                # TODO this should respect the comboFn!!! not only plus what if param in observable and state
 
             grads.append(param_grad)
         return ListOp(grads)
