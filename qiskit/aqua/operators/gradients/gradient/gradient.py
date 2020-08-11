@@ -24,6 +24,26 @@ from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
 from qiskit.aqua.operators import OperatorBase, ListOp
 
+
+"""
+Structure:
+    - grads = []
+    - For param in params:
+        - Get Grad of ComboFn (trivial if sum or Identity)
+        - If operator has measurement 
+            - If param in state (potentially within a parameter expression)
+                - StateGradient
+            - Else OperatorGradient (potentially within a parameter expression)
+        - Else ProbabilityGradient (potentially within a parameter expression)
+        
+        - If param was in param_expr:
+            - grads.append(dOperator/d_param_expr * d_param_expr)
+        - Else grads.append(dOperator/d_param)
+        
+    Return ListOp[grads]
+        
+"""
+
 class Gradient(GradientBase):
     r"""
     Converter for changing parameterized circuits into operators
@@ -50,34 +70,60 @@ class Gradient(GradientBase):
         self._operator = operator
         self._params = params
 
-        # TODO: Check if operator includes a state else throw an error/ or warning?
-        measurement = False
-        state_given = False
-        if isinstance(operator, ListOp):
-            for op in operator.oplist:
-                # TODO check which param is in which op - create list/dict to store the params locations.
-                # TODO Then the gradients must be computed for the different ops and summed up accordingly.
-                if op.is_measurement:
-                    measurement = True
-                else:
-                    state_given = True
-        else:
-            if not operator.is_measurement:
-                state_given = True
+        # Prepare operator
 
-        if not state_given:
-            raise TypeError('Currently the gradient framework only supports gradient evaluation with respect to '
-                            'expectation values and sampling probabilities of quantum states. '
-                            'Please define an operator which includes a quantum state.')
+        grads = []
+        if len(params) != len(set(params)):
+            raise TypeError('Please provide an array that consists of unique parameter items.')
+        for param in params:
+            param_grad = None
+            if isinstance(operator, ListOp):
+                pass
+                # get grad_combo_fn = operator.combo_fn
+                # Check if sympy function
+                # Else try jax
+                # traverse through operators - recursive
+                for op_param in operator.primitive.params:
+                    if isinstance(op_param, ParameterExpression):
+                        if param in op_param.parameters:
+                            param_expr_grad = sy.Derivative(op_param, param)
+                            if operator.is_measurement:
+                                # Check for the corresponding state and compute observable_gradient
+        #                         raise TypeError(
+    #                             'Currently the gradient framework only supports gradient evaluation with respect to '
+    #                             'expectation values and sampling probabilities of quantum states. '
+    #                             'Please define an operator which includes a quantum state.')
+                                p_grad = 0
+                            else:
+                                # Check if the state operator is part of an expectation value and compute either
+                                # state_gradient or probability_gradient
+                                p_grad = 0
+                            if not param_grad:
+                                param_grad = p_grad * param_expr_grad
+                            else:
+                                param_grad += p_grad * param_expr_grad # TODO this should respect the comboFn!!! not only plus what if param in observable and state
+                    else:
+                        if param == op_param:
+                            if operator.is_measurement:
+                                # Check for the corresponding state and compute observable_gradient
+        #                         raise TypeError(
+    #                             'Currently the gradient framework only supports gradient evaluation with respect to '
+    #                             'expectation values and sampling probabilities of quantum states. '
+    #                             'Please define an operator which includes a quantum state.')
+                                p_grad = 0
+                            else:
+                                # Check if the state operator is part of an expectation value and compute either
+                                # state_gradient or probability_gradient
+                                p_grad = 0
+                            if not param_grad:
+                                param_grad = p_grad
+                            else:
+                                param_grad += p_grad # TODO this should respect the comboFn!!! not only plus what if param in observable and state
 
-        if measurement:
-            # TODO: if params in observable return observable_gradient else return state_gradient depending on method
-            pass
-        else:
-            # TODO: return probability gradient
-            pass
+            grads.append(param_grad)
+        return ListOp(grads)
 
-    # TODO get ParameterExpression in the different gradients
+
     # Working title
     def _chain_rule_wrapper_sympy_grad(self,
                                   param: ParameterExpression) -> List[Union[sy.Expr, float]]:

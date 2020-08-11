@@ -120,10 +120,12 @@ class StateGradientAncilla(GradientBase):
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
+            # TODO param expressions
             if param not in target_params:
                 continue
-            params.append(param)
-            gates_to_parameters[param] = []
+            if param not in params:
+                params.append(param)
+                gates_to_parameters[param] = []
             grad_coeffs[param] = []
             grad_gates[param] = []
             for element in elements:
@@ -141,7 +143,7 @@ class StateGradientAncilla(GradientBase):
         # create a copy of the original state with an additional ancilla register
         state = QuantumCircuit(*state_qc.qregs, qr_ancilla)
         state.data = state_qc.data
-        params = list(gates_to_parameters.keys())
+        # params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
         self.insert_gate(state, gates_to_parameters[params[0]][0], HGate(),
                     qubits=[ancilla])
