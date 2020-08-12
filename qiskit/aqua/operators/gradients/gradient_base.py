@@ -21,7 +21,10 @@ import numpy as np
 
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit import Gate, Instruction, Qubit
+from qiskit.providers import BaseBackend
+from qiskit.aqua import QuantumInstance
 
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
@@ -33,7 +36,7 @@ from ..state_fns.state_fn import StateFn
 from ..state_fns.circuit_state_fn import CircuitStateFn
 from ..operator_globals import H, S, I
 from ..converters.converter_base import ConverterBase
-from qiskit.circuit import Parameter, ParameterVector
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +47,11 @@ class GradientBase(ConverterBase):
     whose evaluation yields the gradient with respect to the circuit parameters.
     """
     # Todo remove
+    """
     def decompose_to_two_unique_eigenval(self,
                                         operator: OperatorBase,
                                         params: Union[Parameter, ParameterVector, List])-> OperatorBase:
-        r"""
+
         Decompose the input circuit so that all gates which will be differentiated
         have two unique eigenvalues
         Args:
@@ -55,9 +59,43 @@ class GradientBase(ConverterBase):
         Returns:
             state_operator: An equivalent quantum circuit such that all (relevant)
             parameterized gates are decomposed into gates with two unique eigenvalues.
-        """
+
 
         return OperatorBase
+    """
+    # TODO discuss naming
+    def get_callable(self,
+                      operator: OperatorBase,
+                      params: Union[Parameter, ParameterVector, List[Parameter]],
+                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+        """
+        Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
+        This callable can be used as gradient function for optimizers.
+        Args:
+            operator: The operator for which we want to get the gradient, Hessian or QFI.
+            parameters: The parameters with respect to which we are taking the gradient, Hessian or QFI.
+            backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
+        Returns:
+            callable: Function to compute a gradient, Hessian or QFI for given parameters.
+
+        """
+
+        if not backend:
+            converter = self.convert(operator, params)
+        else:
+            if isinstance(backend, QuantumInstance):
+                if backend.is_statevector:
+                    converter = self.convert(operator, params)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+            else:
+                if backend.name().startswith('statevector'):
+                    converter = self.convert(operator, params)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+        return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
+
+
 
 
     def _get_gate_generator(self, operator, param):
@@ -74,7 +112,7 @@ class GradientBase(ConverterBase):
 
     def parameter_shift(self,
                         operator: OperatorBase,
-                        params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
+                        params: Union[ParameterExpression, Parameter, ParameterVector, List]) -> OperatorBase:
         r"""
         Args:
             state_operator: the operator containing circuits we are taking the derivative of

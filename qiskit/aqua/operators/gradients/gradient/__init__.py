@@ -14,7 +14,7 @@
 
 """The module for Aqua's first order derivatives."""
 
-from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
+from qiskit.aqua.operators.gradients.gradient.prob_gradient import Gradient
 from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
 from qiskit.aqua.operators.gradients.gradient.prob_gradient_lin_comb import ProbabilityGradientAncilla
 from qiskit.aqua.operators.gradients.gradient.prob_gradient_param_shift import ProbabilityGradientParamShift

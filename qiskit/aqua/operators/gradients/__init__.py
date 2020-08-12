@@ -15,8 +15,8 @@
 """The module for Aqua's gradient."""
 
 from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
-from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
-from qiskit.aqua.operators.gradients.hessian.hessian import Hessian
+from qiskit.aqua.operators.gradients.gradient.prob_gradient import Gradient
+from qiskit.aqua.operators.gradients.hessian.state_hessian import Hessian
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI
 # from .ancilla_prob_grad import AncillaProbGradient
 # from .ancilla_state_grad import AncillaStateGradient

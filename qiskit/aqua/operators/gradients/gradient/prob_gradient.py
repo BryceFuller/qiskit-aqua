@@ -18,7 +18,7 @@ from typing import Optional, Union, Tuple, List
 import sympy as sy
 
 from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterExpression, Instruction
+from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
@@ -53,14 +53,13 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
-        params: Optional[List] = None,
+        params: Union[ParameterExpression, ParameterVector, Parameter] = None,
         method: str = 'param_shift',
         natural_gradient: bool = False) -> OperatorBase:
 
         r"""
         Args:
             operator: The measurement operator we are taking the gradient of
-            state_operator:  The operator corresponding to our state preparation circuit
             parameters: The parameters we are taking the gradient with respect to
             method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
                     Deprecated for observable gradient
