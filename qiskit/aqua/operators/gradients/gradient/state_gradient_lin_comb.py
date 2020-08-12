@@ -74,7 +74,7 @@ class StateGradientAncilla(GradientBase):
 
     def _grad_states(self,
                      op: OperatorBase,
-                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp[CircuitStateFn]:
+                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
                              # state_qc: QuantumCircuit,
                              # gates_to_parameters: Dict[Parameter, List[Gate]],
                              # grad_coeffs: Dict[Parameter, List[List[complex]]],

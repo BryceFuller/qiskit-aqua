@@ -12,7 +12,7 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-""" StateGradient Class """
+""" ProbabilityGradient Class """
 
 from typing import Optional, Callable, Union, List, Dict
 import logging
@@ -20,7 +20,7 @@ from functools import partial, reduce
 import numpy as np
 from copy import deepcopy
 
-from qiskit.quantum_info import Pauli
+from qiskit.quantum_info import Pauli, partial_trace
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Instruction, Gate
 
@@ -40,59 +40,48 @@ from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGa
 logger = logging.getLogger(__name__)
 
 
-class ProbabilityGradientAncilla(GradientBase):
+class ProbabilityGradientLinComb(GradientBase):
     r"""
-    We are interested in computing:
-    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for ω in params
+    Compute the gradients of the sampling probabilities of the basis states of a state |ψ(ω)〉w.r.t. ω.
+    This method employs a linear combination of unitaries, see e.g. https://arxiv.org/pdf/1811.11184.pdf
+
     """
 
     def convert(self,
                 operator: OperatorBase = None,
                 params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
         r"""
+
+
         Args
             operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
         Returns
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
+        # Get the circuits which compute a linear combination of unitaries and in turn result in the gradients
+        grad_states = self._grad_states(operator, params) # ListOp with list primitive of length len(params)
 
-        return self._prepare_operator(operator, params)
+        def combo_fn(x):
+            # Generate the operator which computes the linear combination
+            lin_comb_op = (I ^ operator.num_qubits) ^ Z
+            lin_comb_op = lin_comb_op.to_matrix()
+            # Compute a partial trace over the working qubit needed to compute the linear combination
+            if isinstance(x, list) or isinstance(x, np.ndarray):
+                return [partial_trace(lin_comb_op.dot(item), [operator.num_qubits]) for item in x]
+            else:
+                return partial_trace(lin_comb_op.dot(x), [operator.num_qubits])
 
-    def _prepare_operator(self, operator, params):
-        if isinstance(operator, ListOp):
-            return operator.traverse(self.prepare_operator)
-        elif isinstance(operator, StateFn):
-            if operator.is_measurement == True:
-                return operator.traverse(self.prepare_operator)
-        elif isinstance(operator, PrimitiveOp):
-            return 2 * (operator ^ Z)  # Z needs to be at the end
-        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
-            # TODO avoid duplicate transformations
-            operator = self._grad_states(operator, params)
-        return operator
+        return ListOp(grad_states, combo_fn=combo_fn)
 
     def _grad_states(self,
                      op: OperatorBase,
-                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp[CircuitStateFn]:
-                             # state_qc: QuantumCircuit,
-                             # gates_to_parameters: Dict[Parameter, List[Gate]],
-                             # grad_coeffs: Dict[Parameter, List[List[complex]]],
-                             # grad_gates: Dict[Parameter, List[List[Instruction]]])
+                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the gradient states.
 
         Args:
             op: The operator representing the quantum state for which we compute the gradient.
             target_params: The parameters we are taking the gradient wrt: ω
-            state_qc: The quantum circuit representing the state for which we compute the grad.
-            gates_to_parameters: The dictionary of parameters and gates with respect to which the quantum Fisher
-            Information is computed.
-            grad_coeffs: The values needed to compute the gradient for the parameterized gates.
-                    For each parameter, the dict holds a list of all coeffs for all gates which are parameterized by
-                    the parameter. {param:[[coeffs0],...]}
-            grad_gates: The gates needed to compute the gradient for the parameterized gates.
-                    For each parameter, the dict holds a list of all gates to insert for all gates which are
-                    parameterized by the parameter. {param:[[gates_to_insert0],...]}
 
         Returns:
             ListOp of StateFns as quantum circuits which are the states w.r.t. which we compute the gradient.
@@ -114,13 +103,12 @@ class ProbabilityGradientAncilla(GradientBase):
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
         elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum.convert(op) #Todo inplace
+            op = DictToCircuitSum.convert(op)
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
-            # TODO param expressions
             if param not in target_params:
                 continue
             if param not in params:
@@ -180,129 +168,4 @@ class ProbabilityGradientAncilla(GradientBase):
                     else:
                         state += np.abs(coeff_i) * CircuitStateFn(grad_state)
             states += [state]
-            #  TODO check that all properties of op are carried over but I think so
         return ListOp(states) * op.coeff
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # -*- coding: utf-8 -*-
-#
-# # This code is part of Qiskit.
-# #
-# # (C) Copyright IBM 2020.
-# #
-# # This code is licensed under the Apache License, Version 2.0. You may
-# # obtain a copy of this license in the LICENSE.txt file in the root directory
-# # of this source tree or at http://www.apache.org/licenses/LICENSE-2.0.
-# #
-# # Any modifications or derivative works of this code must retain this
-# # copyright notice, and modified files need to carry a notice indicating
-# # that they have been altered from the originals.
-#
-# """ ProbabilityGradient Class """
-#
-# from typing import Optional, Callable, Union, List, Dict
-# import logging
-# from functools import partial, reduce
-# import numpy as np
-#
-# from qiskit.quantum_info import Pauli
-# from qiskit import Aer, QuantumCircuit
-# from qiskit.providers import BaseBackend
-# from qiskit.aqua import QuantumInstance, AquaError
-# from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
-#
-# from qiskit.aqua.operators.operator_base import OperatorBase
-# from qiskit.aqua.operators.converters import DictToCircuitSum
-# from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
-# from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
-# from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
-# from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
-# from qiskit.aqua.operators.list_ops.list_op import ListOp
-# from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
-# from qiskit.aqua.operators.state_fns.state_fn import StateFn
-# from qiskit.aqua.operators.operator_globals import H, S, I, Z
-# from qiskit.aqua.operators.converters.circuit_sampler import CircuitSampler
-# from qiskit.aqua.operators.gradients.gradient import StateGradientAncilla
-#
-# logger = logging.getLogger(__name__)
-#
-#
-# class ProbabilityGradientAncilla(StateGradientAncilla):
-#     r"""
-#     Special Case of the StateGradient where the gradient_operator is a projector on all possible basis states.
-#     This computes the gradients of the sampling probabilities of the basis states rather than an expectation value.
-#
-#     We are interested in computing:
-#     d⟨ψ(ω)|ψ(ω)〉/ dω for ω in params
-#     """
-#
-#     # pylint: disable=too-many-return-statements
-#     def convert(self,
-#                 operator: OperatorBase = None,
-#                 params: Union[Parameter, ParameterVector, List] = None,
-#                 param_bindings: Dict = None,
-#                 backend: Union[QuantumInstance, BaseBackend] = None) -> OperatorBase:
-#         r"""
-#         Args
-#             state_operator: |ψ(ω)〉, The operator corresponding to our quantum state we are taking the gradient of ()
-#             params: The parameters we are taking the gradient with respect to
-#         """
-#
-#         if operator.is_measurement:
-#             raise AquaError('Probability gradients are computed with respect to states instead of expectation values.'
-#                             'Please remove the measurement operator.')
-#
-#         operator = super().convert(operator, params)
-#
-#         # Dictionary with the information which parameter is used in which gate
-#         gates_to_parameters = {}
-#         # Dictionary which relates the coefficients needed for the QFI for every parameter
-#         grad_coeffs = {}
-#         # Dictionary which relates the gates needed for the QFI for every parameter
-#         grad_gates = {}
-#         if isinstance(operator, CircuitStateFn):
-#             state_qc = operator.primitive
-#         elif isinstance(operator, DictStateFn) or isinstance(operator, VectorStateFn):
-#             state_qc = DictToCircuitSum.convert(operator).primitive
-#         else:
-#             raise TypeError('Ancilla gradients only support operators whose states are either '
-#                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
-#         for param, elements in state_qc._parameter_table.items():
-#             gates_to_parameters[param] = []
-#             grad_coeffs[param] = []
-#             grad_gates[param] = []
-#             for element in elements:
-#                 # get the coefficients and controlled gates (raises an error if the parameterized gate is not supported)
-#                 coeffs_gates = self.gate_gradient_dict(element[0])
-#                 gates_to_parameters[param].append(element[0])
-#                 for c_g in coeffs_gates:
-#                     grad_coeffs[param].append(c_g[0])
-#                     grad_gates[param].append(c_g[1])
-#
-#         states = self._grad_states(gates_to_parameters, grad_coeffs, grad_gates)
-#         grad_op = I ^ state_qc.num_qubits ^ Z
-#
-#         # TODO fix eval
-#
-#         # evaluation_qubit = find_regs_by_name(qc, 'ancilla')
-#         # qregs_list = state_qc.qregs
-#         # index_evaluation_qubit = qregs_list.index(evaluation_qubit) # = state_qc.num_qubits + 1
-#         # op = op.to_matrix()
-#         # # Construct circuits to evaluate the expectation values
-#         # sampler = CircuitSampler(self._quantum_instance).convert(StateFn(circuit_item))
-#         # result = sampler.to_density_matrix()
-#         # prob_grad = partial_trace(op.dot(result), [index_evaluation_qubit])
-#         # results.append(list(np.diag(prob_grad.data)))
-#
-#         return grad_op @ states

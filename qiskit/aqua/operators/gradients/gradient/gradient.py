@@ -78,6 +78,8 @@ class Gradient(GradientBase):
             param_grad = None
             if isinstance(operator, ListOp):
                 pass
+                if isinstance(operator.combo_fn, sy.Function):
+                    grad_combo_fn = sy.Derivative(operator.combo_fn, param)
                 # get grad_combo_fn = operator.combo_fn
                 # Check if sympy function
                 # Else try jax
@@ -102,7 +104,7 @@ class Gradient(GradientBase):
                             if not param_grad:
                                 param_grad = p_grad * param_expr_grad
                             else:
-                                param_grad += p_grad * param_expr_grad
+                                param_grad += p_grad * param_expr_grad # TODO check traverse
                                 # TODO this should respect the comboFn!!! not only plus what if param in observable and state
 
                     else:
