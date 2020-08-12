@@ -22,6 +22,7 @@ from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Inst
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
+from ..gradient import ObservableGradient, StateGradient, ProbabilityGradient
 from qiskit.aqua.operators import OperatorBase, ListOp
 
 
@@ -53,13 +54,12 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
-        params: Union[ParameterExpression, ParameterVector, Parameter] = None,
-        method: str = 'param_shift',
-        natural_gradient: bool = False) -> OperatorBase:
+        params: Union[ParameterVector, Parameter] = None,
+        method: str = 'param_shift') -> OperatorBase:
 
         r"""
         Args:
-            operator: The measurement operator we are taking the gradient of
+            operator: The operator we are taking the gradient of
             parameters: The parameters we are taking the gradient with respect to
             method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
                     Deprecated for observable gradient
@@ -68,6 +68,7 @@ class Gradient(GradientBase):
         """
         self._operator = operator
         self._params = params
+        self._method = method
 
         # Prepare operator
 
@@ -75,62 +76,71 @@ class Gradient(GradientBase):
         if len(params) != len(set(params)):
             raise TypeError('Please provide an array that consists of unique parameter items.')
         for param in params:
-            param_grad = None
+            param_grad = []
             if isinstance(operator, ListOp):
                 pass
-                if isinstance(operator.combo_fn, sy.Function):
-                    grad_combo_fn = sy.Derivative(operator.combo_fn, param)
+                # if isinstance(operator.combo_fn, sy.Function):
+                #     grad_combo_fn = sy.Derivative(operator.combo_fn, op) # not possible operator no sympy variable
                 # get grad_combo_fn = operator.combo_fn
                 # Check if sympy function
                 # Else try jax
                 # traverse through operators - recursive
-                for op_param in operator.primitive.params:
-                    if isinstance(op_param, ParameterExpression):
-                        if param in op_param.parameters:
-                            param_expr_grad = sy.Derivative(op_param, param)
-                            if operator.is_measurement:
-                                # Check for the corresponding state and compute observable_gradient
-        #                         raise TypeError(
-    #                             'Currently the gradient framework only supports gradient evaluation with respect to '
-    #                             'expectation values and sampling probabilities of quantum states. '
-    #                             'Please define an operator which includes a quantum state.')
-                                p_grad = 0
-                                # p_grad = ObservableGradient(w.r.t. op_param)
-                            else:
-                                # Check if the state operator is part of an expectation value and compute either
-                                # state_gradient or probability_gradient
-                                p_grad = 0
-                                # p_grad = StateGradient(w.r.t. op_param)
-                            if not param_grad:
-                                param_grad = p_grad * param_expr_grad
-                            else:
-                                param_grad += p_grad * param_expr_grad # TODO check traverse
-                                # TODO this should respect the comboFn!!! not only plus what if param in observable and state
-
-                    else:
-                        if param == op_param:
-                            if operator.is_measurement:
-                                # Check for the corresponding state and compute observable_gradient
-        #                         raise TypeError(
-    #                             'Currently the gradient framework only supports gradient evaluation with respect to '
-    #                             'expectation values and sampling probabilities of quantum states. '
-    #                             'Please define an operator which includes a quantum state.')
-                                p_grad = 0
-                            else:
-                                # Check if the state operator is part of an expectation value and compute either
-                                # state_gradient or probability_gradient
-                                p_grad = 0
-                            if not param_grad:
-                                param_grad = p_grad
-                            else:
-                                param_grad += p_grad
-                                # TODO this should respect the comboFn!!! not only plus what if param in observable and state
-
+                for op in operator:
+                    param_grad.append(self._get_param_grads(op, param))
+                # TODO recombine param_grad according to ComboFn
+            else:
+                param_grad.append(self._get_param_grads(operator, param))
             grads.append(param_grad)
         return ListOp(grads)
 
+    def _get_param_grads(self,
+                         op: OperatorBase,
+                         param: Union[ParameterVector, Parameter]) -> OperatorBase:
+        """
+        For a given operator and parameter, check if the parameter is used in the operator and if so compute the
+        respective gradient
+        Args:
+            op: The operator we are taking the gradient of
+            parame: The param we are taking the gradient with respect to
 
-    # Working title
+        Returns:
+            OperatorBase: Operator corresponding to the gradient for op and param
+
+        """
+        for op_param in op.primitive.params:
+            if isinstance(op_param, ParameterExpression):
+                if param in op_param.parameters:
+                    param_expr_grad = sy.Derivative(op_param, param)
+                    if op.is_measurement:
+                        # Check for the corresponding state and compute observable_gradient
+                        #                         raise TypeError(
+                        #                             'Currently the gradient framework only supports gradient evaluation with respect to '
+                        #                             'expectation values and sampling probabilities of quantum states. '
+                        #                             'Please define an operator which includes a quantum state.')
+                        return ObservableGradient.convert(op, op_param) * param_expr_grad
+                    else:
+                        # Check if the state operator is part of an expectation value and compute either
+                        # state_gradient or probability_gradient
+                        return StateGradient.convert(op, op_param, self._method) * param_expr_grad
+                        # return ProbabilityGradient.convert(op, op_param, self._method)
+
+            else:
+                if param == op_param:
+                    if op.is_measurement:
+                        # Check for the corresponding state and compute observable_gradient
+                        #                         raise TypeError(
+                        #                             'Currently the gradient framework only supports gradient evaluation with respect to '
+                        #                             'expectation values and sampling probabilities of quantum states. '
+                        #                             'Please define an operator which includes a quantum state.')
+                        return ObservableGradient.convert(op, param)
+                    else:
+                        # Check if the state operator is part of an expectation value and compute either
+                        # state_gradient or probability_gradient
+                        return StateGradient.convert(op, param, self._method)
+                        # return ProbabilityGradient.convert(op, param, self._method)
+
+
+                        # Working title
     def _chain_rule_wrapper_sympy_grad(self,
                                   param: ParameterExpression) -> List[Union[sy.Expr, float]]:
         """
