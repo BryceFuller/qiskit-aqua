@@ -288,7 +288,10 @@ class GradientBase(ConverterBase):
             raise AquaError('Could not insert the controlled gate, something went wrong!')
 
 
-    def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
+    def trim_circuit(self,
+                     circuit: QuantumCircuit,
+                     reference_gate: Gate) -> QuantumCircuit:
+
         """Trim the given quantum circuit before the reference gate.
 
         Args:
