@@ -72,46 +72,86 @@ class GradientBase(ConverterBase):
     #  for example, if operator contains multiple different circuits,
     #  then we may need to worry about name collisions!
 
-    def parameter_shift(self,
-                        operator: OperatorBase,
+    def parameter_shift(operator: OperatorBase,
                         params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
         r"""
         Args:
-            state_operator: the operator containing circuits we are taking the derivative of
+            operator: the operator containing circuits we are taking the derivative of
             params: The parameters (ω) we are taking the derivative with respect to. If
                     a ParameterVector is provided, each parameter will be shifted.
         Returns:
             param_shifted_op: A ListOp of SummedOps corresponding to [r*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
         """
         if isinstance(params, (ParameterVector, List)):
-            return ListOp([self.parameter_shift(operator, param) for param in params])
+            param_grads = [parameter_shift(operator, param) for param in params]
+            absent_params = [params[i] for i,grad_ops in enumerate(param_grads) if grad_ops is None]
+            if len(absent_params) > 0:
+                raise ValueError("The following parameters do not appear in the provided operator: ", absent_params)
+            return ListOp(absent_params)
+        
+        #by this point, it's only one parameter
+        param = params
 
-        elif not isinstance(params, Parameter):
+        if not isinstance(param, Parameter):
             raise ValueError
         if isinstance(operator, ListOp) and not isinstance(operator, ComposedOp):
-            return operator.traverse(partial(self.parameter_shift, params=params))
+            return_op = operator.traverse(partial(parameter_shift, params=param))
+            
+            #Remove any branch of the tree where the relevant parameter does not occur
+            trimmed_oplist = [op for op in return_op.oplist if op is not None]
+            #If all branches are None, remove the parent too
+            if len(trimmed_oplist) == 0:
+                return None
+            #Rebuild the operator with the trimmed down oplist
+            properties = {'coeff': return_op._coeff, 'abelian': return_op._abelian}
+            if return_op.__class__ == ListOp:
+                properties['combo_fn'] = return_op.combo_fn
+            return return_op.__class__(oplist=trimmed_oplist, **properties)
+        
         else:
+            
+            circs = get_unique_circuits(operator)
+            if len(circs) > 1:
+                #Understand how this happens
+                raise Error
+            elif len(circs) == 0:
+                print("No circuits found in: ", operator)
+                return operator
+            circ = circs[0]
+            
+            if param not in circ._parameter_table:
+                return None
+            
+            shifted_ops = []
+            for i in range(len(circ._parameter_table[param])):
+                #Implement the gradient for this particular rotation.
+                # Here is where future logic will go that decomposes more 
+                # complicated rotations
+                pshift_op = copy.deepcopy(operator)
+                mshift_op = copy.deepcopy(operator)
+                #We need the circuit objects of the newly instantiated operators
+                pshift_circ = get_unique_circuits(pshift_op)[0]
+                mshift_circ = get_unique_circuits(mshift_op)[0]
 
-            """
-            #Need to figure out the gate which param
-            generator = self.get_gate_generator(operator, param)
-            #it will of course not work like this
-            if isinstance(generator , Pauli):
+                pshift_gate = pshift_circ._parameter_table[param][i][0]
+                mshift_gate = mshift_circ._parameter_table[param][i][0]
+
+                pshift_index = pshift_gate.params.index(param)
+                mshift_index = mshift_gate.params.index(param)
+
+                p_param = pshift_gate.params[pshift_index]
+                m_param = mshift_gate.params[mshift_index]
+
+                pshift_gate.params[pshift_index] = (p_param + (np.pi/4))
+                mshift_gate.params[mshift_index] = (m_param - (np.pi/4))
+
+                #Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
-            TODO make this not be nonsense
-            (e0,e1) = generator.get_eigenvalues()
-            shift_constant = ParameterExpression( param/2 * (e1-e0) )
-            """
-
-            shift_constant = 0.5
-
-            #If I don't explicitly distribute this shift_constant coefficient, then it seems to get lost when I
-            # reduce the overall SummedOp.
-            return shift_constant * (operator.bind_parameters({params: params + np.pi / 2}) -
-                         operator.bind_parameters({params: params - np.pi / 2}))
-
-
-            #return SummedOp(opli s7t=[plus_shift, minus_shift], coeff=shift_constant)
+                
+                shifted_op = shift_constant*(pshift_op - mshift_op)
+                shifted_ops.append(shifted_op)
+                
+            return SummedOp(shifted_ops).reduce()
 
     def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
 
