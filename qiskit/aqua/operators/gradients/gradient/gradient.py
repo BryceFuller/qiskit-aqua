@@ -15,15 +15,20 @@
 """The base interface for Aqua's gradient."""
 
 from typing import Optional, Union, Tuple, List
-import sympy as sy
+
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
-from ..gradient_base import GradientBase
-from ..gradient import ObservableGradient, StateGradient, ProbabilityGradient
+from ..gradient_bas import GradientBase
+# from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
+# # from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
+# from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
 from qiskit.aqua.operators import OperatorBase, ListOp
+
+# TODO don't import globally
+import sympy as sy
 
 
 """
@@ -66,6 +71,7 @@ class Gradient(GradientBase):
         Returns:
             gradient_operator: An operator whose evaluation yields the Gradient
         """
+
         self._operator = operator
         self._params = params
         self._method = method
@@ -88,6 +94,19 @@ class Gradient(GradientBase):
                 for op in operator:
                     param_grad.append(self._get_param_grads(op, param))
                 # TODO recombine param_grad according to ComboFn
+                """ 
+                if ComboFn List then grad_combo_fn = [gradient(x)]
+                if ComboFn Sum then grad_combo_fn = sum[gradient(x)]
+                if ComboFn Tensor then grad_combo_fn = partial(reduce, np.kron)(gradient(x))
+                if ComboFn Composed then 
+                def combo_fn(x):
+                 sum = 0
+                 for i in range(len(x)):
+                    y = deepcopy(x)
+                    y[i] = gradient(x_i)
+                    sum += partial(reduce, np.kron)(y)
+                 return sum
+                """
             else:
                 param_grad.append(self._get_param_grads(operator, param))
             grads.append(param_grad)
@@ -117,10 +136,12 @@ class Gradient(GradientBase):
                         #                             'Currently the gradient framework only supports gradient evaluation with respect to '
                         #                             'expectation values and sampling probabilities of quantum states. '
                         #                             'Please define an operator which includes a quantum state.')
+                        # TODO the op in the next level needs to go one level up i.e. get observable and state
                         return ObservableGradient.convert(op, op_param) * param_expr_grad
                     else:
                         # Check if the state operator is part of an expectation value and compute either
                         # state_gradient or probability_gradient
+                        # TODO the op in the next level needs to go one level up i.e. get observable and state
                         return StateGradient.convert(op, op_param, self._method) * param_expr_grad
                         # return ProbabilityGradient.convert(op, op_param, self._method)
 

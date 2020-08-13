@@ -30,7 +30,9 @@ from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
 from qiskit.aqua.operators.operator_globals import H, S, I, Z
 from qiskit.aqua.operators.expectations import PauliExpectation
-from ..gradient_base import GradientBase
+from ..gradient_bas import GradientBase
+from qiskit.aqua.operators.gradients.gradient import StateGradient
+
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGate, RZGate, CRZGate, CXGate, CYGate, \
@@ -40,7 +42,7 @@ from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGa
 logger = logging.getLogger(__name__)
 
 
-class StateGradientAncilla(GradientBase):
+class StateGradientLinComb(StateGradient):
     r"""
     We are interested in computing:
     d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for ω in params
@@ -56,21 +58,23 @@ class StateGradientAncilla(GradientBase):
         Returns
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
+        self._params = params
 
-        return self._prepare_operator(operator, params)
+        return self._prepare_operator(operator)
 
-    def _prepare_operator(self, operator, params):
+    # TODO remove here. Taverse should happen in gradient
+    def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
-            return operator.traverse(self.prepare_operator)
+            return operator.traverse(self._prepare_operator)
         elif isinstance(operator, StateFn):
             if operator.is_measurement == True:
-                return operator.traverse(self.prepare_operator)
+                return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return 2 * (operator ^ Z)  # Z needs to be at the end
+            return (Z ^ operator)  # Z needs to be at the end
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # TODO avoid duplicate transformations
-            operator = self._grad_states(operator, params)
-        return operator
+            operator = self._grad_states(operator, self._params)
+        return 2 * operator
 
     def _grad_states(self,
                      op: OperatorBase,
@@ -84,7 +88,7 @@ class StateGradientAncilla(GradientBase):
         Args:
             op: The operator representing the quantum state for which we compute the gradient.
             target_params: The parameters we are taking the gradient wrt: ω
-            state_qc: The quantum circuit representing the state for which we compute the grad.
+            state_qc: The quantum circuit representing the state for which we compute the gradient.
             gates_to_parameters: The dictionary of parameters and gates with respect to which the quantum Fisher
             Information is computed.
             grad_coeffs: The values needed to compute the gradient for the parameterized gates.
@@ -137,44 +141,39 @@ class StateGradientAncilla(GradientBase):
                     grad_gates[param].append(c_g[1])
 
         states = []
-        qr_ancilla = QuantumRegister(1, 'ancilla')
-        ancilla = qr_ancilla[0]
-        additional_qubits = ([ancilla], [])
-        # create a copy of the original state with an additional ancilla register
-        state = QuantumCircuit(*state_qc.qregs, qr_ancilla)
-        state.data = state_qc.data
-        # params = list(gates_to_parameters.keys())
-        # apply Hadamard on ancilla
-        self.insert_gate(state, gates_to_parameters[params[0]][0], HGate(),
-                    qubits=[ancilla])
+        qr_work = QuantumRegister(1, 'work_qubit')
+        work_q = qr_work[0]
+        additional_qubits = ([work_q], [])
+        # create a copy of the original state with an additional work_q register
         # Get the states needed to compute the gradient
         for i in range(len(params)):  # loop over parameters
             # construct the states
             for m, gates_to_insert_i in enumerate(grad_gates[params[i]]):
                 for k, gate_to_insert_i in enumerate(gates_to_insert_i):
-                    grad_state = QuantumCircuit(*state.qregs)
-                    grad_state.data = state.data
-
-                    # Fix ancilla phase
+                    grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
+                    grad_state.data = state_qc.data
+                    # apply Hadamard on work_q
+                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q])
+                    # Fix work_q phase
                     coeff_i = grad_coeffs[params[i]][m][k]
                     sign = np.sign(coeff_i)
                     complex = np.iscomplex(coeff_i)
                     if sign == -1:
                         if complex:
                             self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
-                                        qubits=[ancilla])
+                                        qubits=[work_q])
                         else:
                             self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
-                                        qubits=[ancilla])
+                                        qubits=[work_q])
                     else:
                         if complex:
                             self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
-                                        qubits=[ancilla])
+                                        qubits=[work_q])
                     # Insert controlled, intercepting gate - controlled by |0>
                     self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
                                 gate_to_insert_i,
                                 additional_qubits=additional_qubits)
-                    grad_state.h(ancilla)
+                    grad_state.h(work_q)
                     if m == 0 and k == 0:
                         state = np.abs(coeff_i) * CircuitStateFn(grad_state)
                     else:

@@ -22,10 +22,13 @@ import numpy as np
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
+from qiskit.circuit.library.standard_gates import *
+from qiskit.circuit.controlledgate import ControlledGate
 from qiskit.circuit import Gate, Instruction, Qubit
 from qiskit.providers import BaseBackend
-from qiskit.aqua import QuantumInstance
+from qiskit.aqua import QuantumInstance, AquaError
 
+from ..converters import CircuitSampler
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
 from ..primitive_ops.pauli_op import PauliOp
@@ -96,8 +99,6 @@ class GradientBase(ConverterBase):
         return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
 
 
-
-
     def _get_gate_generator(self, operator, param):
         r"""
         Need to figure out what gate param corresponds to and return the
@@ -151,7 +152,8 @@ class GradientBase(ConverterBase):
 
             #return SummedOp(opli s7t=[plus_shift, minus_shift], coeff=shift_constant)
 
-    def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
+    def gate_gradient_dict(self,
+                           gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
 
         """Given a parameterized gate U(theta) with derivative dU(theta)/dtheta = sum_ia_iU(theta)V_i.
            This function returns a:=[a_0, ...] and V=[V_0, ...]
@@ -219,7 +221,7 @@ class GradientBase(ConverterBase):
             # TODO support arbitrary control states
             if gate.ctrl_state != 2**gate.num_ctrl_qubits - 1:
                 raise AquaError('Function only support controlled gates with control state `1` on all control qubits.')
-            base_coeffs_gates = gate_gradient_dict(gate.base_gate)
+            base_coeffs_gates = self.gate_gradient_dict(gate.base_gate)
             coeffs_gates = []
             # The projectors needed for the gradient of a controlled gate are integrated by a sum of gates.
             # The following line generates the decomposition gates.
@@ -246,8 +248,8 @@ class GradientBase(ConverterBase):
 
         raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
 
-
-    def insert_gate(circuit: QuantumCircuit,
+    def insert_gate(self,
+                    circuit: QuantumCircuit,
                     reference_gate: Gate,
                     gate_to_insert: Instruction,
                     qubits: Optional[List[Qubit]] = None,

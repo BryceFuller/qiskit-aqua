@@ -21,5 +21,26 @@ from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
-from ..gradient_base import GradientBase
+from qiskit.aqua.operators.gradients import GradientBase
 from qiskit.aqua.operators import OperatorBase, ListOp
+
+class StateGradient(GradientBase):
+    r"""
+    We are interested in computing:
+    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for θ in params
+    """
+
+    def convert(self,
+                state_operator: OperatorBase = None,
+                params: Union[Parameter, ParameterVector, List] = None,
+                method: str = 'param_shift') -> OperatorBase:
+        r"""
+        Args:
+            operator: The operator we are taking the gradient of
+            parameters: The parameters we are taking the gradient with respect to
+            method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
+                    Deprecated for observable gradient
+        Returns:
+            gradient_operator: An operator whose evaluation yields the Gradient
+        """
+        return

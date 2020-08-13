@@ -33,7 +33,7 @@ from qiskit.aqua.operators.list_ops.summed_op import SummedOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from qiskit.aqua.operators.expectations import PauliExpectation
 from qiskit.aqua.operators.operator_globals import H, S, I
-from ..gradient_base import GradientBase
+from ..gradient_bas import GradientBase
 
 logger = logging.getLogger(__name__)
 

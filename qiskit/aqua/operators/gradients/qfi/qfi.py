@@ -33,16 +33,13 @@ from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
 from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, Zero, One
 
-
-from qiskit.extensions.standard import HGate, XGate, SdgGate, SGate, ZGate
-
 from qiskit.aqua import QuantumInstance
 from qiskit.converters import dag_to_circuit, circuit_to_dag
-from qiskit.circuit.library import RYGate, RZGate, RXGate
+from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
 from qiskit.dagcircuit  import DAGCircuit
 from qiskit.quantum_info import Pauli
 
-from ..gradient_base import GradientBase
+from ..gradient_bas import GradientBase
 
 
 
