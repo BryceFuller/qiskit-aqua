@@ -114,12 +114,14 @@ class Gradient(GradientBase):
         for op_param in op.primitive.params:
             if isinstance(op_param, ParameterExpression):
                 if param in op_param.parameters:
-                    param_expr_grad = op_param.diff(param)
+                    # TODO stacked parameter expressions
+                    param_expr_grad = self._get_grad_parameter_expr(op_param, param)
                     if op.is_measurement:
                         # Check for the corresponding state and compute observable_gradient
                         #                         raise TypeError(
-                        #                             'Currently the gradient framework only supports gradient evaluation with respect to '
-                        #                             'expectation values and sampling probabilities of quantum states. '
+                        #                             'Currently the gradient framework only supports gradient
+                        #                             'evaluation with respect to '
+                        #                             'expectation values and sampling probabilities of quantum states.'
                         #                             'Please define an operator which includes a quantum state.')
                         # TODO the op in the next level needs to go one level up i.e. get observable and state
                         return ObservableGradient.convert(op, op_param) * param_expr_grad
@@ -135,8 +137,9 @@ class Gradient(GradientBase):
                     if op.is_measurement:
                         # Check for the corresponding state and compute observable_gradient
                         #                         raise TypeError(
-                        #                             'Currently the gradient framework only supports gradient evaluation with respect to '
-                        #                             'expectation values and sampling probabilities of quantum states. '
+                        #                             'Currently the gradient framework only supports gradient
+                        #                             'evaluation with respect to '
+                        #                             'expectation values and sampling probabilities of quantum states.'
                         #                             'Please define an operator which includes a quantum state.')
                         return ObservableGradient.convert(op, param)
                     else:
@@ -144,6 +147,23 @@ class Gradient(GradientBase):
                         # state_gradient or probability_gradient
                         return StateGradient.convert(op, param, self._method)
                         # return ProbabilityGradient.convert(op, param, self._method)
+
+    def _get_grad_parameter_expr(self,
+                                 op_param: ParameterExpression,
+                                 param: Parameter) -> sympy.Expr:
+        if isinstance(operator, ListOp):
+            return operator.traverse(self.append_Z_measurement)
+        elif isinstance(operator, StateFn):
+            if operator.is_measurement == True:
+                return operator.traverse(self.append_Z_measurement)
+        elif isinstance(operator, PauliOp):
+            return (Z ^ operator)
+        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
+            # print((operator))
+
+            operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
+
+        return operator
 
 
     def _get_grad_combo_fn(self,
