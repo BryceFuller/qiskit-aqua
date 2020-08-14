@@ -14,21 +14,21 @@
 
 """The base interface for Aqua's gradient."""
 
-from typing import Optional, Union, Tuple, List
-
+from typing import Optional, Union, Tuple, List, Callable
+from functools import reduce, partial
+import numpy as np
+from copy import deepcopy
 
 from qiskit import QuantumCircuit
 from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
-# from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
-# # from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
-# from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
-from qiskit.aqua.operators import OperatorBase, ListOp
+from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
+# from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
+from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
+from qiskit.aqua.operators import OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp
 
-# TODO don't import globally
-import sympy as sy
 
 
 """
@@ -59,14 +59,17 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
+        grad_combo_fn: Callable = lambda x : x,
         params: Union[ParameterVector, Parameter] = None,
         method: str = 'param_shift') -> OperatorBase:
 
         r"""
         Args:
             operator: The operator we are taking the gradient of
+            grad_combo_fn: Gradient for a custom operator combo_fn. The gradient for a standard ListOp or sympy
+            combo_fn is automatically computed.
             parameters: The parameters we are taking the gradient with respect to
-            method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
+            method: The method used to compute the state/probability gradient. ['param_shift', 'lin_comb']
                     Deprecated for observable gradient
         Returns:
             gradient_operator: An operator whose evaluation yields the Gradient
@@ -84,32 +87,14 @@ class Gradient(GradientBase):
         for param in params:
             param_grad = []
             if isinstance(operator, ListOp):
-                pass
-                # if isinstance(operator.combo_fn, sy.Function):
-                #     grad_combo_fn = sy.Derivative(operator.combo_fn, op) # not possible operator no sympy variable
-                # get grad_combo_fn = operator.combo_fn
-                # Check if sympy function
-                # Else try jax
+                grad_combo_fn = self._get_grad_combo_fn(operator, grad_combo_fn)
                 # traverse through operators - recursive
                 for op in operator:
                     param_grad.append(self._get_param_grads(op, param))
-                # TODO recombine param_grad according to ComboFn
-                """ 
-                if ComboFn List then grad_combo_fn = [gradient(x)]
-                if ComboFn Sum then grad_combo_fn = sum[gradient(x)]
-                if ComboFn Tensor then grad_combo_fn = partial(reduce, np.kron)(gradient(x))
-                if ComboFn Composed then 
-                def combo_fn(x):
-                 sum = 0
-                 for i in range(len(x)):
-                    y = deepcopy(x)
-                    y[i] = gradient(x_i)
-                    sum += partial(reduce, np.kron)(y)
-                 return sum
-                """
             else:
                 param_grad.append(self._get_param_grads(operator, param))
-            grads.append(param_grad)
+                # Recombine param_grad according to the operator's combo_fn
+            grads.append(ListOp(param_grad, combo_fn=grad_combo_fn))
         return ListOp(grads)
 
     def _get_param_grads(self,
@@ -120,7 +105,7 @@ class Gradient(GradientBase):
         respective gradient
         Args:
             op: The operator we are taking the gradient of
-            parame: The param we are taking the gradient with respect to
+            param: The param we are taking the gradient with respect to
 
         Returns:
             OperatorBase: Operator corresponding to the gradient for op and param
@@ -129,7 +114,7 @@ class Gradient(GradientBase):
         for op_param in op.primitive.params:
             if isinstance(op_param, ParameterExpression):
                 if param in op_param.parameters:
-                    param_expr_grad = sy.Derivative(op_param, param)
+                    param_expr_grad = op_param.diff(param)
                     if op.is_measurement:
                         # Check for the corresponding state and compute observable_gradient
                         #                         raise TypeError(
@@ -161,20 +146,50 @@ class Gradient(GradientBase):
                         # return ProbabilityGradient.convert(op, param, self._method)
 
 
-                        # Working title
-    def _chain_rule_wrapper_sympy_grad(self,
-                                  param: ParameterExpression) -> List[Union[sy.Expr, float]]:
+    def _get_grad_combo_fn(self,
+                           operator: ListOp,
+                           grad_combo_fn: Callable) -> Callable:
         """
-        Get the derivative of a parameter expression w.r.t. the underlying parameter keys
-        :param param: Parameter Expression
-        :return: List of derivatives of the parameter expression w.r.t. all keys
+        Get the derivative of the operator combo_fn
+        Args:
+            operator: The operator for whose combo_fn we want to get the gradient.
+            grad_combo_fn: The derivative of the standard combo_fn
+
+        Returns:
+            Derivative of the operator combo_fn
+
         """
-        expr = param._symbol_expr
-        keys = param._parameter_symbols.keys()
-        grad = []
-        for key in keys:
-            grad.append(sy.Derivative(expr, key).doit())
-        return grad
+        from sympy import Function
+        if isinstance(operator, SummedOp) or isinstance(operator, TensoredOp):
+            grad_combo_fn = operator.combo_fn
+        elif isinstance(operator, ComposedOp):
+            def grad_composed_combo_fn(x):
+                sum = 0
+                for i in range(len(x)):
+                    y = deepcopy(operator)
+                    y[i] = x[i]
+                    sum += partial(reduce, np.dot)(y)
+                return sum
+            grad_combo_fn = grad_composed_combo_fn
+        elif isinstance(operator.combo_fn, Function):
+            grad_combo_fn = operator.combo_fn.diff()
+        return grad_combo_fn
+
+
+    # # Working title
+    # def _chain_rule_wrapper_sympy_grad(self,
+    #                               param: ParameterExpression) -> List[Union[sy.Expr, float]]:
+    #     """
+    #     Get the derivative of a parameter expression w.r.t. the underlying parameter keys
+    #     :param param: Parameter Expression
+    #     :return: List of derivatives of the parameter expression w.r.t. all keys
+    #     """
+    #     expr = param._symbol_expr
+    #     keys = param._parameter_symbols.keys()
+    #     grad = []
+    #     for key in keys:
+    #         grad.append(sy.Derivative(expr, key).doit())
+    #     return grad
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

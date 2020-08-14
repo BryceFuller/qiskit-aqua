@@ -31,7 +31,6 @@ from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn
 from qiskit.aqua.operators.operator_globals import H, S, I, Z
 from qiskit.aqua.operators.expectations import PauliExpectation
 from ..gradient_base import GradientBase
-from qiskit.aqua.operators.gradients.gradient import StateGradient
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
@@ -42,7 +41,7 @@ from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGa
 logger = logging.getLogger(__name__)
 
 
-class StateGradientLinComb(StateGradient):
+class StateGradientLinComb(GradientBase):
     r"""
     We are interested in computing:
     d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for ω in params
