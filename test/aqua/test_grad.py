@@ -22,6 +22,7 @@ from test.aqua import QiskitAquaTestCase
 from qiskit import BasicAer
 
 from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
+from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
 
 from qiskit.aqua.operators import X, Z, StateFn, CircuitStateFn
 from qiskit import QuantumCircuit, QuantumRegister
@@ -115,8 +116,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
     #     self.assertEqual(len(qfi_circuits), 11)
     #     self.assertEqual(len(qfi_phase_fix_circuits), 4)
 
-    def test_state_prob_grad(self):
-        """Test the ancilla state gradient
+    def test_state_lin_comb_grad(self):
+        """Test the linear combination state gradient
         Tr(|psi><psi|Z) = sin(a)sin(b)
         Tr(|psi><psi|X) = cos(a)
         d<H>/da = - 0.5 sin(a) - 1 cos(a)sin(b)
@@ -144,6 +145,41 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_grad = True
         for i, value_dict in enumerate(values_dict):
             correct_grad &= np.allclose(state_grad.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
+
+        self.assertTrue(correct_grad)
+
+    def test_state_lin_comb_hessian(self):
+        """Test the linear combination state Hessian
+        Tr(|psi><psi|Z) = sin(a)sin(b)
+        Tr(|psi><psi|X) = cos(a)
+        d^2<H>/da^2 = - 0.5 cos(a) + 1 sin(a)sin(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/db^2 = + 1 sin(a)sin(b)
+        """
+
+        H = 0.5 * X - 1 * Z
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
+
+        state_hess = StateHessianLinComb().convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 4, b: np.pi}, {a: np.pi / 4, b: np.pi / 4},
+                       {a: np.pi / 2, b: np.pi / 4}]
+        correct_values = [[[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), 0]],
+                          [[-0.5 / np.sqrt(2) + 0.5, -1 / 2.], [-0.5, 0.5]],
+                          [[1 / np.sqrt(2), 0], [0, 1 / np.sqrt(2)]]]
+        correct_grad = True
+        for i, value_dict in enumerate(values_dict):
+            correct_grad &= np.allclose(state_hess.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
 
         self.assertTrue(correct_grad)
 

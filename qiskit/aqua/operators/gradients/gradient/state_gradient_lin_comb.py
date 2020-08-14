@@ -70,7 +70,7 @@ class StateGradientLinComb(StateGradient):
             if operator.is_measurement == True:
                 return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return (Z ^ operator)  # Z needs to be at the end
+            return (Z ^ operator)
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # TODO avoid duplicate transformations
             operator = self._grad_states(operator, self._params)

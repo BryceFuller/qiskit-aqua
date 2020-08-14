@@ -23,6 +23,8 @@ import numpy as np
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
 
+from qiskit.aqua.operators.gradients.hessian import Hessian
+
 from qiskit.aqua.operators.operator_base import OperatorBase
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
@@ -35,3 +37,15 @@ from ..gradient_base import GradientBase
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 logger = logging.getLogger(__name__)
+
+""" ProbabilityHessian Class """
+
+
+class StateHessian(Hessian):
+    r"""
+    Special Case of the StateHessian where the hessian_operator is a projector on all possible basis states.
+    This computes the hessians of the sampling probabilities of the basis states rather than an expectation value.
+
+    We are interested in computing:
+    d⟨ψ(ω)|ψ(ω)〉/ dω for ω in params
+    """

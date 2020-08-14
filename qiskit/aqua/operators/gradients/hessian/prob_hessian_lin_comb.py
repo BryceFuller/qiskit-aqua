@@ -36,12 +36,12 @@ from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from qiskit.aqua.operators.operator_globals import H, S, I, Z
 from qiskit.aqua.operators.converters.circuit_sampler import CircuitSampler
-from qiskit.aqua.operators.gradients.hessian import StateHessianAncilla
+from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
 
 logger = logging.getLogger(__name__)
 
 
-class ProbabilityHessianAncilla(StateHessianAncilla):
+class ProbabilityHessianLinComb(StateHessianLinComb):
     r"""
     Special Case of the StateHessian where the hessian_operator is a projector on all possible basis states.
     This computes the hessians of the sampling probabilities of the basis states rather than an expectation value.

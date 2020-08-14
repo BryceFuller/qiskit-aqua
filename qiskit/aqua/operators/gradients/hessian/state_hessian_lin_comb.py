@@ -41,7 +41,7 @@ from qiskit.circuit.library.standard_gates import RXGate, CRXGate, RYGate, CRYGa
 logger = logging.getLogger(__name__)
 
 
-class StateHessianAncilla(GradientBase):
+class StateHessianLinComb(GradientBase):
     r"""
     We are interested in computing:
     d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω_kdω_l  for ω in params
@@ -57,21 +57,21 @@ class StateHessianAncilla(GradientBase):
         Returns
             ListOp[ListOp] where the operator at position k,l corresponds to d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω_kdω_l
         """
-
+        self._params = params
         return self._prepare_operator(operator)
 
-    def _prepare_operator(self, operator, params):
+    def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
-            return operator.traverse(self.prepare_operator)
+            return operator.traverse(self._prepare_operator)
         elif isinstance(operator, StateFn):
             if operator.is_measurement == True:
-                return operator.traverse(self.prepare_operator)
+                return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return 2 * (operator ^ Z ^ Z)
+            return (Z ^ I ^ operator)
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
-            operator = self._ancilla_qfi(operator, params)
-        return operator
+            operator = self._hessian_states(operator, self._params)
+        return 8 * operator
 
     def _hessian_states(self, op: OperatorBase,
                      target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
@@ -102,13 +102,12 @@ class StateHessianAncilla(GradientBase):
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
         elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum.convert(op)  # Todo inplace
+            op = DictToCircuitSum.convert(op)
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
-            # TODO param expressions
             if param not in target_params:
                 continue
             if param not in params:
@@ -136,10 +135,11 @@ class StateHessianAncilla(GradientBase):
         # apply Hadamard on ancilla
         self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
                     qubits=[work_q0])
+        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
+                    qubits=[work_q1])
         # Get the circuits needed to compute A_ij
         for i in range(len(params)): #loop over parameters
             hessian_ops = []
-            # TODO Check if this overhead can be reduced or is cached by/with the OpFlow
             # j = 0
             # while j <= i: #loop over parameters
             for j in range(len(params)):
@@ -203,9 +203,11 @@ class StateHessianAncilla(GradientBase):
                                 hessian_circuit.h(work_q0)
                                 hessian_circuit.h(work_q1)
                                 if m == 0 and k == 0:
-                                    hessian_op = [np.abs(coeff_i) * np.abs(coeff_j) * CircuitStateFn(hessian_circuit)]
+                                    hessian_op = op.coeff * np.abs(coeff_i) * np.abs(coeff_j) * \
+                                                  CircuitStateFn(hessian_circuit)
                                 else:
-                                    hessian_op += np.abs(coeff_i) * np.abs(coeff_j) * CircuitStateFn(hessian_circuit)
+                                    hessian_op += op.coeff * np.abs(coeff_i) * np.abs(coeff_j) * \
+                                                  CircuitStateFn(hessian_circuit)
                 hessian_ops += [hessian_op]
-            hessian_operators.append(hessian_ops)
+            hessian_operators.append(ListOp(hessian_ops))
         return ListOp(hessian_operators)
