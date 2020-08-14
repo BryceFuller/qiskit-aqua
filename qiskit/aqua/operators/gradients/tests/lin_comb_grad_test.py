@@ -52,6 +52,3 @@ qfi_value= qfi.assign_parameters(values_dict).eval()
 correct_qfi &= np.allclose(qfi_value, [[1, 0], [0, 1]], atol=1e-6)
 print(correct_qfi)
 a = 0
-
-
-

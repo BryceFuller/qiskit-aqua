@@ -58,7 +58,7 @@ class StateHessianLinComb(GradientBase):
             ListOp[ListOp] where the operator at position k,l corresponds to d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω_kdω_l
         """
         self._params = params
-        return self._prepare_operator(operator)
+        return 16 * self._prepare_operator(operator)
 
     def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
@@ -71,7 +71,7 @@ class StateHessianLinComb(GradientBase):
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
             operator = self._hessian_states(operator, self._params)
-        return 8 * operator
+        return operator
 
     def _hessian_states(self, op: OperatorBase,
                      target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
@@ -198,9 +198,8 @@ class StateHessianLinComb(GradientBase):
                                 # Insert controlled, intercepting gate - controlled by |1>
                                 self.insert_gate(hessian_circuit, gates_to_parameters[params[j]][n], gate_to_insert_j,
                                                                          additional_qubits=([work_q1], []))
-
-                                hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q0)
+                                hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
                                 if m == 0 and k == 0:
                                     hessian_op = op.coeff * np.abs(coeff_i) * np.abs(coeff_j) * \
