@@ -31,7 +31,7 @@ from qiskit.aqua.operators.list_ops.list_op import ListOp
 from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from qiskit.aqua.operators.operator_globals import H, S, I
-from ..gradient_bas import GradientBase
+from ..gradient_base import GradientBase
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 logger = logging.getLogger(__name__)

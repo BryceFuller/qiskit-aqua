@@ -14,7 +14,7 @@
 
 """The module for Aqua's gradient."""
 
-from qiskit.aqua.operators.gradients.gradient_bas import GradientBase
+from qiskit.aqua.operators.gradients.gradient_base import GradientBase
 from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
 from qiskit.aqua.operators.gradients.hessian.hessian import Hessian
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI

@@ -30,7 +30,7 @@ from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
 from qiskit.aqua.operators.operator_globals import H, S, I, Z
 from qiskit.aqua.operators.expectations import PauliExpectation
-from ..gradient_bas import GradientBase
+from ..gradient_base import GradientBase
 from qiskit.aqua.operators.gradients.gradient import StateGradient
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
