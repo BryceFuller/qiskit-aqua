@@ -26,7 +26,7 @@ from qiskit import QuantumCircuit, QuantumRegister
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp, SummedOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from ...expectations import PauliExpectation 
 from qiskit.aqua.operators.converters import DictToCircuitSum
@@ -93,9 +93,10 @@ class QFI(GradientBase):
             AquaError: If one of the circuits could not be constructed.
         """
         # QFI & phase fix observable
-        # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
-        # phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
-        qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
+        qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
+        phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
+        # TODO uncomment
+        # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
         # see https://arxiv.org/pdf/quant-ph/0108146.pdf
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
@@ -130,49 +131,48 @@ class QFI(GradientBase):
                     qfi_coeffs[param].append(c_g[0])
                     qfi_gates[param].append(c_g[1])
 
-        # phase_fix_states = []
-        # qr_work = QuantumRegister(1, 'work_qubit')
-        # work_q = qr_work[0]
-        # additional_qubits = ([work_q], [])
-        # # create a copy of the original state with an additional work_q register
-        # # Get the states needed to compute the gradient
-        # for i in range(len(params)):  # loop over parameters
-        #     # construct the states
-        #     for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
-        #         for k, gate_to_insert_i in enumerate(gates_to_insert_i):
-        #             grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
-        #             grad_state.data = state_qc.data
-        #             # apply Hadamard on work_q
-        #             self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q])
-        #             # Fix work_q phase
-        #             coeff_i = qfi_coeffs[params[i]][m][k]
-        #             sign = np.sign(coeff_i)
-        #             complex = np.iscomplex(coeff_i)
-        #             if sign == -1:
-        #                 if complex:
-        #                     self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
-        #                                 qubits=[work_q])
-        #                 else:
-        #                     self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
-        #                                 qubits=[work_q])
-        #             else:
-        #                 if complex:
-        #                     self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
-        #                                 qubits=[work_q])
-        #             # Insert controlled, intercepting gate - controlled by |0>
-        #             self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
-        #                         gate_to_insert_i,
-        #                         additional_qubits=additional_qubits)
-        #             grad_state = self.trim_circuit(grad_state, gates_to_parameters[params[i]][m])
-        #             grad_state.h(work_q)
-        #             if m == 0 and k == 0:
-        #                 phase_fix_state = np.abs(coeff_i) * op.coeff * CircuitStateFn(grad_state)
-        #                 phase_fix_state = phase_fix_observable @ phase_fix_state
-        #             else:
-        #                 phase_fix_state += np.abs(coeff_i) * op.coeff * CircuitStateFn(grad_state)
-        #
-        #                 phase_fix_state = phase_fix_observable @ phase_fix_state
-        #     phase_fix_states += [phase_fix_state]
+        phase_fix_states = []
+        qr_work = QuantumRegister(1, 'work_qubit')
+        work_q = qr_work[0]
+        additional_qubits = ([work_q], [])
+        # create a copy of the original state with an additional work_q register
+        # Get the states needed to compute the gradient
+        for i in range(len(params)):  # loop over parameters
+            # construct the states
+            for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
+                for k, gate_to_insert_i in enumerate(gates_to_insert_i):
+                    grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
+                    grad_state.data = state_qc.data
+                    # apply Hadamard on work_q
+                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q])
+                    # Fix work_q phase
+                    coeff_i = qfi_coeffs[params[i]][m][k]
+                    sign = np.sign(coeff_i)
+                    complex = np.iscomplex(coeff_i)
+                    if sign == -1:
+                        if complex:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
+                                        qubits=[work_q])
+                        else:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
+                                        qubits=[work_q])
+                    else:
+                        if complex:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
+                                        qubits=[work_q])
+                    # Insert controlled, intercepting gate - controlled by |0>
+                    self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
+                                gate_to_insert_i,
+                                additional_qubits=additional_qubits)
+
+                    grad_state = self.trim_circuit(grad_state, gates_to_parameters[params[i]][m])
+
+                    grad_state.h(work_q)
+                    if m == 0 and k == 0:
+                        phase_fix_state = np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+                    else:
+                        phase_fix_state += np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+            phase_fix_states += [phase_fix_observable @ phase_fix_state]
 
         qfi_operators = []
         qr_ancilla = QuantumRegister(1, 'ancilla')
@@ -244,16 +244,18 @@ class QFI(GradientBase):
 
                                 qfi_circuit.h(ancilla)
                                 if k == 0 and l == 0:
-                                    qfi_op = np.abs(coeff_i) * np.abs(coeff_j) * op.coeff * \
+                                    qfi_op = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                               CircuitStateFn(qfi_circuit)
                                 else:
-                                    qfi_op += np.abs(coeff_i) * np.abs(coeff_j) * op.coeff * \
+                                    qfi_op += np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                               CircuitStateFn(qfi_circuit)
 
-                qfi_ops += [qfi_observable @ qfi_op] # add phase fix
-                #
-                # qfi_ops += [qfi_observable @ qfi_op + 0.5 * ((phase_fix_states[l]) @ (~phase_fix_states[k]) +
-                #                                              (phase_fix_states[k]) @ (~phase_fix_states[l]))] # add phase fix
+                # qfi_ops += [qfi_observable @ qfi_op] # add phase fix
+                # phase fix component
+                def phase_fix_combo_fn(x):
+                    return (-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
+                phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]], combo_fn=phase_fix_combo_fn)
+                qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
             qfi_operators.append(ListOp(qfi_ops))
         return 4 * ListOp(qfi_operators)
 

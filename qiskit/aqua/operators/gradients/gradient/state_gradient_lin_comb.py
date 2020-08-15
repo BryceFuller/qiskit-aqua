@@ -174,9 +174,9 @@ class StateGradientLinComb(GradientBase):
                                 additional_qubits=additional_qubits)
                     grad_state.h(work_q)
                     if m == 0 and k == 0:
-                        state = np.abs(coeff_i) * CircuitStateFn(grad_state)
+                        state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
                     else:
-                        state += np.abs(coeff_i) * CircuitStateFn(grad_state)
+                        state += np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
             states += [state]
             #  TODO check that all properties of op are carried over but I think so
         return ListOp(states) * op.coeff

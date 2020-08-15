@@ -58,7 +58,7 @@ class StateHessianLinComb(GradientBase):
             ListOp[ListOp] where the operator at position k,l corresponds to d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω_kdω_l
         """
         self._params = params
-        return 16 * self._prepare_operator(operator)
+        return 4 * self._prepare_operator(operator)
 
     def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
@@ -202,10 +202,10 @@ class StateHessianLinComb(GradientBase):
                                 hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
                                 if m == 0 and k == 0:
-                                    hessian_op = op.coeff * np.abs(coeff_i) * np.abs(coeff_j) * \
+                                    hessian_op = op.coeff * np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * \
                                                   CircuitStateFn(hessian_circuit)
                                 else:
-                                    hessian_op += op.coeff * np.abs(coeff_i) * np.abs(coeff_j) * \
+                                    hessian_op += op.coeff * np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * \
                                                   CircuitStateFn(hessian_circuit)
                 hessian_ops += [hessian_op]
             hessian_operators.append(ListOp(hessian_ops))

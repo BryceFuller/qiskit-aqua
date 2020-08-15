@@ -115,7 +115,7 @@ class Gradient(GradientBase):
             if isinstance(op_param, ParameterExpression):
                 if param in op_param.parameters:
                     # TODO stacked parameter expressions
-                    param_expr_grad = self._get_grad_parameter_expr(op_param, param)
+                    param_expr_grad = op_param.diff(param)
                     if op.is_measurement:
                         # Check for the corresponding state and compute observable_gradient
                         #                         raise TypeError(
@@ -147,23 +147,6 @@ class Gradient(GradientBase):
                         # state_gradient or probability_gradient
                         return StateGradient.convert(op, param, self._method)
                         # return ProbabilityGradient.convert(op, param, self._method)
-
-    def _get_grad_parameter_expr(self,
-                                 op_param: ParameterExpression,
-                                 param: Parameter) -> sympy.Expr:
-        if isinstance(operator, ListOp):
-            return operator.traverse(self.append_Z_measurement)
-        elif isinstance(operator, StateFn):
-            if operator.is_measurement == True:
-                return operator.traverse(self.append_Z_measurement)
-        elif isinstance(operator, PauliOp):
-            return (Z ^ operator)
-        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
-            # print((operator))
-
-            operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
-
-        return operator
 
 
     def _get_grad_combo_fn(self,
