@@ -15,7 +15,7 @@
 """The module for Aqua's first order derivatives."""
 
 from qiskit.aqua.operators.gradients.hessian.hessian import Hessian
-from qiskit.aqua.operators.gradients.hessian.observable_hessian import ObservableHessian
+from qiskit.aqua.operators.gradients.hessian.operator_hessian import ObservableHessian
 from qiskit.aqua.operators.gradients.hessian.prob_hessian import ProbabilityHessian
 from qiskit.aqua.operators.gradients.hessian.prob_hessian_lin_comb import ProbabilityHessianLinComb
 from qiskit.aqua.operators.gradients.hessian.prob_hessian_param_shift import ProbabilityHessianParamShift
