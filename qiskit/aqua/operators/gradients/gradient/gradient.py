@@ -59,7 +59,7 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
-        grad_combo_fn: Callable = lambda x : x,
+        # grad_combo_fn: Callable = lambda x : x,
         params: Union[ParameterVector, Parameter] = None,
         method: str = 'param_shift') -> OperatorBase:
 
