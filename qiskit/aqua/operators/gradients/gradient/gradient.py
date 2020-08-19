@@ -24,7 +24,7 @@ from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Inst
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
-from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
+from qiskit.aqua.operators.gradients.gradient.operator_gradient import ObservableGradient
 # from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
 from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
 from qiskit.aqua.operators import OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp
@@ -59,7 +59,7 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
-        grad_combo_fn: Callable = lambda x : x,
+        # grad_combo_fn: Callable = lambda x : x,
         params: Union[ParameterVector, Parameter] = None,
         method: str = 'param_shift') -> OperatorBase:
 
