@@ -50,7 +50,8 @@ class QFI(GradientBase):
 
     def convert(self,
                 operator: OperatorBase = None,
-                params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
+                params: Union[Parameter, ParameterVector, List] = None,
+                approx: str = None) -> OperatorBase:
         r"""
         Args
             operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
