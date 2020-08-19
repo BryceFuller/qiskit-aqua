@@ -77,32 +77,7 @@ class Gradient(GradientBase):
 
         param = params
 
-        """
-        All of this logic is outside of autograd because autograd doesn't currently handle 
-        the coefficient of the outermost operator. Currently autograd assumed that 
-        all operator it sees have coeff == 1. It checks and throws an error if this is not true.
-        The reason I haven't put this logic into autograd is because it will eliminate this assumption
-        that all coeffs are 1 and I like having that check there to catch any weird behavior. I will probably
-        move it inside before release though. 
-        """
-        # Separate the operator from the coefficient
-        coeff = operator._coeff
-        op = operator/coeff
-        #Get derivative of the operator (recursively)
-        d_op = self.autograd(op, param, method)
-        if d_op is None:
-            #I need this term to evaluate to 0, but it needs to be an OperatorBase type
-            #We should find a more elegant solution for this.
-            d_op = ~Zero@One
-            
-        grad_op = coeff*d_op
-            
-        if isinstance(coeff, ParameterExpression):
-            #..get derivative of the coefficient
-            d_coeff = self.parameter_expression_grad(coeff, param)
-            grad_op += d_coeff*op
-            
-        return grad_op
+        return self.autograd(operator, param, method)
 
     #NOTE, the coeff of the highest level operator is not handled by any of this code. 
     #Can assume only 1 parameter. If more are passed in we immediately reduce to the case of 1 at a time. 
@@ -114,8 +89,6 @@ class Gradient(GradientBase):
                 expr = coeff._symbol_expr
                 return expr==1.0
             return coeff==1
-        
-        assert is_coeff_one(operator._coeff)
 
         if isinstance(params, (ParameterVector, List)):
             param_grads = [self.autograd(operator, param, method) for param in params]
@@ -128,6 +101,28 @@ class Gradient(GradientBase):
         
         #by this point, it's only one parameter
         param = params
+
+        #Handle Product Rules
+        if not is_coeff_one(operator._coeff):
+            # Separate the operator from the coefficient
+            coeff = operator._coeff
+            op = operator/coeff
+            #Get derivative of the operator (recursively)
+            d_op = self.autograd(op, param, method)
+            #..get derivative of the coeff
+            d_coeff = self.parameter_expression_grad(coeff, param)
+
+            if d_op is None:
+                #I need this term to evaluate to 0, but it needs to be an OperatorBase type
+                #We should find a more elegant solution for this.
+                d_op = ~Zero@One
+            grad_op = coeff*d_op
+   
+            #if the deriv of the coeff is not zero, then apply the product rule
+            if d_coeff._symbol_expr != 0:
+                grad_op += d_coeff*op
+
+            return grad_op
         
         #Base Case, you've hit a ComposedOp!
         #Prior to execution, the composite operator was standardized and coefficients were collected.
@@ -154,28 +149,7 @@ class Gradient(GradientBase):
             
         #This is the recursive case where the chain rule is handled
         elif isinstance(operator, ListOp):  
-            ops = operator.oplist
-            grad_ops = []        
-            for oper in ops:
-                #ListOp( {c(x_0)g(x_0), c(x_1)g(x_1)  }  )
-                #For the ith operator in this ListOp...
-                # ...get the coefficient
-                coeff = oper._coeff
-                # ...and separate the operator from the coefficient
-                op = oper/coeff
-                #..get derivative of the coefficient
-                d_coeff = self.parameter_expression_grad(coeff, param)
-                #get derivative of the operator
-                #This will be a recursive call in practice.
-                d_op = self.autograd(op, param, method)
-                #Think harder about this
-                if d_op is None:
-                    #I need this term to evaluate to 0, but it needs to be an OperatorBase type
-                    #We should find a more elegant solution for this.
-                    d_op = ~Zero@One
-                
-                grad_op = d_coeff*op + coeff*d_op
-                grad_ops.append(grad_op)
+            grad_ops = [self.autograd(op, param, method) for op in operator.oplist]        
                 
             #Note that this check to see if the ListOp has a default combo_fn
             # will fail if the user manually specifies the default combo_fn. 
@@ -197,7 +171,7 @@ class Gradient(GradientBase):
             # (for example, using probability gradients)
             # I think this is a problem more generally, not just in this subroutine. 
             grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=ops+grad_ops, combo_fn=grad_combo_fn)
+            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
             
         elif isinstance(operator, StateFn):
             if operator._is_measurement:
