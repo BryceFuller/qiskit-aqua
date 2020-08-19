@@ -14,7 +14,7 @@
 
 """The module for Aqua's first order derivatives."""
 
-from qiskit.aqua.operators.gradients.qfi.qfi import QFI
+from .qfi import QFI
 
 
 __all__ = ['QFI']

@@ -14,14 +14,14 @@
 
 """The module for Aqua's first order derivatives."""
 
-from qiskit.aqua.operators.gradients.hessian.hessian import Hessian
-from qiskit.aqua.operators.gradients.hessian.observable_hessian import ObservableHessian
-from qiskit.aqua.operators.gradients.hessian.prob_hessian import ProbabilityHessian
-from qiskit.aqua.operators.gradients.hessian.prob_hessian_lin_comb import ProbabilityHessianLinComb
-from qiskit.aqua.operators.gradients.hessian.prob_hessian_param_shift import ProbabilityHessianParamShift
-from qiskit.aqua.operators.gradients.hessian.state_hessian import StateHessian
-from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
-from qiskit.aqua.operators.gradients.hessian.state_hessian_param_shift import StateHessianParamShift
+from .hessian import Hessian
+from .observable_hessian import ObservableHessian
+from .prob_hessian import ProbabilityHessian
+from .prob_hessian_lin_comb import ProbabilityHessianLinComb
+from .prob_hessian_param_shift import ProbabilityHessianParamShift
+from .state_hessian import StateHessian
+from .state_hessian_lin_comb import StateHessianLinComb
+from .state_hessian_param_shift import StateHessianParamShift
 
 __all__ = ['Hessian',
            'ObservableHessian',

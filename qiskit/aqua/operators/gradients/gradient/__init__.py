@@ -14,14 +14,14 @@
 
 """The module for Aqua's first order derivatives."""
 
-from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
-from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
-from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
-from qiskit.aqua.operators.gradients.gradient.prob_gradient_lin_comb import ProbabilityGradientLinComb
-from qiskit.aqua.operators.gradients.gradient.prob_gradient_param_shift import ProbabilityGradientParamShift
-from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
-from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
-from qiskit.aqua.operators.gradients.gradient.state_gradient_param_shift import StateGradientParamShift
+from .gradient import Gradient
+from .observable_gradient import ObservableGradient
+from .prob_gradient import ProbabilityGradient
+from .prob_gradient_lin_comb import ProbabilityGradientLinComb
+from .prob_gradient_param_shift import ProbabilityGradientParamShift
+from .state_gradient import StateGradient
+from .state_gradient_lin_comb import StateGradientLinComb
+from .state_gradient_param_shift import StateGradientParamShift
 
 __all__ = ['Gradient',
            'ObservableGradient',
