@@ -705,6 +705,8 @@ def cost_estimate_sigmoid(shots, probs, gt_labels):
     # x = cost_estimate(shots, probs, gt_labels)
     x = cost_estimate(probs, gt_labels, shots)
     loss = (1.) / (1. + np.exp(-x))
+    # Todo delete below
+    print('Loss ', loss)
     return loss
 
 

@@ -135,7 +135,7 @@ class DiscriminatorNet():
            weights (numpy.ndarray): customized scaling for each sample (optional)
 
         Returns:
-            tuple(numpy.ndarray, numpy.ndarray): parameter gradients
+            tuple(numpy.ndarray, numpy.ndarray): parameter gradient
         """
 
         def sigmoid_backward(da, z):
