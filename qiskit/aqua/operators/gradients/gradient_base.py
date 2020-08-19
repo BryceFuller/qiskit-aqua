@@ -72,7 +72,8 @@ class GradientBase(ConverterBase):
     #  for example, if operator contains multiple different circuits,
     #  then we may need to worry about name collisions!
 
-    def parameter_shift(operator: OperatorBase,
+    def parameter_shift(self,
+                        operator: OperatorBase,
                         params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
         r"""
         Args:
@@ -83,7 +84,7 @@ class GradientBase(ConverterBase):
             param_shifted_op: A ListOp of SummedOps corresponding to [r*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
         """
         if isinstance(params, (ParameterVector, List)):
-            param_grads = [parameter_shift(operator, param) for param in params]
+            param_grads = [self.parameter_shift(operator, param) for param in params]
             absent_params = [params[i] for i,grad_ops in enumerate(param_grads) if grad_ops is None]
             if len(absent_params) > 0:
                 raise ValueError("The following parameters do not appear in the provided operator: ", absent_params)
@@ -95,7 +96,7 @@ class GradientBase(ConverterBase):
         if not isinstance(param, Parameter):
             raise ValueError
         if isinstance(operator, ListOp) and not isinstance(operator, ComposedOp):
-            return_op = operator.traverse(partial(parameter_shift, params=param))
+            return_op = operator.traverse(partial(self.parameter_shift, params=param))
             
             #Remove any branch of the tree where the relevant parameter does not occur
             trimmed_oplist = [op for op in return_op.oplist if op is not None]
