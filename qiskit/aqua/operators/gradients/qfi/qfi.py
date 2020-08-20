@@ -18,6 +18,7 @@ from typing import Optional, Tuple, List, Dict, Union, Callable
 import warnings
 
 import numpy as np
+from scipy.linalg import block_diag
 import copy
 from copy import deepcopy
 from functools import partial, reduce, cmp_to_key
@@ -26,11 +27,14 @@ from qiskit import QuantumCircuit, QuantumRegister
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
+
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp, SummedOp
+
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from ...expectations import PauliExpectation 
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
+
 from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, X, Zero, One
 
 from qiskit.aqua import QuantumInstance
@@ -56,13 +60,21 @@ class QFI(GradientBase):
         Args
             operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
+            approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
         Returns
-            ListOp[ListOp] where the operator at position k,l corresponds to [QFI]kl
+            ListOp[ListOp] where the operator at position k,l corresponds to QFI_kl
         """
         # TODO integrate diagonal without ancilla
         # self._params = params
+        if approx is None:
+            return self._qfi_states(operator, params)
+        elif approx is 'diagonal':
+            return self.diagonal_qfi(operator)
+        elif approx is 'block_diagonal':
+            pass
+        else:
+            raise ValueError("Unrecognized input provided for approx. Valid inputs include [None, 'diagonal', 'block_diagonal']")
 
-        return self._qfi_states(operator, params)
 
     # def _prepare_operator(self, operator):
     #     if isinstance(operator, ListOp):
@@ -77,6 +89,7 @@ class QFI(GradientBase):
     #         operator = self._qfi_states(operator, self._params)
     #     return operator
 
+    #TODO This probably should have a more intuitive name.    
     def _qfi_states(self, op: OperatorBase,
                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
@@ -189,6 +202,7 @@ class QFI(GradientBase):
         # Get the circuits needed to compute A_ij
         for i in range(len(params)): #loop over parameters
             qfi_ops = []
+
             # j = 0
             # while j <= i: #loop over parameters
             for j in range(len(params)):
@@ -236,8 +250,8 @@ class QFI(GradientBase):
                                 What speaks against it is the new way to compute the phase fix directly within 
                                 the observable here the trimming wouldn't work. The other way would be more efficient
                                 in terms of computation but this is more convenient to write it.'''
-
                                 # Remove redundant gates
+
                                 if j <= i:
                                     qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[i]][m])
                                 else:
@@ -260,137 +274,123 @@ class QFI(GradientBase):
             qfi_operators.append(ListOp(qfi_ops))
         return 4 * ListOp(qfi_operators)
 
-    def old_convert(self, operator: OperatorBase,
-                approximation: str = 'diagonal',
-                method: str = 'no_ancilla') -> OperatorBase:
-        r"""
-        Args:
-            operator: The operator for which we are generating the Quantum Fisher Information Metric Tensor
-            parameters: The parameters over which the metric tensor is being evaluated
+    def block_diagonal_qfi(self, 
+                           operator: Union[CircuitOp,CircuitStateFn],
+                           target_params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
+        
+        if not isinstance(operator, (CircuitOp,CircuitStateFn)):
+            raise NotImplementedError
 
-        Returns:
-            metric_operator: An operator whose evaluation yeilds the QFI metric tensor
-        """
+        circuit = operator.primitive
 
-        if approximation == 'block_diagonal' and method == 'no_ancilla':
+        #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
+        layers = self.partition_circuit(circuit)
+        if layers[-1].num_parameters == 0:
+            layers.pop(-1)
+            
+        psis = [CircuitOp(layer) for layer in layers]
+        for i, psi in enumerate(psis):
+            if i == 0:  continue
+            psis[i] = psi@psis[i-1]
 
-            if not isinstance(operator, (CircuitOp,CircuitStateFn)):
-                raise NotImplementedError
+        #Get generators
+        #TODO: make this work for other types of rotations
+        #NOTE: This assumes that each parameter only affects one rotation.
+        # we need to think more about what happens if multiple rotations 
+        # are controlled with a single parameter. 
+        #TODO: currently the input: target_params is ignored. This should either be removed, 
+        # or logic should be added to prevent evaluating the QFI on certain params. 
+        params = circuit.ordered_parameters
+        generators = self.get_generators(params,circuit)
 
-            circuit = operator.primitive
+        blocks = []
 
-            #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
-            layers = self.partition_circuit(circuit)
-            if layers[-1].num_parameters == 0:
-                layers.pop(-1)
-                
-            psis = [CircuitOp(layer) for layer in layers]
-            for i, psi in enumerate(psis):
-                if i == 0:  continue
-                psis[i] = psi@psis[i-1]
+        for l, psi_l in enumerate(psis):
 
-            #Get generators
-            #TODO: make this work for other types of rotations
-            #NOTE: This assumes that each parameter only affects one rotation.
-            # we need to think more about what happens if multiple rotations 
-            # are controlled with a single parameter. 
-            params = circuit.ordered_parameters
-            generators = self.get_generators(params,circuit)
+            params = self.sort_params(psi_l.primitive.parameters)
 
-            blocks = []
+            block = np.zeros((len(params),len(params))).tolist()
+            
 
-            for l, psi_l in enumerate(psis):
-
-                params = self.sort_params(psi_l.primitive.parameters)
-
-                block = np.zeros((len(params),len(params))).tolist()
-                
-
-                #calculate all single-operator terms <psi_l|K_i|psi_l>
-                single_terms = np.zeros(len(params)).tolist()
-                for i, pi in enumerate(params):
-                    K = generators[pi]
-                    psi_Ki = ~StateFn(K) @ psi_l @ Zero
-                    psi_Ki = PauliExpectation().convert(psi_Ki)
-                    single_terms[i] = psi_Ki
+            #calculate all single-operator terms <psi_l|K_i|psi_l>
+            single_terms = np.zeros(len(params)).tolist()
+            for i, pi in enumerate(params):
+                K = generators[pi]
+                psi_Ki = ~StateFn(K) @ psi_l @ Zero
+                psi_Ki = PauliExpectation().convert(psi_Ki)
+                single_terms[i] = psi_Ki
 
 
-                
-                #Calculate all double-operator terms <psi_l|K_j @ K_i|psi_l>
-                # and build composite operators for each matrix entry
-                for i, pi in enumerate(params):
-                    Ki = generators[pi]
-                    for j, pj in enumerate(params):
+            
+            #Calculate all double-operator terms <psi_l|K_j @ K_i|psi_l>
+            # and build composite operators for each matrix entry
+            for i, pi in enumerate(params):
+                Ki = generators[pi]
+                for j, pj in enumerate(params):
 
-                        if i == j:
-                            block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: [1-y**2 for y in x])
-                            continue
+                    if i == j:
+                        block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: [1-y**2 for y in x])
+                        continue
 
-                        Kj = generators[pj]
-                        K = ~Kj @ Ki
+                    Kj = generators[pj]
+                    K = ~Kj @ Ki
 
-                        psi_KjKi = ~StateFn(K) @ psi_l @ Zero
-                        psi_KjKi = PauliExpectation().convert(psi_KjKi)
-                        cross_term = ListOp(oplist = [single_terms[i],single_terms[j]], combo_fn= lambda x: np.prod(x))
-                        block[i][j] = psi_KjKi - cross_term
+                    psi_KjKi = ~StateFn(K) @ psi_l @ Zero
+                    psi_KjKi = PauliExpectation().convert(psi_KjKi)
+                    cross_term = ListOp(oplist = [single_terms[i],single_terms[j]], combo_fn= lambda x: np.prod(x))
+                    block[i][j] = psi_KjKi - cross_term
 
-                blocks.append(block)
+            wrapped_block = ListOp([ListOp(row) for row in block])
+            blocks.append(wrapped_block)
 
-            qfi = blocks[0]
-            if len(blocks) > 1:
-                for block in blocks[1:]:
-                    qfi = block_diag(qfi, block)
+        block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: block_diag(x))
+        return block_diagonal_qfi
 
-            #for i, row in enumerate(qfi):
-            #    qfi[i] = ListOp(row)
-            #qfi = ListOp(qfi)
+    def diagonal_qfi(self, 
+                     operator: Union[CircuitOp,CircuitStateFn],
+                     target_params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
+       
+        if not isinstance(operator, (CircuitOp,CircuitStateFn)):
+            raise NotImplementedError
 
-            return qfi
+        circuit = operator.primitive
 
-        # layers = partition_circuit()
-        elif approximation == 'diagonal' and method == 'no_ancilla':
+        #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
+        layers = self.partition_circuit(circuit)
+        if layers[-1].num_parameters == 0:
+            layers.pop(-1)
+            
+        psis = [CircuitOp(layer) for layer in layers]
+        for i, psi in enumerate(psis):
+            if i == 0:  continue
+            psis[i] = psi@psis[i-1]
 
-            if not isinstance(operator, (CircuitOp,CircuitStateFn)):
-                raise NotImplementedError
+        #Get generators
+        #TODO: make this work for other types of rotations
+        #NOTE: This assumes that each parameter only affects one rotation.
+        # we need to think more about what happens if multiple rotations 
+        # are controlled with a single parameter. 
+        #TODO: currently the input: target_params is ignored. This should either be removed, 
+        # or logic should be added to prevent evaluating the QFI on certain params. 
+        params = circuit.ordered_parameters
+        generators = self.get_generators(params,circuit)
 
-            circuit = operator.primitive
-
-            #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
-            layers = self.partition_circuit(circuit)
-            if layers[-1].num_parameters == 0:
-                layers.pop(-1)
-                
-            psis = [CircuitOp(layer) for layer in layers]
-            for i, psi in enumerate(psis):
-                if i == 0:  continue
-                psis[i] = psi@psis[i-1]
-
-            #Get generators
-            #TODO: make this work for other types of rotations
-            #NOTE: This assumes that each parameter only affects one rotation.
-            # we need to think more about what happens if multiple rotations 
-            # are controlled with a single parameter. 
-            params = circuit.ordered_parameters
-            generators = self.get_generators(params,circuit)
-
-            diag = []
-            for param in params:
-                K = generators[param]
-                meas_op = ~StateFn(K)
-                
-                #get appropriate psi_l
-                psi = [(psi) for psi in psis if param in psi.primitive.parameters][0]
-                
-                op = meas_op @ psi @ Zero
-                rotated_op = PauliExpectation().convert(op)
-                diag.append(rotated_op)
-                
-            grad_op = ListOp(oplist=diag, combo_fn=lambda x: [1-y**2 for y in x])
-            return grad_op
-
-
-
+        diag = []
+        for param in params:
+            K = generators[param]
+            meas_op = ~StateFn(K)
+            
+            #get appropriate psi_l
+            psi = [(psi) for psi in psis if param in psi.primitive.parameters][0]
+            
+            op = meas_op @ psi @ Zero
+            rotated_op = PauliExpectation().convert(op)
+            diag.append(rotated_op)
+            
+        grad_op = ListOp(oplist=diag, combo_fn=lambda x: np.diag([1-y**2 for y in x]))
         return grad_op
+
+
 
     def partition_circuit(self, circuit):
         dag = circuit_to_dag(circuit)

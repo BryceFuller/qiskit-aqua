@@ -182,6 +182,7 @@ class VQEAdapt(VQAlgorithm):
                             str(np.abs(max_grad[0])))
                 threshold_satisfied = True
                 break
+
             # check indices of picked gradients for cycles
             if VQEAdapt._check_cyclicity(prev_op_indices):
                 logger.info("Alternating sequence found. Finishing.")

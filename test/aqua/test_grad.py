@@ -21,17 +21,20 @@ from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
 
+
 from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
 from qiskit.aqua.operators.gradients.gradient.prob_gradient_lin_comb import ProbabilityGradientLinComb
 from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI
 
 from qiskit.aqua.operators import X, Z, StateFn, CircuitStateFn
+
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter
 import numpy as np
 
 from qiskit.aqua import QuantumInstance, aqua_globals
+
 
 
 # from .gradient import Gradient
@@ -68,7 +71,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.h(q)
         qc.rz(params[0], q[0])
         qc.rx(params[1], q[0])
-
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
         state_grad = StateGradientLinComb().convert(operator=op, params=params)
@@ -118,7 +120,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         self.assertTrue(correct_grad)
 
     def test_prob_lin_comb_grad(self):
-
         """Test the ancilla probability gradient
         dp0/da = cos(a)sin(b) / 2
         dp1/da = - cos(a)sin(b) / 2
@@ -172,6 +173,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         # for param, elements in qc._parameter_table.items():
         #     for element in elements:
         #         parameterized_gates.append(element[0])
+
 
         op = CircuitStateFn(primitive=qc, coeff=1.)
         qfi = QFI().convert(operator=op, params=params)

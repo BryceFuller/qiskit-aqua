@@ -3,7 +3,6 @@ from qiskit.aqua.operators import (StateFn, Zero, One, Plus, Minus,
                                    CircuitOp)
 from qiskit.aqua.operators.operator_globals import H, S, I, Z
 import numpy as np
-
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, ParameterExpression
 

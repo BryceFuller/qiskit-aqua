@@ -18,6 +18,8 @@ from typing import Optional, Callable, Union, List, Tuple
 import logging
 from functools import partial, reduce
 import numpy as np
+import sympy as sy
+from copy import deepcopy
 
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
@@ -27,19 +29,20 @@ from qiskit.circuit.controlledgate import ControlledGate
 from qiskit.circuit import Gate, Instruction, Qubit
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
-
 from ..converters import CircuitSampler
+
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
 from ..primitive_ops.pauli_op import PauliOp
 from ..primitive_ops.circuit_op import CircuitOp
 from ..list_ops.list_op import ListOp
+from ..list_ops.summed_op import SummedOp
 from ..list_ops.composed_op import ComposedOp
+from ..list_ops.tensored_op import TensoredOp
 from ..state_fns.state_fn import StateFn
 from ..state_fns.circuit_state_fn import CircuitStateFn
-from ..operator_globals import H, S, I
+from ..operator_globals import H, S, I, Zero, One
 from ..converters.converter_base import ConverterBase
-
 
 logger = logging.getLogger(__name__)
 
@@ -111,9 +114,25 @@ class GradientBase(ConverterBase):
     #  for example, if operator contains multiple different circuits,
     #  then we may need to worry about name collisions!
 
+    def parameter_expression_grad(self, pe, param):
+        deriv =sy.diff(sy.sympify(str(pe)), param)
+        
+        symbol_map = {}
+        symbols = deriv.free_symbols
+        
+        for s in symbols:
+            for p in pe.parameters:
+                if s.name == p.name:
+                    symbol_map[p] = s
+                    break
+        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+        
+        return ParameterExpression(symbol_map, deriv)
+
     def parameter_shift(self,
                         operator: OperatorBase,
-                        params: Union[ParameterExpression, Parameter, ParameterVector, List]) -> OperatorBase:
+                        params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
+
         r"""
         Args:
             operator: the operator containing circuits we are taking the derivative of
@@ -150,7 +169,9 @@ class GradientBase(ConverterBase):
         
         else:
             
-            circs = get_unique_circuits(operator)
+
+            circs = self.get_unique_circuits(operator)
+
             if len(circs) > 1:
                 #Understand how this happens
                 raise Error
@@ -167,11 +188,13 @@ class GradientBase(ConverterBase):
                 #Implement the gradient for this particular rotation.
                 # Here is where future logic will go that decomposes more 
                 # complicated rotations
-                pshift_op = copy.deepcopy(operator)
-                mshift_op = copy.deepcopy(operator)
+                pshift_op = deepcopy(operator)
+                mshift_op = deepcopy(operator)
+
                 #We need the circuit objects of the newly instantiated operators
-                pshift_circ = get_unique_circuits(pshift_op)[0]
-                mshift_circ = get_unique_circuits(mshift_op)[0]
+                pshift_circ = self.get_unique_circuits(pshift_op)[0]
+                mshift_circ = self.get_unique_circuits(mshift_op)[0]
+
 
                 pshift_gate = pshift_circ._parameter_table[param][i][0]
                 mshift_gate = mshift_circ._parameter_table[param][i][0]
@@ -184,6 +207,9 @@ class GradientBase(ConverterBase):
 
                 pshift_gate.params[pshift_index] = (p_param + (np.pi/4))
                 mshift_gate.params[mshift_index] = (m_param - (np.pi/4))
+                
+                #TODO: Add check that asserts a NotImplementedError if a non-pauli gate is given. 
+
 
                 #Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
@@ -195,6 +221,7 @@ class GradientBase(ConverterBase):
 
     def gate_gradient_dict(self,
                            gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
+
 
         """Given a parameterized gate U(theta) with derivative dU(theta)/dtheta = sum_ia_iU(theta)V_i.
            This function returns a:=[a_0, ...] and V=[V_0, ...]
@@ -262,6 +289,7 @@ class GradientBase(ConverterBase):
             # TODO support arbitrary control states
             if gate.ctrl_state != 2**gate.num_ctrl_qubits - 1:
                 raise AquaError('Function only support controlled gates with control state `1` on all control qubits.')
+
             base_coeffs_gates = self.gate_gradient_dict(gate.base_gate)
             coeffs_gates = []
             # The projectors needed for the gradient of a controlled gate are integrated by a sum of gates.
@@ -288,6 +316,49 @@ class GradientBase(ConverterBase):
             return coeffs_gates
 
         raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
+
+    def unroll_operator(self, operator):
+    
+        def unroll_traverse(operator):
+            if isinstance(operator, ListOp):
+                #Traverse the elements in the ListOp
+                print(operator)
+                print([type(op) for op in operator])
+                res = [op.traverse(unroll_traverse) if hasattr( op,'traverse') else op for op in operator]
+                #Separate out the lists from non-list elements
+                lists = [l for l in res if isinstance(l, (List, ListOp))]
+                not_lists = [r for r in res if not isinstance(r, (List, ListOp))]
+                #unroll the list elements and recombine everything
+                unrolled = [y for x in lists for y in x]
+                res = not_lists + unrolled
+                return res
+            return operator
+        
+        #When unroll_traverse terminates, there will still be 
+        # one last layer of nested lists to unroll. (computational tree will be depth <=2)
+        unrolled_op = operator.traverse(unroll_traverse)
+        if not isinstance(unrolled_op, Iterable):
+            return [unrolled_op]
+        lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
+        not_lists = [r for r in unrolled_op if not isinstance(r, (List, ListOp))]
+        #unroll the list elements and recombine everything
+        unrolled = [y for x in lists for y in x]
+        return not_lists + unrolled
+
+    def get_unique_circuits(self, operator):
+        
+        def get_circuit(op):
+            if isinstance(op, (CircuitStateFn, CircuitOp)):
+                return op.primitive
+        
+        unrolled_op = self.unroll_operator(operator)
+        circs = [get_circuit(op) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
+        
+        no_duplicates = []
+        [no_duplicates.append(i) for i in circs if i not in no_duplicates]
+        return no_duplicates
+
+
 
     def insert_gate(self,
                     circuit: QuantumCircuit,
@@ -329,6 +400,7 @@ class GradientBase(ConverterBase):
             raise AquaError('Could not insert the controlled gate, something went wrong!')
 
 
+
     def trim_circuit(self,
                      circuit: QuantumCircuit,
                      reference_gate: Gate) -> QuantumCircuit:
@@ -365,6 +437,7 @@ class GradientBase(ConverterBase):
                 #Traverse the elements in the ListOp
                 res = [op.traverse(unroll_traverse) for op in operator]
                 #Separate out the lists from non-list elements
+
                 lists = [l for l in res if isinstance(l, (List, ListOp))]
                 not_lists = [r for r in res if not isinstance(r, (List,ListOp))]
                 #unroll the list elements and recombine everything
@@ -376,6 +449,7 @@ class GradientBase(ConverterBase):
         #When unroll_traverse terminates, there will still be 
         # one last layer of nested lists to unroll. (computational tree will be depth <=2)
         unrolled_op = operator.traverse(unroll_traverse)
+
         lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
         not_lists = [r for r in unrolled_op if not isinstance(r, (List,ListOp))]
         #unroll the list elements and recombine everything
