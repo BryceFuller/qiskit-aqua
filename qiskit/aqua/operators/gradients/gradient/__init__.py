@@ -15,7 +15,7 @@
 """The module for Aqua's first order derivatives."""
 
 from .gradient import Gradient
-from .observable_gradient import ObservableGradient
+from .operator_gradient import ObservableGradient
 from .prob_gradient import ProbabilityGradient
 from .prob_gradient_lin_comb import ProbabilityGradientLinComb
 from .prob_gradient_param_shift import ProbabilityGradientParamShift
