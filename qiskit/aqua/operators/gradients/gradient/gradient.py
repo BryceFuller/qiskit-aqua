@@ -29,9 +29,12 @@ from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
 from qiskit.aqua.operators.gradients.gradient.operator_gradient import ObservableGradient
-# from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
 from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
-from qiskit.aqua.operators import OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp
+
+from qiskit.aqua.operators.operator_globals import H, S, I, X, Y, Z, Zero, One
+from qiskit.aqua.operators import (OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, 
+                                  CircuitStateFn, StateFn, OperatorStateFn, CircuitOp, 
+                                  MatrixOp, PrimitiveOp, PauliOp)
 
 
 
