@@ -15,7 +15,7 @@
 """The module for Aqua's first order derivatives."""
 
 from .hessian import Hessian
-from .observable_hessian import ObservableHessian
+from .operator_hessian import ObservableHessian
 from .prob_hessian import ProbabilityHessian
 from .prob_hessian_lin_comb import ProbabilityHessianLinComb
 from .prob_hessian_param_shift import ProbabilityHessianParamShift
