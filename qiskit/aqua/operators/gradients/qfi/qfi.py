@@ -64,14 +64,19 @@ class QFI(GradientBase):
         Returns
             ListOp[ListOp] where the operator at position k,l corresponds to QFI_kl
         """
-        # TODO integrate diagonal without ancilla
-        # self._params = params
+        
+        #Currently there's some ambiguity about how parameters are ordered that needs to be 
+        #decided. In particular with cases where a parameter occurs more than once in a circuit,
+        # where more than one circuit are provided. One option might be to include a method that returns the parameter 
+        # ordering and allow the user to call it directly to ask for the parameters. Or create an input argument to 
+        # specify if the parameter mapping should be returned. 
+
         if approx is None:
             return self._qfi_states(operator, params)
         elif approx is 'diagonal':
             return self.diagonal_qfi(operator)
         elif approx is 'block_diagonal':
-            pass
+            return self.block_diagonal_qfi(operator)
         else:
             raise ValueError("Unrecognized input provided for approx. Valid inputs include [None, 'diagonal', 'block_diagonal']")
 
@@ -287,6 +292,9 @@ class QFI(GradientBase):
         layers = self.partition_circuit(circuit)
         if layers[-1].num_parameters == 0:
             layers.pop(-1)
+
+        block_params = [self.sort_params(layer.parameters) for layer in layers]
+
             
         psis = [CircuitOp(layer) for layer in layers]
         for i, psi in enumerate(psis):
@@ -307,8 +315,7 @@ class QFI(GradientBase):
 
         for l, psi_l in enumerate(psis):
 
-            params = self.sort_params(psi_l.primitive.parameters)
-
+            params = block_params[l]
             block = np.zeros((len(params),len(params))).tolist()
             
 
@@ -320,8 +327,6 @@ class QFI(GradientBase):
                 psi_Ki = PauliExpectation().convert(psi_Ki)
                 single_terms[i] = psi_Ki
 
-
-            
             #Calculate all double-operator terms <psi_l|K_j @ K_i|psi_l>
             # and build composite operators for each matrix entry
             for i, pi in enumerate(params):
@@ -329,7 +334,7 @@ class QFI(GradientBase):
                 for j, pj in enumerate(params):
 
                     if i == j:
-                        block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: [1-y**2 for y in x])
+                        block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: 1-x[0]**2)
                         continue
 
                     Kj = generators[pj]
@@ -342,8 +347,8 @@ class QFI(GradientBase):
 
             wrapped_block = ListOp([ListOp(row) for row in block])
             blocks.append(wrapped_block)
-
-        block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: block_diag(x))
+            
+        block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: np.real(block_diag(*x)))
         return block_diagonal_qfi
 
     def diagonal_qfi(self, 
