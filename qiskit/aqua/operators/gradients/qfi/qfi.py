@@ -26,18 +26,19 @@ from qiskit import QuantumCircuit, QuantumRegister
 
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
+
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp, SummedOp
+
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from ...expectations import PauliExpectation 
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
-from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, Zero, One
 
-from qiskit.circuit.library.standard_gates import HGate, XGate, SdgGate, SGate, ZGate
+from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, X, Zero, One
 
 from qiskit.aqua import QuantumInstance
 from qiskit.converters import dag_to_circuit, circuit_to_dag
-from qiskit.circuit.library import RYGate, RZGate, RXGate
+from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
 from qiskit.dagcircuit  import DAGCircuit
 from qiskit.quantum_info import Pauli
 
@@ -52,7 +53,8 @@ class QFI(GradientBase):
 
     def convert(self,
                 operator: OperatorBase = None,
-                params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
+                params: Union[Parameter, ParameterVector, List] = None,
+                approx: str = None) -> OperatorBase:
         r"""
         Args
             operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
@@ -60,26 +62,31 @@ class QFI(GradientBase):
         Returns
             ListOp[ListOp] where the operator at position k,l corresponds to [QFI]kl
         """
-        # TODO choose for which parameters we want the QFI
         # TODO integrate diagonal without ancilla
-        if isinstance(operator, ListOp):
-            for op in operator.oplist:
-                # TODO traverse through operator and get the states to compute the QFI for
-                # TODO inplace
-                # TODO Do this for every independent circuit, rest of product rule to be handled here
-                op = self._ancilla_grad_states(op) # TODO change this inplace
+        # self._params = params
 
-            # TODO iterate through params and check if in op - create list/dict to store the params locations
-        else:
-            operator = self._ancilla_grad_states(operator) # change this inplace
+        return self._qfi_states(operator, params)
 
-        return operator
+    # def _prepare_operator(self, operator):
+    #     if isinstance(operator, ListOp):
+    #         return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, StateFn):
+    #         if operator.is_measurement == True:
+    #             return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, PrimitiveOp):
+    #         return 4 * Z ^ ((I ^ operator.num_qubits) - operator)
+    #     if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
+    #         # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
+    #         operator = self._qfi_states(operator, self._params)
+    #     return operator
 
-    def _ancilla_qfi(self, op: OperatorBase) -> ListOp:
+    def _qfi_states(self, op: OperatorBase,
+                    target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
             op: The operator representing the quantum state for which we compute the QFI.
+            target_params: The parameters we are computing the QFI wrt: ω
 
         Returns:
             Operators which give the QFI.
@@ -90,8 +97,11 @@ class QFI(GradientBase):
             AquaError: If one of the circuits could not be constructed.
         """
         # QFI & phase fix observable
-        qfi_observable = 4 * ((I ^ op.num_qubits) ^ Z - op ^ Z)
-        # phase_fix_observable = (I ^ op.num_qubits) ^ (X + 1j * Y)  # see https://arxiv.org/pdf/quant-ph/0108146.pdf
+        qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
+        phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
+        # TODO uncomment
+        # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
+        # see https://arxiv.org/pdf/quant-ph/0108146.pdf
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
         # Dictionary which relates the coefficients needed for the QFI for every parameter
@@ -104,14 +114,17 @@ class QFI(GradientBase):
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
         elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum.convert(op)  # Todo inplace
+            op = DictToCircuitSum.convert(op)
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
-            params.append(param)
-            gates_to_parameters[param] = []
+            if param not in target_params:
+                continue
+            if param not in params:
+                params.append(param)
+                gates_to_parameters[param] = []
             qfi_coeffs[param] = []
             qfi_gates[param] = []
             for element in elements:
@@ -122,6 +135,49 @@ class QFI(GradientBase):
                     qfi_coeffs[param].append(c_g[0])
                     qfi_gates[param].append(c_g[1])
 
+        phase_fix_states = []
+        qr_work = QuantumRegister(1, 'work_qubit')
+        work_q = qr_work[0]
+        additional_qubits = ([work_q], [])
+        # create a copy of the original state with an additional work_q register
+        # Get the states needed to compute the gradient
+        for i in range(len(params)):  # loop over parameters
+            # construct the states
+            for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
+                for k, gate_to_insert_i in enumerate(gates_to_insert_i):
+                    grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
+                    grad_state.data = state_qc.data
+                    # apply Hadamard on work_q
+                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q])
+                    # Fix work_q phase
+                    coeff_i = qfi_coeffs[params[i]][m][k]
+                    sign = np.sign(coeff_i)
+                    complex = np.iscomplex(coeff_i)
+                    if sign == -1:
+                        if complex:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
+                                        qubits=[work_q])
+                        else:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
+                                        qubits=[work_q])
+                    else:
+                        if complex:
+                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
+                                        qubits=[work_q])
+                    # Insert controlled, intercepting gate - controlled by |0>
+                    self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
+                                gate_to_insert_i,
+                                additional_qubits=additional_qubits)
+
+                    grad_state = self.trim_circuit(grad_state, gates_to_parameters[params[i]][m])
+
+                    grad_state.h(work_q)
+                    if m == 0 and k == 0:
+                        phase_fix_state = np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+                    else:
+                        phase_fix_state += np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+            phase_fix_states += [phase_fix_observable @ phase_fix_state]
+
         qfi_operators = []
         qr_ancilla = QuantumRegister(1, 'ancilla')
         ancilla = qr_ancilla[0]
@@ -129,14 +185,14 @@ class QFI(GradientBase):
         # create a copy of the original circuit with an additional ancilla register
         circuit = QuantumCircuit(*state_qc.qregs, qr_ancilla)
         circuit.data = state_qc.data
-        params = list(gates_to_parameters.keys())
+        # params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
         self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
                     qubits=[ancilla])
         # Get the circuits needed to compute A_ij
         for i in range(len(params)): #loop over parameters
             qfi_ops = []
-            # TODO Check if this overhead can be reduced or is cached by/with the OpFlow
+
             # j = 0
             # while j <= i: #loop over parameters
             for j in range(len(params)):
@@ -184,18 +240,29 @@ class QFI(GradientBase):
                                 What speaks against it is the new way to compute the phase fix directly within 
                                 the observable here the trimming wouldn't work. The other way would be more efficient
                                 in terms of computation but this is more convenient to write it.'''
-
                                 # Remove redundant gates
-                                # qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[i]][m])
+
+                                if j <= i:
+                                    qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[i]][m])
+                                else:
+                                    qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[j]][n])
 
                                 qfi_circuit.h(ancilla)
-                                if m == 0 and k == 0:
-                                    qfi_op = [np.abs(coeff_i) * np.abs(coeff_j) * CircuitStateFn(qfi_circuit)]
+                                if k == 0 and l == 0:
+                                    qfi_op = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
+                                              CircuitStateFn(qfi_circuit)
                                 else:
-                                    qfi_op += np.abs(coeff_i) * np.abs(coeff_j) * CircuitStateFn(qfi_circuit)
-                qfi_ops += [qfi_op]
-            qfi_operators.append(qfi_ops)
-        return ~qfi_observable @ ListOp(qfi_operators)
+                                    qfi_op += np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
+                                              CircuitStateFn(qfi_circuit)
+
+                # qfi_ops += [qfi_observable @ qfi_op] # add phase fix
+                # phase fix component
+                def phase_fix_combo_fn(x):
+                    return (-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
+                phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]], combo_fn=phase_fix_combo_fn)
+                qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
+            qfi_operators.append(ListOp(qfi_ops))
+        return 4 * ListOp(qfi_operators)
 
     def old_convert(self, operator: OperatorBase,
                 approximation: str = 'diagonal',

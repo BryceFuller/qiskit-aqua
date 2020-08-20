@@ -14,8 +14,6 @@
 
 """The base interface for Aqua's gradient."""
 
-
-
 from functools import partial, reduce
 from collections.abc import Iterable
 from typing import Optional, Union, Tuple, List, Callable
@@ -26,22 +24,35 @@ import jax.numpy as jnp
 from jax import grad, jit, vmap
 
 from qiskit import QuantumCircuit
-from qiskit.circuit import Parameter, ParameterVector, ParameterExpression, Instruction
+from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
 from qiskit.providers import BaseBackend
 from qiskit.aqua import QuantumInstance, AquaError
 from ..gradient_base import GradientBase
-from ...operator_base import OperatorBase
-from ...primitive_ops.primitive_op import PrimitiveOp
-from ...primitive_ops.pauli_op import PauliOp
-from ...primitive_ops.circuit_op import CircuitOp
-from ...list_ops.list_op import ListOp
-from ...list_ops.composed_op import ComposedOp
-from ...list_ops.summed_op import SummedOp
-from ...list_ops.tensored_op import TensoredOp
-from ...state_fns.state_fn import StateFn
-from ...state_fns.circuit_state_fn import CircuitStateFn
-from ...operator_globals import H, S, I, Zero, One
-from ...converters.converter_base import ConverterBase
+from qiskit.aqua.operators.gradients.gradient.operator_gradient import ObservableGradient
+# from qiskit.aqua.operators.gradients.gradient.prob_gradient import ProbabilityGradient
+from qiskit.aqua.operators.gradients.gradient.state_gradient import StateGradient
+from qiskit.aqua.operators import OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp
+
+
+
+"""
+Structure:
+    - grads = []
+    - For param in params:
+        - Get Grad of ComboFn (trivial if sum or Identity)
+        - If operator has measurement 
+            - If param in state (potentially within a parameter expression)
+                - StateGradient
+            - Else OperatorGradient (potentially within a parameter expression)
+        - Else ProbabilityGradient (potentially within a parameter expression)
+        
+        - If param was in param_expr:
+            - grads.append(dOperator/d_param_expr * d_param_expr)
+        - Else grads.append(dOperator/d_param)
+        
+    Return ListOp[grads]
+        
+"""
 
 class Gradient(GradientBase):
     r"""
@@ -52,15 +63,17 @@ class Gradient(GradientBase):
     # pylint: disable=too-many-return-statements
     def convert(self,
         operator: OperatorBase = None,
-        params: Optional[List] = None,
-        method: str = 'param_shift',
-        natural_gradient: bool = False) -> OperatorBase:
+        # grad_combo_fn: Callable = lambda x : x,
+        params: Union[ParameterVector, Parameter] = None,
+        method: str = 'param_shift') -> OperatorBase:
 
         r"""
         Args:
-            operator: The measurement operator we are taking the gradient of
-            params: The parameters we are taking the gradient with respect to
-            method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
+            operator: The operator we are taking the gradient of
+            grad_combo_fn: Gradient for a custom operator combo_fn. The gradient for a standard ListOp or sympy
+            combo_fn is automatically computed.
+            parameters: The parameters we are taking the gradient with respect to
+            method: The method used to compute the state/probability gradient. ['param_shift', 'lin_comb']
                     Deprecated for observable gradient
         Returns:
             gradient_operator: An operator whose evaluation yields the Gradient
@@ -189,11 +202,11 @@ class Gradient(GradientBase):
             
         
     def get_grad_combo_fn(self, operator: ListOp) -> Callable:
+
         """
         Get the derivative of the operator combo_fn
         Args:
-            operator: The operator for whose combo_fn we want to get the gradient.
-            
+            operator: The operator for whose combo_fn we want to get the gradient.            
         Returns:
             function which evaluates the partial gradient of operator._combo_fn 
             with respect to each element of operator.oplist
@@ -245,6 +258,7 @@ class Gradient(GradientBase):
         for key in keys:
             grad.append(sy.Derivative(expr, key).doit())
         return grad
+
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

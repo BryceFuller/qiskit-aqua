@@ -23,7 +23,13 @@ from copy import deepcopy
 
 from qiskit.quantum_info import Pauli
 from qiskit import QuantumCircuit
+from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
+from qiskit.circuit.library.standard_gates import *
+from qiskit.circuit.controlledgate import ControlledGate
 from qiskit.circuit import Gate, Instruction, Qubit
+from qiskit.providers import BaseBackend
+from qiskit.aqua import QuantumInstance, AquaError
+from ..converters import CircuitSampler
 
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
@@ -37,7 +43,6 @@ from ..state_fns.state_fn import StateFn
 from ..state_fns.circuit_state_fn import CircuitStateFn
 from ..operator_globals import H, S, I, Zero, One
 from ..converters.converter_base import ConverterBase
-from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +53,11 @@ class GradientBase(ConverterBase):
     whose evaluation yields the gradient with respect to the circuit parameters.
     """
     # Todo remove
+    """
     def decompose_to_two_unique_eigenval(self,
                                         operator: OperatorBase,
                                         params: Union[Parameter, ParameterVector, List])-> OperatorBase:
-        r"""
+
         Decompose the input circuit so that all gates which will be differentiated
         have two unique eigenvalues
         Args:
@@ -59,9 +65,41 @@ class GradientBase(ConverterBase):
         Returns:
             state_operator: An equivalent quantum circuit such that all (relevant)
             parameterized gates are decomposed into gates with two unique eigenvalues.
-        """
+
 
         return OperatorBase
+    """
+    # TODO discuss naming
+    def get_callable(self,
+                      operator: OperatorBase,
+                      params: Union[Parameter, ParameterVector, List[Parameter]],
+                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+        """
+        Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
+        This callable can be used as gradient function for optimizers.
+        Args:
+            operator: The operator for which we want to get the gradient, Hessian or QFI.
+            parameters: The parameters with respect to which we are taking the gradient, Hessian or QFI.
+            backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
+        Returns:
+            callable: Function to compute a gradient, Hessian or QFI for given parameters.
+
+        """
+
+        if not backend:
+            converter = self.convert(operator, params)
+        else:
+            if isinstance(backend, QuantumInstance):
+                if backend.is_statevector:
+                    converter = self.convert(operator, params)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+            else:
+                if backend.name().startswith('statevector'):
+                    converter = self.convert(operator, params)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+        return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
 
 
     def _get_gate_generator(self, operator, param):
@@ -94,6 +132,7 @@ class GradientBase(ConverterBase):
     def parameter_shift(self,
                         operator: OperatorBase,
                         params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
+
         r"""
         Args:
             operator: the operator containing circuits we are taking the derivative of
@@ -130,7 +169,9 @@ class GradientBase(ConverterBase):
         
         else:
             
+
             circs = self.get_unique_circuits(operator)
+
             if len(circs) > 1:
                 #Understand how this happens
                 raise Error
@@ -154,6 +195,7 @@ class GradientBase(ConverterBase):
                 pshift_circ = self.get_unique_circuits(pshift_op)[0]
                 mshift_circ = self.get_unique_circuits(mshift_op)[0]
 
+
                 pshift_gate = pshift_circ._parameter_table[param][i][0]
                 mshift_gate = mshift_circ._parameter_table[param][i][0]
 
@@ -168,6 +210,7 @@ class GradientBase(ConverterBase):
                 
                 #TODO: Add check that asserts a NotImplementedError if a non-pauli gate is given. 
 
+
                 #Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
                 
@@ -176,7 +219,9 @@ class GradientBase(ConverterBase):
                 
             return SummedOp(shifted_ops).reduce()
 
-    def gate_gradient_dict(gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
+    def gate_gradient_dict(self,
+                           gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
+
 
         """Given a parameterized gate U(theta) with derivative dU(theta)/dtheta = sum_ia_iU(theta)V_i.
            This function returns a:=[a_0, ...] and V=[V_0, ...]
@@ -244,7 +289,8 @@ class GradientBase(ConverterBase):
             # TODO support arbitrary control states
             if gate.ctrl_state != 2**gate.num_ctrl_qubits - 1:
                 raise AquaError('Function only support controlled gates with control state `1` on all control qubits.')
-            base_coeffs_gates = gate_gradient_dict(gate.base_gate)
+
+            base_coeffs_gates = self.gate_gradient_dict(gate.base_gate)
             coeffs_gates = []
             # The projectors needed for the gradient of a controlled gate are integrated by a sum of gates.
             # The following line generates the decomposition gates.
@@ -313,7 +359,9 @@ class GradientBase(ConverterBase):
         return no_duplicates
 
 
-    def insert_gate(circuit: QuantumCircuit,
+
+    def insert_gate(self,
+                    circuit: QuantumCircuit,
                     reference_gate: Gate,
                     gate_to_insert: Instruction,
                     qubits: Optional[List[Qubit]] = None,
@@ -352,7 +400,11 @@ class GradientBase(ConverterBase):
             raise AquaError('Could not insert the controlled gate, something went wrong!')
 
 
-    def trim_circuit(circuit: QuantumCircuit, reference_gate: Gate) -> QuantumCircuit:
+
+    def trim_circuit(self,
+                     circuit: QuantumCircuit,
+                     reference_gate: Gate) -> QuantumCircuit:
+
         """Trim the given quantum circuit before the reference gate.
 
         Args:
@@ -385,8 +437,9 @@ class GradientBase(ConverterBase):
                 #Traverse the elements in the ListOp
                 res = [op.traverse(unroll_traverse) for op in operator]
                 #Separate out the lists from non-list elements
-                lists = [l for l in res if isinstance(l, (list, ListOp))]
-                not_lists = [r for r in res if not isinstance(r, (list,ListOp))]
+
+                lists = [l for l in res if isinstance(l, (List, ListOp))]
+                not_lists = [r for r in res if not isinstance(r, (List,ListOp))]
                 #unroll the list elements and recombine everything
                 unrolled = [y for x in lists for y in x]
                 res = not_lists + unrolled
@@ -396,8 +449,9 @@ class GradientBase(ConverterBase):
         #When unroll_traverse terminates, there will still be 
         # one last layer of nested lists to unroll. (computational tree will be depth <=2)
         unrolled_op = operator.traverse(unroll_traverse)
-        lists = [l for l in unrolled_op if isinstance(l, (list, ListOp))]
-        not_lists = [r for r in unrolled_op if not isinstance(r, (list,ListOp))]
+
+        lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
+        not_lists = [r for r in unrolled_op if not isinstance(r, (List,ListOp))]
         #unroll the list elements and recombine everything
         unrolled = [y for x in lists for y in x]
         return not_lists + unrolled
