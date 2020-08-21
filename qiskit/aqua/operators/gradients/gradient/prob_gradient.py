@@ -12,7 +12,7 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-"""The base interface for Aqua's gradient."""
+"""The base interface the probability gradients."""
 
 from typing import Optional, Union
 
@@ -28,13 +28,13 @@ class ProbabilityGradient(GradientBase):
                 operator: OperatorBase,
                 params: Optional[Union[ParameterVector, Parameter]] = None,
                 method: str = 'param_shift') -> OperatorBase:
-        r"""
+        """
         Args:
             operator: The operator we are taking the gradient of
             params: The parameters we are taking the gradient with respect to
-            method: The method used to compute the state/probability gradient.
-                Can be either of ``'param_shift'`` or ``'ancilla'``
-                    Deprecated for observable gradient
+            method: The method used to compute the state/probability gradient. Can be either
+                of ``'param_shift'`` or ``'lin_comb'``.
+
         Returns:
             An operator whose evaluation yields the Gradient
         """
