@@ -14,34 +14,28 @@
 
 """The base interface for Aqua's gradient."""
 
-from typing import Optional, Union, Tuple, List
-import sympy as sy
+from typing import Optional, Union
 
-from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
-from qiskit.providers import BaseBackend
-from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.circuit import Parameter, ParameterVector
 from qiskit.aqua.operators.gradients import GradientBase
-from qiskit.aqua.operators import OperatorBase, ListOp
+from qiskit.aqua.operators import OperatorBase
 
 
 class ProbabilityGradient(GradientBase):
-    r"""
-    We are interested in computing:
-    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for θ in params
-    """
+    """TODO"""
 
     def convert(self,
-        operator: OperatorBase = None,
-        params: Union[ParameterVector, Parameter] = None,
-        method: str = 'param_shift') -> OperatorBase:
-
+                operator: OperatorBase,
+                params: Optional[Union[ParameterVector, Parameter]] = None,
+                method: str = 'param_shift') -> OperatorBase:
         r"""
         Args:
             operator: The operator we are taking the gradient of
-            parameters: The parameters we are taking the gradient with respect to
-            method: The method used to compute the state/probability gradient. ['param_shift', 'ancilla']
+            params: The parameters we are taking the gradient with respect to
+            method: The method used to compute the state/probability gradient.
+                Can be either of ``'param_shift'`` or ``'ancilla'``
                     Deprecated for observable gradient
         Returns:
-            gradient_operator: An operator whose evaluation yields the Gradient
+            An operator whose evaluation yields the Gradient
         """
+        pass
