@@ -15,7 +15,7 @@
 """The module for Aqua's first order derivatives."""
 
 from .hessian import Hessian
-from .operator_hessian import ObservableHessian
+from .operator_hessian import OperatorHessian
 from .prob_hessian import ProbabilityHessian
 from .prob_hessian_lin_comb import ProbabilityHessianLinComb
 from .prob_hessian_param_shift import ProbabilityHessianParamShift
@@ -24,7 +24,7 @@ from .state_hessian_lin_comb import StateHessianLinComb
 from .state_hessian_param_shift import StateHessianParamShift
 
 __all__ = ['Hessian',
-           'ObservableHessian',
+           'OperatorHessian',
            'ProbabilityHessian',
            'ProbabilityHessianLinComb',
            'ProbabilityHessianParamShift',

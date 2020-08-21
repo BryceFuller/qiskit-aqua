@@ -14,18 +14,15 @@
 
 """The module for Aqua's gradient."""
 
-from qiskit.aqua.operators.gradients.gradient_base import GradientBase
-from qiskit.aqua.operators.gradients.gradient.observable_gradient import ObservableGradient
-from qiskit.aqua.operators.gradients.gradient.gradient import Gradient
-from qiskit.aqua.operators.gradients.hessian.hessian import Hessian
-from qiskit.aqua.operators.gradients.qfi.qfi import QFI
-
+from .gradient_base import GradientBase
+from .gradient import OperatorGradient
+from .gradient import Gradient
+from .hessian import Hessian
+from .qfi import QFI
 # from .ancilla_prob_grad import AncillaProbGradient
 # from .ancilla_state_grad import AncillaStateGradient
-
 
 __all__ = ['GradientBase',
            'Gradient',
            'Hessian',
            'QFI']
-

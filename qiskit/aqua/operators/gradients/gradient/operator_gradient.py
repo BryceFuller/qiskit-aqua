@@ -29,12 +29,13 @@ from ..gradient_base import GradientBase
 logger = logging.getLogger(__name__)
 
 
-class ObservableGradient(GradientBase):
+class OperatorGradient(GradientBase):
     """Computing the operator gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dθ."""
 
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[Parameter, ParameterVector, List]] = None) -> OperatorBase:
+                params: Optional[Union[Parameter, ParameterVector, List[Parameter]]] = None
+                ) -> OperatorBase:
         """
         Args:
             operator: The operator corresponding to our quantum state we are taking the

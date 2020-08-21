@@ -26,7 +26,7 @@ from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from ..gradient_base import GradientBase
 
 
-class ObservableHessian(GradientBase):
+class OperatorHessian(GradientBase):
     """Compute the Hessian d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dθidθj, with respect to the operator parameters.
     """
 
