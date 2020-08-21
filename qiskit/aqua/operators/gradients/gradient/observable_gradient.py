@@ -12,47 +12,35 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-""" OperatorGradient Class """
+"""The operator gradient."""
 
-from typing import Optional, Callable, Union, List
-import logging
-from functools import partial, reduce
-import numpy as np
+from typing import Union, List, Optional
+from functools import partial
 
-from qiskit.quantum_info import Pauli
-from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 from qiskit.aqua.operators.operator_base import OperatorBase
-from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
-from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
-from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
 from qiskit.aqua.operators.list_ops.list_op import ListOp
 from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
-from qiskit.aqua.operators.list_ops.summed_op import SummedOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
-from qiskit.aqua.operators.expectations import PauliExpectation
-from qiskit.aqua.operators.operator_globals import H, S, I
 from ..gradient_base import GradientBase
-
-logger = logging.getLogger(__name__)
 
 
 class ObservableGradient(GradientBase):
-    r"""
-    We are interested in computing:
-    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for θ in params
-    """
+    """Compute d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dθ."""
 
+    # TODO arguments shouldn't differ
+    # pylint: disable=arguments-differ
     def convert(self,
-                state_operator: OperatorBase = None,
-                params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
-        r"""
-        Args
-            state_operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
-            target_operator: The measurement operator we are taking the gradient of: O(θ)
-            params: The parameters we are taking the gradient with respect to: θ
-        Returns
+                operator: OperatorBase,
+                params: Optional[Union[Parameter, ParameterVector, List]] = None) -> OperatorBase:
+        """
+        Args:
+            operator: The operator corresponding to our quantum state we are taking the
+                gradient of: |ψ(ω).
+            params: The parameters we are taking the gradient with respect to: θ.
+
+        Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
 
@@ -62,9 +50,11 @@ class ObservableGradient(GradientBase):
                     return True
             return False
 
+        # TODO inconsistent return statements! All return statements should return
+        # the same type, not some OperatorBase and some None
         def prune_meas_op(meas_op, param):
             if isinstance(meas_op, StateFn):
-                if meas_op.is_measurement == True:
+                if meas_op.is_measurement:
                     new_op = prune_meas_op(meas_op.primitive, param)
                     if new_op is not None:
                         return ~StateFn(new_op, coeff=(meas_op.coeff))
@@ -80,33 +70,27 @@ class ObservableGradient(GradientBase):
                 return type(meas_op)(oplist, coeff=meas_op.coeff)
             else:
                 if contains_param(meas_op, param):
-                    return (meas_op / param)
-            return
+                    return meas_op / param
 
         if isinstance(params, (ParameterVector, List)):
-            return ListOp([self.convert(state_operator, param) for param in params])
+            return ListOp([self.convert(operator, param) for param in params])
         else:
             param = params
 
-        if contains_param(state_operator, param):
-            return (state_operator / param)
+        if contains_param(operator, param):
+            return operator / param
 
-        if isinstance(state_operator, StateFn):
-            if state_operator.is_measurement:
-                return prune_meas_op(state_operator, param)
-            else:
-                return state_operator
-
-
-        elif isinstance(state_operator, ComposedOp):
-            conv_ops = [self.convert(op, param) for op in state_operator]
+        if isinstance(operator, StateFn):
+            if operator.is_measurement:
+                return prune_meas_op(operator, param)
+            return operator
+        elif isinstance(operator, ComposedOp):
+            conv_ops = [self.convert(op, param) for op in operator]
             if (conv_ops)[0] is not None:
-                return ComposedOp(conv_ops, coeff=state_operator.coeff)
-
-        elif isinstance(state_operator, ListOp):
-            pruned_list = [op for op in [self.convert(op, param) for op in state_operator] if op is not None]
+                return ComposedOp(conv_ops, coeff=operator.coeff)
+        elif isinstance(operator, ListOp):
+            pruned_list = [op for op in [self.convert(op, param)
+                                         for op in operator] if op is not None]
             if len(pruned_list) == 0:
                 return
-            return type(state_operator)(pruned_list, coeff=state_operator.coeff)
-
-        return
+            return type(operator)(pruned_list, coeff=operator.coeff)
