@@ -21,7 +21,7 @@ from qiskit.circuit import Parameter, Gate, ControlledGate, Qubit
 from qiskit.extensions.standard import RXGate, RYGate, RZGate, CXGate, CYGate, CZGate
 
 from qiskit.aqua import QuantumInstance, AquaError
-from qiskit.aqua.operators.gradients.gradient.prob_gradient import Gradient
+from qiskit.aqua.operators.gradients.gradient.probability_gradient import Gradient
 
 
 class NaturalGradient(Gradient):

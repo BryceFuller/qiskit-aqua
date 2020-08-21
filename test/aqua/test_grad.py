@@ -23,7 +23,7 @@ from qiskit import BasicAer
 
 
 from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
-from qiskit.aqua.operators.gradients.gradient.prob_gradient_lin_comb import ProbabilityGradientLinComb
+from qiskit.aqua.operators.gradients.gradient.probability_gradient_lin_comb import ProbabilityGradientLinComb
 from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI
 
@@ -36,10 +36,10 @@ import numpy as np
 from qiskit.aqua import QuantumInstance, aqua_globals
 
 
-
 # from .gradient import Gradient
 class TestQuantumFisherInf(QiskitAquaTestCase):
     """ Test Quantum Fisher Information """
+
     def setUp(self):
         super().setUp()
         aqua_globals.random_seed = 50
@@ -80,7 +80,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                           [-0.5, -1 / np.sqrt(2)]]
         correct_grad = True
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
+            correct_grad &= np.allclose(state_grad.assign_parameters(
+                value_dict).eval(), correct_values[i], atol=1e-6)
 
         self.assertTrue(correct_grad)
 
@@ -115,7 +116,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                           [[1 / np.sqrt(2), 0], [0, 1 / np.sqrt(2)]]]
         correct_grad = True
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_hess.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
+            correct_grad &= np.allclose(state_hess.assign_parameters(
+                value_dict).eval(), correct_values[i], atol=1e-6)
 
         self.assertTrue(correct_grad)
 
@@ -148,7 +150,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             print(prob_grad.assign_parameters(value_dict).eval())
             # print(prob_grad.assign_parameters(value_dict).eval())
-            correct_grad &= np.allclose(prob_grad.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
+            correct_grad &= np.allclose(prob_grad.assign_parameters(
+                value_dict).eval(), correct_values[i], atol=1e-6)
         self.assertTrue(correct_grad)
     #
     # def test_product_rule(self):
@@ -174,7 +177,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         #     for element in elements:
         #         parameterized_gates.append(element[0])
 
-
         op = CircuitStateFn(primitive=qc, coeff=1.)
         qfi = QFI().convert(operator=op, params=params)
         values_dict = [{params[0]: np.pi / 4, params[1]: 0.1}, {params[0]: np.pi, params[1]: 0.1},
@@ -182,7 +184,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [[[1, 0], [0, 0.5]], [[1, 0], [0, 0]],  [[1, 0], [0, 1]]]
         correct_qfi = True
         for i, value_dict in enumerate(values_dict):
-            correct_qfi &= np.allclose(qfi.assign_parameters(value_dict).eval(), correct_values[i], atol=1e-6)
+            correct_qfi &= np.allclose(qfi.assign_parameters(
+                value_dict).eval(), correct_values[i], atol=1e-6)
         self.assertTrue(correct_qfi)
 
 
