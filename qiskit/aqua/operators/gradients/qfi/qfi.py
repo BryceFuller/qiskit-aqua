@@ -14,72 +14,68 @@
 
 """The module for Quantum the Fisher Information."""
 
-from typing import Optional, Tuple, List, Dict, Union, Callable
-import warnings
+from typing import List, Union, Optional
+import copy
+from functools import cmp_to_key
 
 import numpy as np
 from scipy.linalg import block_diag
-import copy
-from copy import deepcopy
-from functools import partial, reduce, cmp_to_key
 
-from qiskit import QuantumCircuit, QuantumRegister
+from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector
+from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
+from qiskit.converters import dag_to_circuit, circuit_to_dag
 
-from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
-
-
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, PauliOp, SummedOp
-
-from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
-from ...expectations import PauliExpectation 
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
 from qiskit.aqua.operators.converters import DictToCircuitSum
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
-
-from qiskit.aqua.operators.operator_globals import H, S, I, Z, Y, X, Zero, One
-
-from qiskit.aqua import QuantumInstance
-from qiskit.converters import dag_to_circuit, circuit_to_dag
-from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
-from qiskit.dagcircuit  import DAGCircuit
-from qiskit.quantum_info import Pauli
+from qiskit.aqua.operators.operator_globals import I, Z, Y, X, Zero
 
 from ..gradient_base import GradientBase
-
+from ...expectations import PauliExpectation
 
 
 class QFI(GradientBase):
-    r"""Compute the Quantum Fisher Information given a pure, parametrized quantum state.
+    r"""Compute the Quantum Fisher Information (QFI) given a pure, parametrized quantum state.
+
+    The QFI is:
+
         [QFI]kl= Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉] * 0.25.
     """
 
     def convert(self,
-                operator: OperatorBase = None,
-                params: Union[Parameter, ParameterVector, List] = None,
-                approx: str = None) -> OperatorBase:
+                operator: OperatorBase,
+                params: Optional[Union[Parameter, ParameterVector, List[Parameter]]] = None,
+                approx: Optional[str] = None) -> OperatorBase:
         r"""
-        Args
-            operator:The operator corresponding to our quantum state we are taking the gradient of: |ψ(ω)〉
+        Args:
+            operator: The operator corresponding to our quantum state we are taking the gradient
+                of: |ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
             approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
-        Returns
+
+        Returns:
             ListOp[ListOp] where the operator at position k,l corresponds to QFI_kl
+
+        Raises:
+            ValueError: If the value for ``approx`` is not supported.
         """
-        
-        #Currently there's some ambiguity about how parameters are ordered that needs to be 
-        #decided. In particular with cases where a parameter occurs more than once in a circuit,
-        # where more than one circuit are provided. One option might be to include a method that returns the parameter 
-        # ordering and allow the user to call it directly to ask for the parameters. Or create an input argument to 
-        # specify if the parameter mapping should be returned. 
+
+        # Currently there's some ambiguity about how parameters are ordered that needs to be
+        # decided. In particular with cases where a parameter occurs more than once in a circuit,
+        # where more than one circuit are provided. One option might be to include a method that
+        # returns the parameter ordering and allow the user to call it directly to ask for the
+        # parameters. Or create an input argument to specify if the parameter mapp_ing should be
+        # returned.
 
         if approx is None:
             return self._qfi_states(operator, params)
-        elif approx is 'diagonal':
+        elif approx == 'diagonal':
             return self.diagonal_qfi(operator)
-        elif approx is 'block_diagonal':
+        elif approx == 'block_diagonal':
             return self.block_diagonal_qfi(operator)
         else:
-            raise ValueError("Unrecognized input provided for approx. Valid inputs include [None, 'diagonal', 'block_diagonal']")
-
+            raise ValueError("Unrecognized input provided for approx. Valid inputs are "
+                             "[None, 'diagonal', 'block_diagonal'].")
 
     # def _prepare_operator(self, operator):
     #     if isinstance(operator, ListOp):
@@ -94,7 +90,8 @@ class QFI(GradientBase):
     #         operator = self._qfi_states(operator, self._params)
     #     return operator
 
-    #TODO This probably should have a more intuitive name.    
+    # TODO This probably should have a more intuitive name.
+
     def _qfi_states(self, op: OperatorBase,
                     target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
@@ -104,12 +101,12 @@ class QFI(GradientBase):
             target_params: The parameters we are computing the QFI wrt: ω
 
         Returns:
-            Operators which give the QFI.
-            If a parameter appears multiple times, one circuit is created per parameterized gates to compute
-            the product rule.
+            Operators which give the QFI. If a parameter appears multiple times, one circuit is
+            created per parameterized gates to compute the product rule.
 
         Raises:
             AquaError: If one of the circuits could not be constructed.
+            TypeError: If ``operator`` is an unsupported type.
         """
         # QFI & phase fix observable
         qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
@@ -129,11 +126,11 @@ class QFI(GradientBase):
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
         elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum.convert(op)
+            op = DictToCircuitSum().convert(op)
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
-        state_qc = deepcopy(op.primitive)
+        state_qc = copy.deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
             if param not in target_params:
                 continue
@@ -143,7 +140,8 @@ class QFI(GradientBase):
             qfi_coeffs[param] = []
             qfi_gates[param] = []
             for element in elements:
-                # get the coefficients and controlled gates (raises an error if the parameterized gate is not supported)
+                # get the coefficients and controlled gates (raises an error if the parameterized
+                # gate is not supported)
                 coeffs_gates = self.gate_gradient_dict(element[0])
                 gates_to_parameters[param].append(element[0])
                 for c_g in coeffs_gates:
@@ -156,41 +154,50 @@ class QFI(GradientBase):
         additional_qubits = ([work_q], [])
         # create a copy of the original state with an additional work_q register
         # Get the states needed to compute the gradient
-        for i in range(len(params)):  # loop over parameters
+        for param in params:  # loop over parameters
             # construct the states
-            for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
+            for m, gates_to_insert_i in enumerate(qfi_gates[param]):
                 for k, gate_to_insert_i in enumerate(gates_to_insert_i):
                     grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
                     grad_state.data = state_qc.data
-                    # apply Hadamard on work_q
-                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q])
+                    # apply Hadamard on work_q  # TODO can this not just be grad_state.h(work_q)?
+                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(),
+                                     qubits=[work_q])
                     # Fix work_q phase
-                    coeff_i = qfi_coeffs[params[i]][m][k]
+                    coeff_i = qfi_coeffs[param][m][k]
                     sign = np.sign(coeff_i)
-                    complex = np.iscomplex(coeff_i)
+                    is_complex = np.iscomplex(coeff_i)
                     if sign == -1:
-                        if complex:
-                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SdgGate(),
-                                        qubits=[work_q])
+                        if is_complex:
+                            self.insert_gate(grad_state,
+                                             gates_to_parameters[params[0]][0],
+                                             SdgGate(),
+                                             qubits=[work_q])
                         else:
-                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], ZGate(),
-                                        qubits=[work_q])
+                            self.insert_gate(grad_state,
+                                             gates_to_parameters[params[0]][0],
+                                             ZGate(),
+                                             qubits=[work_q])
                     else:
-                        if complex:
-                            self.insert_gate(grad_state, gates_to_parameters[params[0]][0], SGate(),
-                                        qubits=[work_q])
+                        if is_complex:
+                            self.insert_gate(grad_state,
+                                             gates_to_parameters[params[0]][0],
+                                             SGate(),
+                                             qubits=[work_q])
                     # Insert controlled, intercepting gate - controlled by |0>
-                    self.insert_gate(grad_state, gates_to_parameters[params[i]][m],
-                                gate_to_insert_i,
-                                additional_qubits=additional_qubits)
+                    self.insert_gate(grad_state, gates_to_parameters[param][m],
+                                     gate_to_insert_i,
+                                     additional_qubits=additional_qubits)
 
-                    grad_state = self.trim_circuit(grad_state, gates_to_parameters[params[i]][m])
+                    grad_state = self.trim_circuit(grad_state, gates_to_parameters[param][m])
 
                     grad_state.h(work_q)
                     if m == 0 and k == 0:
-                        phase_fix_state = np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+                        phase_fix_state = np.sqrt(np.abs(coeff_i)) * \
+                                                  op.coeff * CircuitStateFn(grad_state)
                     else:
-                        phase_fix_state += np.sqrt(np.abs(coeff_i)) * op.coeff * CircuitStateFn(grad_state)
+                        phase_fix_state += np.sqrt(np.abs(coeff_i)) * \
+                                                   op.coeff * CircuitStateFn(grad_state)
             phase_fix_states += [phase_fix_observable @ phase_fix_state]
 
         qfi_operators = []
@@ -202,252 +209,282 @@ class QFI(GradientBase):
         circuit.data = state_qc.data
         # params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
-        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
-                    qubits=[ancilla])
+        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(), qubits=[ancilla])
         # Get the circuits needed to compute A_ij
-        for i in range(len(params)): #loop over parameters
+        for i, param_i in enumerate(params):  # loop over parameters
             qfi_ops = []
 
             # j = 0
             # while j <= i: #loop over parameters
-            for j in range(len(params)):
+            for j, param_j in enumerate(params):
 
                 # construct the circuits
-                for m, gates_to_insert_i in enumerate(qfi_gates[params[i]]):
-                    for k, gate_to_insert_i in enumerate(gates_to_insert_i):
-                        coeff_i = qfi_coeffs[params[i]][m][k]
-                        for n, gates_to_insert_j in enumerate(qfi_gates[params[j]]):
-                            for l, gate_to_insert_j in enumerate(gates_to_insert_j):
-                                coeff_j = qfi_coeffs[params[j]][n][l]
+                for m_i, gates_to_insert_i in enumerate(qfi_gates[param_i]):
+                    for k_i, gate_to_insert_i in enumerate(gates_to_insert_i):
+                        coeff_i = qfi_coeffs[param_i][m_i][k_i]
+                        for m_j, gates_to_insert_j in enumerate(qfi_gates[param_j]):
+                            for k_j, gate_to_insert_j in enumerate(gates_to_insert_j):
+                                coeff_j = qfi_coeffs[param_j][m_j][k_j]
                                 # create a copy of the original circuit with the same registers
                                 qfi_circuit = QuantumCircuit(*circuit.qregs)
                                 qfi_circuit.data = circuit.data
 
                                 # Fix ancilla phase
-                                sign = np.sign(np.conj(coeff_i)*coeff_j)
-                                complex = np.iscomplex(np.conj(coeff_i)*coeff_j)
+                                sign = np.sign(np.conj(coeff_i) * coeff_j)
+                                is_complex = np.iscomplex(np.conj(coeff_i) * coeff_j)
                                 if sign == -1:
-                                    if complex:
-                                        self.insert_gate(qfi_circuit, gates_to_parameters[params[0]][0], SdgGate(),
-                                                    qubits=[ancilla])
+                                    if is_complex:
+                                        self.insert_gate(qfi_circuit,
+                                                         gates_to_parameters[params[0]][0],
+                                                         SdgGate(),
+                                                         qubits=[ancilla])
                                     else:
-                                        self.insert_gate(qfi_circuit, gates_to_parameters[params[0]][0], ZGate(),
-                                                    qubits=[ancilla])
+                                        self.insert_gate(qfi_circuit,
+                                                         gates_to_parameters[params[0]][0],
+                                                         ZGate(),
+                                                         qubits=[ancilla])
                                 else:
-                                    if complex:
-                                        self.insert_gate(qfi_circuit, gates_to_parameters[params[0]][0], SGate(),
-                                                    qubits=[ancilla])
+                                    if is_complex:
+                                        self.insert_gate(qfi_circuit,
+                                                         gates_to_parameters[params[0]][0],
+                                                         SGate(),
+                                                         qubits=[ancilla])
 
-                                self.insert_gate(qfi_circuit, gates_to_parameters[params[0]][0], XGate(),
-                                            qubits=[ancilla])
+                                self.insert_gate(qfi_circuit,
+                                                 gates_to_parameters[params[0]][0],
+                                                 XGate(),
+                                                 qubits=[ancilla])
 
                                 # Insert controlled, intercepting gate - controlled by |1>
-                                self.insert_gate(qfi_circuit, gates_to_parameters[params[i]][m], gate_to_insert_i,
-                                                                         additional_qubits=additional_qubits)
+                                self.insert_gate(qfi_circuit,
+                                                 gates_to_parameters[param_i][m_i],
+                                                 gate_to_insert_i,
+                                                 additional_qubits=additional_qubits)
 
-                                self.insert_gate(qfi_circuit, gate_to_insert_i, XGate(), qubits=[ancilla], after=True)
+                                self.insert_gate(qfi_circuit,
+                                                 gate_to_insert_i,
+                                                 XGate(),
+                                                 qubits=[ancilla],
+                                                 after=True)
 
                                 # Insert controlled, intercepting gate - controlled by |0>
-                                self.insert_gate(qfi_circuit, gates_to_parameters[params[j]][n], gate_to_insert_j,
-                                                                         additional_qubits=additional_qubits)
+                                self.insert_gate(qfi_circuit,
+                                                 gates_to_parameters[param_j][m_j],
+                                                 gate_to_insert_j,
+                                                 additional_qubits=additional_qubits)
 
-                                '''TODO check if we could use the trimming 
-                                What speaks against it is the new way to compute the phase fix directly within 
-                                the observable here the trimming wouldn't work. The other way would be more efficient
-                                in terms of computation but this is more convenient to write it.'''
+                                # TODO check if we could use the trimming
+                                # What speaks against it is the new way to compute the phase fix
+                                # directly within the observable here the trimming wouldn't work.
+                                # The other way would be more efficient in terms of computation but
+                                # this is more convenient to write it.
+
                                 # Remove redundant gates
 
                                 if j <= i:
-                                    qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[i]][m])
+                                    qfi_circuit = self.trim_circuit(
+                                        qfi_circuit, gates_to_parameters[param_i][m_i]
+                                        )
                                 else:
-                                    qfi_circuit = self.trim_circuit(qfi_circuit, gates_to_parameters[params[j]][n])
+                                    qfi_circuit = self.trim_circuit(
+                                        qfi_circuit, gates_to_parameters[param_j][m_j]
+                                        )
 
                                 qfi_circuit.h(ancilla)
-                                if k == 0 and l == 0:
-                                    qfi_op = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
-                                              CircuitStateFn(qfi_circuit)
+
+                                term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
+                                    CircuitStateFn(qfi_circuit)
+                                if k_i == 0 and k_j == 0:
+                                    qfi_op = term
                                 else:
-                                    qfi_op += np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
-                                              CircuitStateFn(qfi_circuit)
+                                    qfi_op += term
 
                 # qfi_ops += [qfi_observable @ qfi_op] # add phase fix
                 # phase fix component
                 def phase_fix_combo_fn(x):
                     return (-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
-                phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]], combo_fn=phase_fix_combo_fn)
+                phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]],
+                                   combo_fn=phase_fix_combo_fn)
                 qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
             qfi_operators.append(ListOp(qfi_ops))
         return 4 * ListOp(qfi_operators)
 
-    def block_diagonal_qfi(self, 
-                           operator: Union[CircuitOp,CircuitStateFn],
-                           target_params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
-        
-        if not isinstance(operator, (CircuitOp,CircuitStateFn)):
-            raise NotImplementedError
+    def block_diagonal_qfi(self,
+                           operator: Union[CircuitOp, CircuitStateFn],
+                           # target_params: Optional[Union[Parameter,
+                           #                               ParameterVector,
+                           #                               List[Parameter]]] = None
+                           ) -> OperatorBase:
+        """TODO"""
+        if not isinstance(operator, (CircuitOp, CircuitStateFn)):
+            raise NotImplementedError('operator must be a CircuitOp or CircuitStateFn')
 
         circuit = operator.primitive
 
-        #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
-        layers = self.partition_circuit(circuit)
+        # Parition the circuit into layers, and build the circuits to prepare $\psi_i$
+        layers = self._partition_circuit(circuit)
         if layers[-1].num_parameters == 0:
             layers.pop(-1)
 
-        block_params = [self.sort_params(layer.parameters) for layer in layers]
+        block_params = [self._sort_params(layer.parameters) for layer in layers]
 
-            
         psis = [CircuitOp(layer) for layer in layers]
         for i, psi in enumerate(psis):
-            if i == 0:  continue
-            psis[i] = psi@psis[i-1]
+            if i == 0:
+                continue
+            psis[i] = psi @ psis[i - 1]
 
-        #Get generators
-        #TODO: make this work for other types of rotations
-        #NOTE: This assumes that each parameter only affects one rotation.
-        # we need to think more about what happens if multiple rotations 
-        # are controlled with a single parameter. 
-        #TODO: currently the input: target_params is ignored. This should either be removed, 
-        # or logic should be added to prevent evaluating the QFI on certain params. 
-        params = circuit.ordered_parameters
-        generators = self.get_generators(params,circuit)
+        # Get generators
+        # TODO: make this work for other types of rotations
+        # NOTE: This assumes that each parameter only affects one rotation.
+        # we need to think more about what happens if multiple rotations
+        # are controlled with a single parameter.
+        # TODO: currently the input: target_params is ignored. This should either be removed,
+        # or logic should be added to prevent evaluating the QFI on certain params.
+
+        # TODO this assumes a NLocal circuit, normal circuits dont have this attribute!
+        if hasattr(circuit, 'ordered_parameters'):
+            params = circuit.ordered_parameters
+        else:
+            raise NotImplementedError('TODO relying on the ordered_parameters attribute')
+
+        generators = self.get_generators(params, circuit)
 
         blocks = []
 
-        for l, psi_l in enumerate(psis):
+        for k, psi_i in enumerate(psis):
+            params = block_params[k]
+            block = np.zeros((len(params), len(params))).tolist()
 
-            params = block_params[l]
-            block = np.zeros((len(params),len(params))).tolist()
-            
-
-            #calculate all single-operator terms <psi_l|K_i|psi_l>
+            # calculate all single-operator terms <psi_i|generator_i|psi_i>
             single_terms = np.zeros(len(params)).tolist()
-            for i, pi in enumerate(params):
-                K = generators[pi]
-                psi_Ki = ~StateFn(K) @ psi_l @ Zero
-                psi_Ki = PauliExpectation().convert(psi_Ki)
-                single_terms[i] = psi_Ki
+            for i, p_i in enumerate(params):
+                generator = generators[p_i]
+                psi_gen_i = ~StateFn(generator) @ psi_i @ Zero
+                psi_gen_i = PauliExpectation().convert(psi_gen_i)
+                single_terms[i] = psi_gen_i
 
-            #Calculate all double-operator terms <psi_l|K_j @ K_i|psi_l>
+            # Calculate all double-operator terms <psi_i|generator_j @ generator_i|psi_i>
             # and build composite operators for each matrix entry
-            for i, pi in enumerate(params):
-                Ki = generators[pi]
-                for j, pj in enumerate(params):
+            for i, p_i in enumerate(params):
+                generator_i = generators[p_i]
+                for j, p_j in enumerate(params):
 
                     if i == j:
-                        block[i][i] = ListOp(oplist=[single_terms[i]], combo_fn=lambda x: 1-x[0]**2)
+                        block[i][i] = ListOp([single_terms[i]], combo_fn=lambda x: 1 - x[0] ** 2)
                         continue
 
-                    Kj = generators[pj]
-                    K = ~Kj @ Ki
+                    generator_j = generators[p_j]
+                    generator = ~generator_j @ generator_i
 
-                    psi_KjKi = ~StateFn(K) @ psi_l @ Zero
-                    psi_KjKi = PauliExpectation().convert(psi_KjKi)
-                    cross_term = ListOp(oplist = [single_terms[i],single_terms[j]], combo_fn= lambda x: np.prod(x))
-                    block[i][j] = psi_KjKi - cross_term
+                    psi_gen_ij = ~StateFn(generator) @ psi_i @ Zero
+                    psi_gen_ij = PauliExpectation().convert(psi_gen_ij)
+                    cross_term = ListOp([single_terms[i], single_terms[j]], combo_fn=np.prod)
+                    block[i][j] = psi_gen_ij - cross_term
 
             wrapped_block = ListOp([ListOp(row) for row in block])
             blocks.append(wrapped_block)
-            
+
         block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: np.real(block_diag(*x)))
         return block_diagonal_qfi
 
-    def diagonal_qfi(self, 
-                     operator: Union[CircuitOp,CircuitStateFn],
-                     target_params: Union[Parameter, ParameterVector, List] = None) -> OperatorBase:
-       
-        if not isinstance(operator, (CircuitOp,CircuitStateFn)):
+    def diagonal_qfi(self,
+                     operator: Union[CircuitOp, CircuitStateFn],
+                     #  target_params: Union[Parameter, ParameterVector, List] = None
+                     ) -> OperatorBase:
+        """TODO"""
+        if not isinstance(operator, (CircuitOp, CircuitStateFn)):
             raise NotImplementedError
 
         circuit = operator.primitive
 
-        #Parition the circuit into layers, and build the circuits to prepare $\psi_l$
-        layers = self.partition_circuit(circuit)
+        # Parition the circuit into layers, and build the circuits to prepare $\psi_i$
+        layers = self._partition_circuit(circuit)
         if layers[-1].num_parameters == 0:
             layers.pop(-1)
-            
+
         psis = [CircuitOp(layer) for layer in layers]
         for i, psi in enumerate(psis):
-            if i == 0:  continue
-            psis[i] = psi@psis[i-1]
+            if i == 0:
+                continue
+            psis[i] = psi @ psis[i - 1]
 
-        #Get generators
-        #TODO: make this work for other types of rotations
-        #NOTE: This assumes that each parameter only affects one rotation.
-        # we need to think more about what happens if multiple rotations 
-        # are controlled with a single parameter. 
-        #TODO: currently the input: target_params is ignored. This should either be removed, 
-        # or logic should be added to prevent evaluating the QFI on certain params. 
+        # Get generators
+        # TODO: make this work for other types of rotations
+        # NOTE: This assumes that each parameter only affects one rotation.
+        # we need to think more about what happens if multiple rotations
+        # are controlled with a single parameter.
+        # TODO: currently the input: target_params is ignored. This should either be removed,
+        # or logic should be added to prevent evaluating the QFI on certain params.
         params = circuit.ordered_parameters
-        generators = self.get_generators(params,circuit)
+        generators = self.get_generators(params, circuit)
 
         diag = []
         for param in params:
-            K = generators[param]
-            meas_op = ~StateFn(K)
-            
-            #get appropriate psi_l
+            generator = generators[param]
+            meas_op = ~StateFn(generator)
+
+            # get appropriate psi_i
             psi = [(psi) for psi in psis if param in psi.primitive.parameters][0]
-            
+
             op = meas_op @ psi @ Zero
             rotated_op = PauliExpectation().convert(op)
             diag.append(rotated_op)
-            
-        grad_op = ListOp(oplist=diag, combo_fn=lambda x: np.diag([1-y**2 for y in x]))
+
+        grad_op = ListOp(diag, combo_fn=lambda x: np.diag([1 - y ** 2 for y in x]))
         return grad_op
 
-
-
-    def partition_circuit(self, circuit):
+    def _partition_circuit(self, circuit):
+        """TODO"""
         dag = circuit_to_dag(circuit)
         dag_layers = ([i['graph'] for i in dag.serial_layers()])
         num_qubits = circuit.num_qubits
-        layers = list(zip(dag_layers, [{x:False for x in range(0,num_qubits)} for layer in dag_layers]))
+        layers = list(
+            zip(dag_layers, [{x: False for x in range(0, num_qubits)} for layer in dag_layers]))
 
-        #initialize the ledger
-        # The ledger tracks which qubits in each layer are available to have 
+        # initialize the ledger
+        # The ledger tracks which qubits in each layer are available to have
         # gates from subsequent layers shifted backward.
-        # The idea being that all parameterized gates should have 
+        # The idea being that all parameterized gates should have
         # no descendants within their layer
-        for i,(layer,ledger) in enumerate(layers):
+        for i, (layer, ledger) in enumerate(layers):
             op_node = layer.op_nodes()[0]
             is_param = op_node.op.is_parameterized()
             qargs = op_node.qargs
-            indices = [qarg.index for qarg in qargs]   
+            indices = [qarg.index for qarg in qargs]
             if is_param:
                 for index in indices:
                     ledger[index] = True
 
-        
         def apply_node_op(node, dag, back=True):
             op = copy.copy(node.op)
-            qa = copy.copy(node.qargs)
-            ca = copy.copy(node.cargs)
-            co = copy.copy(node.condition)
+            qargs = copy.copy(node.qargs)
+            cargs = copy.copy(node.cargs)
+            condition = copy.copy(node.condition)
             if back:
-                dag.apply_operation_back(op, qa, ca, co)
+                dag.apply_operation_back(op, qargs, cargs, condition)
             else:
-                dag.apply_operation_front(op, qa, ca, co)
+                dag.apply_operation_front(op, qargs, cargs, condition)
 
         converged = False
-        
-        
-        
-        for x in range(dag.depth()):  
-            if converged: 
+
+        for _ in range(dag.depth()):
+            if converged:
                 break
 
             converged = True
 
-            for i,(layer,ledger) in enumerate(layers):
-                if i == len(layers)-1: continue
+            for i, (layer, ledger) in enumerate(layers):
+                if i == len(layers) - 1:
+                    continue
 
-                (next_layer, next_ledger) = layers[i+1]
+                (next_layer, next_ledger) = layers[i + 1]
                 for next_node in next_layer.op_nodes():
                     is_param = next_node.op.is_parameterized()
                     qargs = next_node.qargs
-                    indices = [qarg.index for qarg in qargs]   
+                    indices = [qarg.index for qarg in qargs]
 
-                    #If the next_node can be moved back a layer without conflicting 
+                    # If the next_node can be moved back a layer without conflicting
                     # without becoming the descendant of a parameterized gate, then do it.
                     if not any([ledger[x] for x in indices]):
 
@@ -461,7 +498,7 @@ class QFI(GradientBase):
 
                         converged = False
 
-                #clean up empty layers left behind.
+                # clean up empty layers left behind.
                 if len(next_layer.op_nodes()) == 0:
                     layers.pop(i+1)
 
@@ -469,6 +506,7 @@ class QFI(GradientBase):
         return partitioned_circs
 
     def get_generators(self, params, circuit):
+        """TODO"""
         dag = circuit_to_dag(circuit)
         layers = list(dag.serial_layers())
 
@@ -481,32 +519,32 @@ class QFI(GradientBase):
                 if param in instr.params:
 
                     if isinstance(instr, RYGate):
-                        K = Y
+                        generator = Y
                     elif isinstance(instr, RZGate):
-                        K = Z
+                        generator = Z
                     elif isinstance(instr, RXGate):
-                        K = X
+                        generator = X
                     else:
-                        raise NotImplementedError 
+                        raise NotImplementedError
 
-                    #get all qubit indices in this layer where the param parameterizes
+                    # get all qubit indices in this layer where the param parameterizes
                     # an operation.
                     indices = [[q.index for q in qreg] for qreg in layer['partition']]
                     indices = [item for sublist in indices for item in sublist]
 
                     if len(indices) > 1:
-                        raise NoteImplementedError
+                        raise NotImplementedError
                     index = indices[0]
-                    K = (I^(index))^K^(I^(num_qubits-index-1))
-                    generators[param] = K
+                    generator = (I ^ (index)) ^ generator ^ (I ^ (num_qubits-index-1))
+                    generators[param] = generator
 
         return generators
 
-    def sort_params(self, params):
-        def compare_params(p1, p2):
-            s1 = p1.name
-            s2 = p2.name
-            v1= s1[s1.find("[")+1:s1.find("]")]
-            v2= s2[s2.find("[")+1:s2.find("]")]
-            return int(v1) - int(v2)
-        return sorted(params, key=cmp_to_key(compare_params),reverse=False)
+    def _sort_params(self, params):
+        def compare_params(param1, param2):
+            name1 = param1.name
+            name2 = param2.name
+            value1 = name1[name1.find("[")+1:name1.find("]")]
+            value2 = name2[name2.find("[")+1:name2.find("]")]
+            return int(value1) - int(value2)
+        return sorted(params, key=cmp_to_key(compare_params), reverse=False)
