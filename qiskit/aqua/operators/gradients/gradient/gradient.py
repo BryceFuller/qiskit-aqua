@@ -176,8 +176,9 @@ class Gradient(GradientBase):
                                 'collected inside the ComposedOp.')
 
             # Do some checks to make sure operator is sensible
-            # TODO if this is a sum of circuit state fns then compute the gradient for all separate ones
+            # TODO if this is a sum of circuit state fns - traverse including autograd
             if isinstance(operator[-1], (CircuitStateFn, CircuitOp)):
+                # TODO check if CircuitOp/ CircuitStateFn
                 pass
                 # Do some checks and decide how you're planning on taking the gradient.
                 # for now we do param shift

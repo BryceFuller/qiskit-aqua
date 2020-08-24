@@ -30,6 +30,7 @@ class NaturalGradient(Gradient):
     # TODO get gradient
     # TODO get Fisher
 
+
     def __init__(self, circuit: Optional[QuantumCircuit] = None,
                  quantum_instance: Optional[QuantumInstance] = None) -> None:
         """
