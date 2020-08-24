@@ -28,27 +28,65 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import logging
 logger = logging.getLogger(__name__)
 
+from qiskit.aqua.operators import Gradient, QFI
+from qiskit import QuantumCircuit
+from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
+from qiskit.aqua import AquaError
+
+from qiskit.aqua.operators import (
+    OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, CircuitOp, CircuitStateFn, StateFn, DictStateFn,
+    VectorStateFn, Zero, One, DictToCircuitSum)
 
 
-def convert(operator, params, regularization):
-    """
+class NaturalGradient(Gradient):
+    """Convert an operator expression to the first-order gradient."""
 
-    Args:
-        operator:
-        params:
+    # TODO the arguments shouldn't differ, all additional parameters should go to the initializer
+    # pylint: disable=arguments-differ
+    def convert(self,
+                operator: OperatorBase,
+                params: Optional[Union[ParameterVector, Parameter]] = None,
+                method: str = 'param_shift',
+                regularization: Optional[str] = None,
+                approx: Optional[str] = None
+                ) -> OperatorBase:
+        r"""
+        Args:
+            operator: The operator we are taking the gradient of
+            params: The parameters we are taking the gradient with respect to.
+            method: The method used to compute the state/probability gradient. Can be either
+                ``'param_shift'`` or ``'lin_comb'`` or ``'fin_diff'``. Deprecated for observable gradient.
+            regularization: Use the following regularization with an lstsq method to solve the underlying SLE
+                Can be either None or ``'ridge'`` or ``'lasso'`` or ``'perturb_diag'``
+                ``'ridge'`` and ``'lasso'`` use an automatic optimal parameter search
+                If regularization is None but the metric is ill-conditioned or singular then a lstsq solver is
+                used without regularization
+            approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
 
-    Returns:
+        Returns:
+            An operator whose evaluation yields the NaturalGradient.
 
-    """
-    # get gradient - C, x[1]
-    # get metric - A,  x[0] ==> A = QFI/4
-    # def combo_fn(x):
-    # if np.linalg.matrix_rank(x[0]) >= 2 and np.linalg.cond(x[0]) < 1000:
-    #             nat_grad = np.linalg.solve(x[0], x[1])
-    # else:
-    #       nat_grad = regularized_lse_solver(x[0], x[1], regularization=regularization)
-    # return nat_grad
+        Raises:
+            ValueError: If ``params`` contains a parameter not present in ``operator``.
+        """
+        grad = Gradient().convert(operator, params, method)
+        metric = QFI().convert(operator, params, approx) * 0.25
 
+        def combo_fn(x):
+            c = x[0]
+            a = x[1]
+            if regularization:
+                nat_grad = regularized_lse_solver(a, c, regularization=regularization)
+            else:
+                try:
+                    nat_grad = np.linalg.solve(a, c)
+                except np.LinAlgError:
+                    nat_grad = np.linalg.lstsq(a, c)
+            return nat_grad
+
+        return ListOp([grad, metric], combo_fn=combo_fn)
+
+@staticmethod
 def reg_term_search(A: np.ndarray,
                     C: np.ndarray, reg_method, lambda1=1e-3, lambda4=1., tol=1e-8):
     """
@@ -149,7 +187,7 @@ def reg_term_search(A: np.ndarray,
     # print('Iterations ', counter)
     return lambda_mc, x_mc
 
-
+@staticmethod
 def ridge(A: np.ndarray,
           C: np.ndarray,
           lambda_=1., auto_search=True, lambda1=1e-3, lambda4=1., tol_search=1e-8,
@@ -197,7 +235,7 @@ def ridge(A: np.ndarray,
         x_mc = reg.coef_
     return lambda_mc, np.transpose(x_mc)
 
-
+@staticmethod
 def lasso(A, C, lambda_=1., auto_search=True, lambda1=1e-4, lambda4=1., tol_search=1e-8,
           fit_intercept=True, normalize=False, precompute=False, copy_A=True, max_iter=1000, tol=0.0001,
           warm_start=False, positive=False, random_state=None, selection='random'):
@@ -246,7 +284,7 @@ def lasso(A, C, lambda_=1., auto_search=True, lambda1=1e-4, lambda4=1., tol_sear
         x_mc = reg.coef_
     return lambda_mc, x_mc
 
-
+@staticmethod
 def regularized_lse_solver(A: np.ndarray,
                            C: np.ndarray,
                            regularization: str = 'perturb_diag',
