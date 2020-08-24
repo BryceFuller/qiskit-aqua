@@ -24,7 +24,7 @@ from qiskit import BasicAer
 from qiskit.aqua.operators.gradients import Gradient
 
 from qiskit.aqua.operators.gradients.gradient.gradient_lin_comb import GradientLinComb
-from qiskit.aqua.operators.gradients.hessian.state_hessian_lin_comb import StateHessianLinComb
+from qiskit.aqua.operators.gradients.hessian.hessian_lin_comb import HessianLinComb
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI
 
 from qiskit.aqua.operators import X, Z, StateFn, CircuitStateFn
@@ -140,7 +140,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
-        state_hess = StateHessianLinComb().convert(operator=op, params=params)
+        state_hess = HessianLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4, b: np.pi}, {a: np.pi / 4, b: np.pi / 4},
                        {a: np.pi / 2, b: np.pi / 4}]
         correct_values = [[[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), 0]],
@@ -153,38 +153,38 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         self.assertTrue(correct_grad)
 
-    # def test_prob_lin_comb_grad(self):
-    #     """Test the ancilla probability gradient
-    #     dp0/da = cos(a)sin(b) / 2
-    #     dp1/da = - cos(a)sin(b) / 2
-    #     dp0/db = sin(a)cos(b) / 2
-    #     dp1/db = - sin(a)cos(b) / 2
-    #     """
-    #
-    #     a = Parameter('a')
-    #     b = Parameter('b')
-    #     params = [a, b]
-    #
-    #     q = QuantumRegister(1)
-    #     qc = QuantumCircuit(q)
-    #     qc.h(q)
-    #     qc.rz(params[0], q[0])
-    #     qc.rx(params[1], q[0])
-    #
-    #     op = CircuitStateFn(primitive=qc, coeff=1.)
-    #
-    #     prob_grad = GradientLinComb().convert(operator=op, params=params)
-    #     values_dict = [{a: np.pi / 4, b: 0}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
-    #                    {params[0]: np.pi / 2, params[1]: np.pi}]
-    #     correct_values = [[[0, 0], [1/(2*np.sqrt(2)), - 1/(2*np.sqrt(2))]], [[1/4, - 1/4], [1/4, - 1/4]],
-    #                       [[0, 0], [- 1/2, 1/2]]]
-    #     correct_grad = True
-    #     for i, value_dict in enumerate(values_dict):
-    #         print(prob_grad.assign_parameters(value_dict).eval())
-    #         # print(prob_grad.assign_parameters(value_dict).eval())
-    #         correct_grad &= np.allclose(prob_grad.assign_parameters(
-    #             value_dict).eval(), correct_values[i], atol=1e-6)
-    #     self.assertTrue(correct_grad)
+    def test_prob_lin_comb_grad(self):
+        """Test the ancilla probability gradient
+        dp0/da = cos(a)sin(b) / 2
+        dp1/da = - cos(a)sin(b) / 2
+        dp0/db = sin(a)cos(b) / 2
+        dp1/db = - sin(a)cos(b) / 2
+        """
+
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        op = CircuitStateFn(primitive=qc, coeff=1.)
+
+        prob_grad = GradientLinComb().convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 4, b: 0}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
+                       {params[0]: np.pi / 2, params[1]: np.pi}]
+        correct_values = [[[0, 0], [1/(2*np.sqrt(2)), - 1/(2*np.sqrt(2))]], [[1/4, - 1/4], [1/4, - 1/4]],
+                          [[0, 0], [- 1/2, 1/2]]]
+        correct_grad = True
+        for i, value_dict in enumerate(values_dict):
+            print(prob_grad.assign_parameters(value_dict).eval())
+            # print(prob_grad.assign_parameters(value_dict).eval())
+            correct_grad &= np.allclose(prob_grad.assign_parameters(
+                value_dict).eval(), correct_values[i], atol=1e-6)
+        self.assertTrue(correct_grad)
     #
     # def test_product_rule(self):
     #     # TODO

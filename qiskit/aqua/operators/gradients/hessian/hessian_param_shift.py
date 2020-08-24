@@ -22,7 +22,7 @@ from qiskit.circuit import Parameter
 from ..gradient_base import GradientBase
 
 
-class StateHessianParamShift(GradientBase):
+class HessianParamShift(GradientBase):
     """TODO"""
 
     def convert(self,

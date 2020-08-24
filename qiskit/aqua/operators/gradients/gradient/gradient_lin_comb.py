@@ -166,8 +166,10 @@ class GradientLinComb(GradientBase):
                 lin_comb_op = lin_comb_op.to_matrix()
                 # Compute a partial trace over the working qubit needed to compute the linear combination
                 if isinstance(x, list) or isinstance(x, np.ndarray):
-                    return [partial_trace(lin_comb_op.dot(item), [op.num_qubits]) for item in x]
+                    print([partial_trace(lin_comb_op.dot(item), [op.num_qubits]).data for item in x])
+                    return [partial_trace(lin_comb_op.dot(item), [op.num_qubits]).data for item in x]
                 else:
-                    return partial_trace(lin_comb_op.dot(x), [op.num_qubits])
+                    print(partial_trace(lin_comb_op.dot(x), [op.num_qubits]).data)
+                    return partial_trace(lin_comb_op.dot(x), [op.num_qubits]).data
 
             return ListOp(states, combo_fn=combo_fn) * op.coeff

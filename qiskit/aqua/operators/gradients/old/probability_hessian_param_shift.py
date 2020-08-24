@@ -34,12 +34,12 @@ from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from qiskit.aqua.operators.operator_globals import H, S, I
 from qiskit.aqua.operators.converters.circuit_sampler import CircuitSampler
-from .state_hessian_param_shift import StateHessianParamShift
+from qiskit.aqua.operators.gradients.hessian.hessian_param_shift import HessianParamShift
 
 logger = logging.getLogger(__name__)
 
 
-class ProbabilityHessianParamShift(StateHessianParamShift):
+class ProbabilityHessianParamShift(HessianParamShift):
     r"""
     Special Case of the StateHessian where the hessian_operator is the identity
     (Actually there are some more nuanced differences on how this is computed in practice!)

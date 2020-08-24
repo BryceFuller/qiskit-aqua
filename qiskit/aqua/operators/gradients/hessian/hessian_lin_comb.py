@@ -30,7 +30,7 @@ from qiskit.aqua.operators.operator_globals import I, Z
 from ..gradient_base import GradientBase
 
 
-class StateHessianLinComb(GradientBase):
+class HessianLinComb(GradientBase):
     """Compute the state hessian using the linear combination method."""
 
     def convert(self,
@@ -89,13 +89,13 @@ class StateHessianLinComb(GradientBase):
         # Loop throuh the parameters in the circuit
         params = []
 
-        if isinstance(op, (CircuitStateFn, CircuitOp)):
-            pass
-        elif isinstance(op, (DictStateFn, VectorStateFn)):
-            op = DictToCircuitSum().convert(op)
-        else:
-            raise TypeError('Ancilla gradients only support operators whose states are either '
-                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
+        # if isinstance(op, (CircuitStateFn, CircuitOp)):
+        #     pass
+        # elif isinstance(op, (DictStateFn, VectorStateFn)):
+        #     op = DictToCircuitSum().convert(op)
+        # else:
+        #     raise TypeError('Ancilla gradients only support operators whose states are either '
+        #                     'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
             if param not in target_params:

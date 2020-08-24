@@ -16,18 +16,10 @@
 
 from .hessian import Hessian
 from .operator_hessian import OperatorHessian
-from .probability_hessian import ProbabilityHessian
-from .probability_hessian_lin_comb import ProbabilityHessianLinComb
-from .probability_hessian_param_shift import ProbabilityHessianParamShift
-from .state_hessian import StateHessian
-from .state_hessian_lin_comb import StateHessianLinComb
-from .state_hessian_param_shift import StateHessianParamShift
+from .hessian_lin_comb import HessianLinComb
+from .hessian_param_shift import HessianParamShift
 
 __all__ = ['Hessian',
            'OperatorHessian',
-           'ProbabilityHessian',
-           'ProbabilityHessianLinComb',
-           'ProbabilityHessianParamShift',
-           'StateHessian',
-           'StateHessianLinComb',
-           'StateHessianParamShift']
+           'HessianLinComb',
+           'HessianParamShift']
