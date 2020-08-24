@@ -173,3 +173,4 @@ class GradientLinComb(GradientBase):
                     return partial_trace(lin_comb_op.dot(x), [op.num_qubits]).data
 
             return ListOp(states, combo_fn=combo_fn) * op.coeff
+            # return ListOp(states) * op.coeff

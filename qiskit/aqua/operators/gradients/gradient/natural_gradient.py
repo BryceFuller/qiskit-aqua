@@ -41,7 +41,7 @@ def convert(operator, params, regularization):
 
     """
     # get gradient - C, x[1]
-    # get metric - A,  x[0]
+    # get metric - A,  x[0] ==> A = QFI/4
     # def combo_fn(x):
     # if np.linalg.matrix_rank(x[0]) >= 2 and np.linalg.cond(x[0]) < 1000:
     #             nat_grad = np.linalg.solve(x[0], x[1])

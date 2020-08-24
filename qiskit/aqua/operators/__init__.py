@@ -163,7 +163,7 @@ from .gradients import (GradientBase, Gradient, Hessian, QFI)
 # OperatorGradient, ProbabilityGradientAncilla,
 # ProbabilityGradientParamShift, StateGradientAncilla,
 # StateGradientParamShift, OperatorHessian, ProbabilityHessianAncilla,
-# ProbabilityHessianParamShift, StateHessianAncilla, StateHessianParamShift)
+# ProbabilityHessianParamShift, StateHessianAncilla, HessianParamShift)
 
 __all__ = [
     # Common
@@ -192,5 +192,5 @@ __all__ = [
     # 'OperatorGradient', 'ProbabilityGradientAncilla', 'ProbabilityGradientParamShift',
     # 'StateGradientAncilla', 'StateGradientParamShift', 'OperatorHessian',
     # 'ProbabilityHessianAncilla', 'ProbabilityHessianParamShift', 'StateHessianAncilla',
-    # 'StateHessianParamShift','QFI'
+    # 'HessianParamShift','QFI'
 ]
