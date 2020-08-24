@@ -1,5 +1,5 @@
-from qiskit.aqua.operators.gradients.gradient.probability_gradient_lin_comb import ProbabilityGradientLinComb
-from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
+
+from qiskit.aqua.operators.gradients.gradient.gradient_lin_comb import GradientLinComb
 from qiskit.aqua.operators.gradients.qfi import QFI
 from qiskit import BasicAer
 from qiskit.aqua.operators import X, Z, StateFn, CircuitStateFn, CircuitSampler
@@ -25,7 +25,7 @@ q = QuantumRegister(1)
 qc = QuantumCircuit(q)
 qc.h(q)
 qc.rz(params[0], q[0])
-qc.rx(params[1], q[0])
+qc.rx(params[0], q[0])
 
 # op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 op = CircuitStateFn(primitive=qc, coeff=1.)

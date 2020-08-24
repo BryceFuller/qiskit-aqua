@@ -16,18 +16,12 @@
 
 from .gradient import Gradient
 from .operator_gradient import OperatorGradient
-from .probability_gradient import ProbabilityGradient
-from .probability_gradient_lin_comb import ProbabilityGradientLinComb
-from .probability_gradient_param_shift import ProbabilityGradientParamShift
-from .state_gradient import StateGradient
-from .state_gradient_lin_comb import StateGradientLinComb
-from .state_gradient_param_shift import StateGradientParamShift
+from qiskit.aqua.operators.gradients.old.probability_gradient_param_shift import ProbabilityGradientParamShift
+from .gradient_lin_comb import GradientLinComb
+from .gradient_param_shift import GradientParamShift
 
 __all__ = ['Gradient',
            'OperatorGradient',
-           'ProbabilityGradient',
-           'ProbabilityGradientLinComb',
            'ProbabilityGradientParamShift',
-           'StateGradient',
-           'StateGradientLinComb',
-           'StateGradientParamShift']
+           'GradientLinComb',
+           'GradientParamShift']

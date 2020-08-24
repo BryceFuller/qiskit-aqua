@@ -23,14 +23,17 @@ from qiskit.circuit.library import ZGate, SGate, SdgGate, HGate
 
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
-from qiskit.aqua.operators.converters import DictToCircuitSum
-from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
-from qiskit.aqua.operators.operator_globals import Z
+from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
+from qiskit.aqua.operators.operator_globals import Z, I
+from qiskit.quantum_info import partial_trace
 from ..gradient_base import GradientBase
 
 
-class StateGradientLinComb(GradientBase):
-    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω using the linear combination method."""
+class GradientLinComb(GradientBase):
+    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω using the linear combination method.
+    respectively the gradients of the sampling probabilities of the basis states of a state |ψ(ω)〉w.r.t. ω.
+    This method employs a linear combination of unitaries, see e.g. https://arxiv.org/pdf/1811.11184.pdf
+    """
 
     def convert(self,
                 operator: OperatorBase,
@@ -45,21 +48,21 @@ class StateGradientLinComb(GradientBase):
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
         self._params = params
+        self._operator_has_measurement = False
         return self._prepare_operator(operator)
 
-    # TODO remove here. Traverse should happen in gradient
     def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
             return operator.traverse(self._prepare_operator)
         elif isinstance(operator, StateFn):
             if operator.is_measurement:
+                self._operator_has_measurement = True
                 return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return Z ^ operator
-        if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
-            # TODO avoid duplicate transformations
+            return 2 * Z ^ operator
+        if isinstance(operator, (CircuitStateFn, CircuitOp)):
             operator = self._grad_states(operator, self._params)
-        return 2 * operator
+        return operator
 
     def _grad_states(self,
                      op: OperatorBase,
@@ -80,22 +83,6 @@ class StateGradientLinComb(GradientBase):
             AquaError: If one of the circuits could not be constructed.
             TypeError: If the operators is of unsupported type.
         """
-        # TODO what's with these arguments?
-        # state_qc: QuantumCircuit,
-        # gates_to_parameters: Dict[Parameter, List[Gate]],
-        # grad_coeffs: Dict[Parameter, List[List[complex]]],
-        # grad_gates: Dict[Parameter, List[List[Instruction]]])
-        # state_qc: The quantum circuit representing the state for which we compute the gradient.
-        # gates_to_parameters: The dictionary of parameters and gates with respect to which the
-        #   quantum Fisher
-        # Information is computed.
-        # grad_coeffs: The values needed to compute the gradient for the parameterized gates.
-        #      For each parameter, the dict holds a list of all coeffs for all gates which are
-        #      parameterized by
-        #      the parameter. {param:[[coeffs0],...]}
-        # grad_gates: The gates needed to compute the gradient for the parameterized gates.
-        #      For each parameter, the dict holds a list of all gates to insert for all gates
-        #      which are parameterized by the parameter. {param:[[gates_to_insert0],...]}
 
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
@@ -105,14 +92,6 @@ class StateGradientLinComb(GradientBase):
         grad_gates = {}
         # Loop throuh the parameters in the circuit
         params = []
-
-        if isinstance(op, (CircuitStateFn, CircuitOp)):
-            pass
-        elif isinstance(op, (DictStateFn, VectorStateFn)):
-            op = DictToCircuitSum().convert(op)  # TODO inplace
-        else:
-            raise TypeError('Ancilla gradients only support operators whose states are either '
-                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
         for param, elements in state_qc._parameter_table.items():
             # TODO param expressions
@@ -146,7 +125,6 @@ class StateGradientLinComb(GradientBase):
                     grad_state.compose(state_qc, inplace=True)
 
                     # apply Hadamard on work_q
-                    # TODO can this not just be grad_state.h(qr_work) ?
                     self.insert_gate(
                         grad_state, gates_to_parameters[params[0]][0], HGate(), qubits=[work_q]
                     )
@@ -166,6 +144,7 @@ class StateGradientLinComb(GradientBase):
                         if is_complex:
                             self.insert_gate(grad_state, gates_to_parameters[params[0]][0],
                                              SGate(), qubits=[work_q])
+
                     # Insert controlled, intercepting gate - controlled by |0>
                     self.insert_gate(grad_state, gates_to_parameters[param][m],
                                      gate_to_insert_i,
@@ -178,4 +157,17 @@ class StateGradientLinComb(GradientBase):
 
             states += [state]
             #  TODO check that all properties of op are carried over but I think so
-        return ListOp(states) * op.coeff
+        if self._operator_has_measurement:
+            return ListOp(states) * op.coeff
+        else:
+            def combo_fn(x):
+                # Generate the operator which computes the linear combination
+                lin_comb_op = (I ^ op.num_qubits) ^ Z
+                lin_comb_op = lin_comb_op.to_matrix()
+                # Compute a partial trace over the working qubit needed to compute the linear combination
+                if isinstance(x, list) or isinstance(x, np.ndarray):
+                    return [partial_trace(lin_comb_op.dot(item), [op.num_qubits]) for item in x]
+                else:
+                    return partial_trace(lin_comb_op.dot(x), [op.num_qubits])
+
+            return ListOp(states, combo_fn=combo_fn) * op.coeff

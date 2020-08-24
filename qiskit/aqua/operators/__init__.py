@@ -152,18 +152,18 @@ from .evolutions import (EvolutionBase, EvolutionFactory, EvolvedOp, PauliTrotte
                          MatrixEvolution, TrotterizationBase, TrotterizationFactory, Trotter,
                          Suzuki, QDrift)
 
-from .gradients import (GradientBase, Gradient, Hessian, QFI)
-# OperatorGradient, ProbabilityGradientAncilla,
-# ProbabilityGradientParamShift, StateGradientAncilla,
-# StateGradientParamShift, OperatorHessian, ProbabilityHessianAncilla,
-# ProbabilityHessianParamShift, StateHessianAncilla, StateHessianParamShift)
-
 
 # Convenience immutable instances
 from .operator_globals import (EVAL_SIG_DIGITS,
                                X, Y, Z, I,
                                CX, S, H, T, Swap, CZ,
                                Zero, One, Plus, Minus)
+
+from .gradients import (GradientBase, Gradient, Hessian, QFI)
+# OperatorGradient, ProbabilityGradientAncilla,
+# ProbabilityGradientParamShift, StateGradientAncilla,
+# StateGradientParamShift, OperatorHessian, ProbabilityHessianAncilla,
+# ProbabilityHessianParamShift, StateHessianAncilla, StateHessianParamShift)
 
 __all__ = [
     # Common

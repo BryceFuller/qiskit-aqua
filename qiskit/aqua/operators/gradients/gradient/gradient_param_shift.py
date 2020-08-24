@@ -21,26 +21,25 @@ from qiskit.aqua.operators import OperatorBase
 from ..gradient_base import GradientBase
 
 
-class StateGradientParamShift(GradientBase):
+class GradientParamShift(GradientBase):
     """Compute the gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω with the parameter shift method."""
 
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[Parameter, ParameterVector, List[Parameter]]] = None
+                params: Optional[Union[Parameter, ParameterVector, List[Parameter]]] = None,
+                analytic: bool = True
                 ) -> OperatorBase:
         """
         Args:
             operator: The operator corresponding to our quantum state we are taking the
                 gradient of: |ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
+            analytic: If True use the parameter shift rule to compute analytic gradients,
+                      else use a finite difference approach
 
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
-        # TODO add finite difference
-        # analytic: bool = True
-        # analytic: If True compute an analytic gradient, else compute a finite difference
-        #     approximations
 
         # TODO Look through state and decompose gates which cannot be evaluated with the parameter
         # shift rule. This seems like it could be it's own converter??
@@ -49,4 +48,9 @@ class StateGradientParamShift(GradientBase):
         # TODO Note to above --> all are pi/2
         # parameter_shift will return a ListOp of the same size as params
         # one SummedOp per parameter.
-        return self.parameter_shift(operator, params)
+        if analytic:
+            return self.parameter_shift(operator, params)
+            #TODO move the logic for parameter shifting from gradient_base here
+        else:
+            pass
+            # TODO add finite difference

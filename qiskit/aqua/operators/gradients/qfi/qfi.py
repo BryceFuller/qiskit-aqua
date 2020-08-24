@@ -111,9 +111,10 @@ class QFI(GradientBase):
         # QFI & phase fix observable
         qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
         phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
-        # TODO uncomment
-        # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
         # see https://arxiv.org/pdf/quant-ph/0108146.pdf
+        # Alternative
+        # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
+
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
         # Dictionary which relates the coefficients needed for the QFI for every parameter
@@ -273,12 +274,6 @@ class QFI(GradientBase):
                                                  gate_to_insert_j,
                                                  additional_qubits=additional_qubits)
 
-                                # TODO check if we could use the trimming
-                                # What speaks against it is the new way to compute the phase fix
-                                # directly within the observable here the trimming wouldn't work.
-                                # The other way would be more efficient in terms of computation but
-                                # this is more convenient to write it.
-
                                 # Remove redundant gates
 
                                 if j <= i:
@@ -294,7 +289,7 @@ class QFI(GradientBase):
 
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                     CircuitStateFn(qfi_circuit)
-                                if k_i == 0 and k_j == 0:
+                                if m_i == 0 and k_i == 0 and m_j == 0 and k_j == 0:
                                     qfi_op = term
                                 else:
                                     qfi_op += term

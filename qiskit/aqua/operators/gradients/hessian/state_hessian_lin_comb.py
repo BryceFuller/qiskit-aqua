@@ -207,7 +207,7 @@ class StateHessianLinComb(GradientBase):
                                 term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
                                     CircuitStateFn(hessian_circuit)
 
-                                if i == 0 and j == 0:
+                                if i == 0 and j == 0 and m == 0 and n == 0:
                                     hessian_op = term
                                 else:
                                     hessian_op += term

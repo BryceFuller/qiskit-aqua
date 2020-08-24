@@ -25,9 +25,12 @@ from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Inst
 from qiskit.aqua import AquaError
 
 from qiskit.aqua.operators import (
-    OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, CircuitStateFn, StateFn, DictStateFn,
-    VectorStateFn, Zero, One
+    OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, CircuitOp, CircuitStateFn, StateFn, DictStateFn,
+    VectorStateFn, Zero, One, DictToCircuitSum
 )
+
+from .gradient_lin_comb import GradientLinComb
+from .gradient_param_shift import GradientParamShift
 
 from ..gradient_base import GradientBase
 
@@ -55,7 +58,6 @@ class Gradient(GradientBase):
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                # grad_combo_fn: Callable = lambda x: x,
                 params: Optional[Union[ParameterVector, Parameter]] = None,
                 method: str = 'param_shift'
                 ) -> OperatorBase:
@@ -64,7 +66,7 @@ class Gradient(GradientBase):
             operator: The operator we are taking the gradient of
             params: The parameters we are taking the gradient with respect to.
             method: The method used to compute the state/probability gradient. Can be either
-                ``'param_shift'`` or ``'lin_comb'``. Deprecated for observable gradient.
+                ``'param_shift'`` or ``'lin_comb'`` or ``'fin_diff'``. Deprecated for observable gradient.
 
         Returns:
             An operator whose evaluation yields the Gradient.
@@ -174,19 +176,29 @@ class Gradient(GradientBase):
                                 'collected inside the ComposedOp.')
 
             # Do some checks to make sure operator is sensible
-            if isinstance(operator[-1], CircuitStateFn):
+            # TODO if this is a sum of circuit state fns then compute the gradient for all separate ones
+            if isinstance(operator[-1], (CircuitStateFn, CircuitOp)):
+                pass
                 # Do some checks and decide how you're planning on taking the gradient.
                 # for now we do param shift
-                if method == 'param_shift':
-                    return self.parameter_shift(operator, param)
+
             elif isinstance(operator[-1], (VectorStateFn, DictStateFn)):
-                pass
-                # Do LCU logic
+                operator[-1] = DictToCircuitSum().convert(operator[-1])
+                # Do LCU logic # TODO what's that?
             else:
-                pass
+                raise TypeError('Gradients only support operators whose states are either '
+                                'CircuitStateFn, DictStateFn, or VectorStateFn.')
+
+            if method == 'param_shift':
+                return GradientParamShift().convert(operator, param)
+            elif method == 'fin_diff':
+                return GradientParamShift().convert(operator, param, analytic=False)
+                # return self.parameter_shift(operator, param)
+            elif method == 'lin_comb':
+                return GradientLinComb().convert(operator, param)
                 # @CHRISTA, here is where you'd check if you need to
                 # decompose some operator into circuits or do
-                # something other than the parameter shift rule.
+                # something other than the parameter shift rule. # TODO is this what I need?
 
         # This is the recursive case where the chain rule is handled
         elif isinstance(operator, ListOp):
@@ -206,14 +218,16 @@ class Gradient(GradientBase):
                 print("SummedOp combo fn")
                 return SummedOp(oplist=grad_ops)
             elif isinstance(operator, TensoredOp):
-                raise NotImplementedError
-                # TODO!
+                return TensoredOp(oplist=grad_ops)
+            # else:
+            #     raise NotImplementedError
+            #     # TODO!
 
             # NOTE! This will totally break if you try to pass a DictStateFn through a combo_fn
             # (for example, using probability gradients)
             # I think this is a problem more generally, not just in this subroutine.
             grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
+            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn) # TODO why operator.oplist? -> only grad_ops
 
         elif isinstance(operator, StateFn):
             if operator._is_measurement:
@@ -282,8 +296,8 @@ class Gradient(GradientBase):
 
     # TODO get ParameterExpression in the different gradients
     # Working title
-    def _chain_rule_wrapper_sympy_grad(self,
-                                       param: ParameterExpression) -> List[Union[sy.Expr, float]]:
+    def parameter_expression_grad(self,
+                                param: ParameterExpression) -> List[Union[sy.Expr, float]]:
         """Get the derivative of a parameter expression w.r.t. the underlying parameter keys.
 
         Args:

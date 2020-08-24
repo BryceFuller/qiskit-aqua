@@ -26,10 +26,10 @@ from qiskit.aqua.operators.operator_base import OperatorBase
 from qiskit.aqua.operators.list_ops.list_op import ListOp
 from qiskit.aqua.operators.state_fns.state_fn import StateFn
 from qiskit.aqua.operators.converters.circuit_sampler import CircuitSampler
-from .state_gradient_param_shift import StateGradientParamShift
+from qiskit.aqua.operators.gradients.gradient.gradient_param_shift import GradientParamShift
 
 
-class ProbabilityGradientParamShift(StateGradientParamShift):
+class ProbabilityGradientParamShift(GradientParamShift):
     """Special Case of the StateGradient where the gradient_operator is the identity.
 
     Actually there are some more nuanced differences on how this is computed in practice!
@@ -39,7 +39,7 @@ class ProbabilityGradientParamShift(StateGradientParamShift):
                 operator: OperatorBase,
                 params: Union[Parameter, ParameterVector, List[Parameter]] = None,
                 param_bindings: Optional[Dict[Parameter, float]] = None,
-                backend: Optional[QuantumInstance, BaseBackend] = None,
+                backend: Optional[Union[QuantumInstance, BaseBackend]] = None,
                 analytic: bool = True) -> OperatorBase:
         r"""
         Args
