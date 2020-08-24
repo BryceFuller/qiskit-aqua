@@ -32,7 +32,7 @@ from qiskit.circuit.library.standard_gates import HGate, SdgGate, SGate, ZGate
 from qiskit.aqua import QuantumInstance
 
 
-from qiskit.aqua.operators.gradients.gradient.prob_gradient import Gradient
+from qiskit.aqua.operators.gradients.gradient.probability_gradient import Gradient
 
 from .grad_utils import gate_gradient_dict, insert_gate
 
@@ -176,7 +176,7 @@ class AncillaStateGradient(Gradient):
     def construct_circuits(self, parameterized_gates: Dict[Parameter, List[Gate]],
                            grad_coeffs: Dict[Parameter, List[List[complex]]],
                            grad_gates: Dict[Parameter, List[List[Instruction]]]) -> \
-                           List[QuantumCircuit]:
+            List[QuantumCircuit]:
         """Generate the gradient circuits.
 
         Args:
@@ -212,7 +212,7 @@ class AncillaStateGradient(Gradient):
                     qubits=[ancilla])
         # Get the circuits needed to compute the gradient
         for j, op in enumerate(self._observable):
-            for i in range(len(params)): #loop over parameters
+            for i in range(len(params)):  # loop over parameters
                 # construct the circuits
                 for m, gates_to_insert_i in enumerate(grad_gates[params[i]]):
                     for k, gate_to_insert_i in enumerate(gates_to_insert_i):
@@ -236,8 +236,8 @@ class AncillaStateGradient(Gradient):
                                             qubits=[ancilla])
                         # Insert controlled, intercepting gate - controlled by |0>
                         insert_gate(grad_circuit, parameterized_gates[params[i]][m],
-                                                                 gate_to_insert_i,
-                                                                 additional_qubits=additional_qubits)
+                                    gate_to_insert_i,
+                                    additional_qubits=additional_qubits)
                         # TODO if to_instruction not supported - warning
                         op_gate = op.to_circuit().to_gate()
                         controlled_op_gate = op_gate.control()

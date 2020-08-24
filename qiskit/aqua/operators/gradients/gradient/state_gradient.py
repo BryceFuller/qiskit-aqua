@@ -14,41 +14,40 @@
 
 """The base interface for Aqua's gradient."""
 
-from typing import Optional, Union, Tuple, List
-import sympy as sy
+from typing import Optional, Union, List
 
-from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
-from qiskit.providers import BaseBackend
-from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.circuit import Parameter, ParameterVector
+from qiskit.aqua.operators import OperatorBase
 from qiskit.aqua.operators.gradients import GradientBase
-from qiskit.aqua.operators.gradients.gradient.state_gradient_lin_comb import StateGradientLinComb
-from qiskit.aqua.operators.gradients.gradient.state_gradient_param_shift import StateGradientParamShift
-from qiskit.aqua.operators import OperatorBase, ListOp
+
+from .state_gradient_lin_comb import StateGradientLinComb
+from .state_gradient_param_shift import StateGradientParamShift
+
 
 class StateGradient(GradientBase):
-    r"""
-    We are interested in computing:
-    d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω  for θ in params
-    """
+    r"""Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω."""
 
     def convert(self,
-                operator: OperatorBase = None,
-                params: Union[Parameter, ParameterVector, List] = None,
+                operator: OperatorBase,
+                params: Optional[Union[Parameter, ParameterVector, List]] = None,
                 method: str = 'param_shift') -> OperatorBase:
-        r"""
+        """
         Args:
             operator: The operator we are taking the gradient of
-            parameters: The parameters we are taking the gradient with respect to
-            method: The method used to compute the state/probability gradient. ['param_shift', 'lin_comb']
-                    Deprecated for observable gradient
+            params: The parameters we are taking the gradient with respect to
+            method: The method used to compute the state/probability gradient, can be either of
+                ``'param_shift'`` or ``'lin_comb'``.
+
         Returns:
-            gradient_operator: An operator whose evaluation yields the Gradient
+            An operator whose evaluation yields the Gradient
+
+        Raises:
+            NotImplementedError: If an unsupported ``mode`` is selected.
         """
         if method == 'param_shift':
             return StateGradientParamShift().convert(operator=operator, params=params)
         elif method == 'lin_comb':
             return StateGradientLinComb().convert(operator=operator, params=params)
         else:
-            raise AquaError('The chosen gradient method is not implemented. Please choose either param_shift '
-                            'or lin_comb.')
+            raise NotImplementedError('The chosen gradient method is not implemented. '
+                                      'Please choose either ``param_shift`` or ``lin_comb``.')

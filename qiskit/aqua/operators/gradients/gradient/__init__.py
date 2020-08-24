@@ -14,18 +14,17 @@
 
 """The module for Aqua's first order derivatives."""
 
-
 from .gradient import Gradient
-from .operator_gradient import ObservableGradient
-from .prob_gradient import ProbabilityGradient
-from .prob_gradient_lin_comb import ProbabilityGradientLinComb
-from .prob_gradient_param_shift import ProbabilityGradientParamShift
+from .operator_gradient import OperatorGradient
+from .probability_gradient import ProbabilityGradient
+from .probability_gradient_lin_comb import ProbabilityGradientLinComb
+from .probability_gradient_param_shift import ProbabilityGradientParamShift
 from .state_gradient import StateGradient
 from .state_gradient_lin_comb import StateGradientLinComb
 from .state_gradient_param_shift import StateGradientParamShift
 
 __all__ = ['Gradient',
-           'ObservableGradient',
+           'OperatorGradient',
            'ProbabilityGradient',
            'ProbabilityGradientLinComb',
            'ProbabilityGradientParamShift',

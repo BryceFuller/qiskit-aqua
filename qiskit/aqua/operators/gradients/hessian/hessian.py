@@ -13,57 +13,54 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-""" Hessian Class """
+"""The module to compute Hessians."""
 
-from typing import Optional, Callable, Union, List, Tuple
-import logging
-from functools import partial, reduce
-import numpy as np
+from typing import Optional, Union, List, Tuple
 
-from qiskit.quantum_info import Pauli
-from qiskit import QuantumCircuit
-
+from qiskit.circuit import Parameter
 from qiskit.aqua.operators.operator_base import OperatorBase
-from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
-from qiskit.aqua.operators.primitive_ops.pauli_op import PauliOp
-from qiskit.aqua.operators.primitive_ops.circuit_op import CircuitOp
 from qiskit.aqua.operators.list_ops.list_op import ListOp
-from qiskit.aqua.operators.list_ops.composed_op import ComposedOp
-from qiskit.aqua.operators.state_fns.state_fn import StateFn
-from qiskit.aqua.operators.operator_globals import H, S, I
-from ..gradient_base import GradientBase
-from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
-logger = logging.getLogger(__name__)
+from ..gradient_base import GradientBase
 
 
 class Hessian(GradientBase):
-    r"""
-    Converter for changing parameterized circuits into operators
-    whose evaluation yields the second-order gradient with respect to the circuit parameters.
-    """
+    """Compute the Hessian of a expected value."""
 
-    # pylint: disable=too-many-return-statements
     def convert(self,
-        operator: OperatorBase = None,
-        param_pairs: Union[Tuple, List] = None,
-        method: str = 'param_shift') -> OperatorBase:
-        r"""
+                operator: OperatorBase,
+                params: Optional[Union[Tuple[Parameter, Parameter],
+                                       List[Tuple[Parameter, Parameter]]]] = None,
+                method: str = 'param_shift') -> OperatorBase:
+        """
         Args:
             operator: The measurement operator we are taking the gradient of
-            state_operator:  The operator corresponding to our state preparation circuit
-            parameters: The parameters we are taking the gradient with respect to
-            method: The method used to compute the gradient. Either 'param_shift' or 'ancilla'
+            operator:  The operator corresponding to our state preparation circuit
+            params: The parameters we are taking the gradient with respect to
+            method: The method used to compute the gradient. Either 'param_shift' or 'ancilla'.
+
         Returns:
             gradient_operator: An operator whose evaluation yeild the Hessian
         """
-        if isinstance(param_pairs, Tuple):
-            if method == 'param_shift':
-                return self.parameter_shift_grad(self.parameter_shift(operator, param_pairs[0]), param_pairs[1])
-            if method == 'ancilla':
-                return self.ancilla_hessian(param_pairs)
+        # if input is a tuple instead of a list, wrap it into a list
+        if isinstance(params, tuple):
+            is_tuple = True
+            params = [params]
+        else:
+            is_tuple = False
 
-        # Todo fix the ancilla method here
-        return ListOp([self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1]) for pair in param_pairs])
+        if method == 'param_shift':
+            hessian = ListOp(
+                [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1])
+                 for pair in params]
+            )
+        elif method == 'ancilla':
+            hessian = self.ancilla_hessian(params)
 
-    # Todo add ancilla hessian here
+        if is_tuple:  # if input was not a list extract the single operator from the list op
+            return hessian.oplist[0]
+        return hessian
+
+    def ancilla_hessian(self, params):
+        """TODO"""
+        raise NotImplementedError  # TODO
