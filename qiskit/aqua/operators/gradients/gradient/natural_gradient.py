@@ -29,19 +29,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 from qiskit.aqua.operators import Gradient, QFI
-from qiskit import QuantumCircuit
-from qiskit.circuit import ParameterExpression, Parameter, ParameterVector, Instruction
-from qiskit.aqua import AquaError
+from qiskit.circuit import Parameter, ParameterVector
 
-from qiskit.aqua.operators import (
-    OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, CircuitOp, CircuitStateFn, StateFn, DictStateFn,
-    VectorStateFn, Zero, One, DictToCircuitSum)
+from qiskit.aqua.operators import (OperatorBase, ListOp)
 
 
 class NaturalGradient(Gradient):
     """Convert an operator expression to the first-order gradient."""
 
-    # TODO the arguments shouldn't differ, all additional parameters should go to the initializer
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
@@ -91,8 +86,8 @@ def reg_term_search(A: np.ndarray,
                     C: np.ndarray, reg_method, lambda1=1e-3, lambda4=1., tol=1e-8):
     """
     This method implements a search for a regularization parameter lambda by finding for the corner of the L-curve
-    More explicitly, one has to evaluate a suitable lambda by finding a compromise between the error in the solution and
-    the norm of the regularization.
+    More explicitly, one has to evaluate a suitable lambda by finding a compromise between the error in the
+    solution and the norm of the regularization.
     This function implements a method presented in
     `A simple algorithm to find the L-curve corner in the regularization of inverse problems
      <https://arxiv.org/pdf/1608.04571.pdf>`
@@ -184,7 +179,6 @@ def reg_term_search(A: np.ndarray,
             _, lambda3 = get_lambda2_lambda3(lambda_[0], lambda_[3])
             lambda_[2] = lambda3
             x_lambda[2] = reg_method(A, C, lambda_[2])
-    # print('Iterations ', counter)
     return lambda_mc, x_mc
 
 @staticmethod
@@ -225,7 +219,6 @@ def ridge(A: np.ndarray,
     if auto_search:
         def reg_method(A, C, l):
             reg.set_params(alpha=l)
-            # reg.set_params({'alpha': l})
             reg.fit(A, C)
             return reg.coef_
         lambda_mc, x_mc = reg_term_search(A, C, reg_method, lambda1=lambda1, lambda4=lambda4, tol=tol_search)
