@@ -87,7 +87,7 @@ class HessianLinComb(GradientBase):
         # Dictionary which relates the gates needed for the hessian for every parameter
         hessian_gates = {}
         # Loop throuh the parameters in the circuit
-        params = []
+        # params = []
 
         # if isinstance(op, (CircuitStateFn, CircuitOp)):
         #     pass
@@ -97,12 +97,15 @@ class HessianLinComb(GradientBase):
         #     raise TypeError('Ancilla gradients only support operators whose states are either '
         #                     'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = deepcopy(op.primitive)
-        for param, elements in state_qc._parameter_table.items():
-            if param not in target_params:
-                continue
-            if param not in params:
-                params.append(param)
-                gates_to_parameters[param] = []
+        # for param, elements in state_qc._parameter_table.items():
+        for param in target_params:
+            elements = state_qc._parameter_table[param]
+            # TODO param expressions
+            # if param not in target_params:
+            #     continue
+            # if param not in params:
+            #     params.append(param)
+            gates_to_parameters[param] = []
             hessian_coeffs[param] = []
             hessian_gates[param] = []
             for element in elements:
@@ -124,16 +127,16 @@ class HessianLinComb(GradientBase):
         circuit.data = state_qc.data
         # params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
-        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
+        self.insert_gate(circuit, gates_to_parameters[target_params[0]][0], HGate(),
                          qubits=[work_q0])
-        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(),
+        self.insert_gate(circuit, gates_to_parameters[target_params[0]][0], HGate(),
                          qubits=[work_q1])
         # Get the circuits needed to compute A_ij
-        for param_a in params:  # loop over parameters
+        for param_a in target_params:  # loop over parameters
             hessian_ops = []
             # j = 0
             # while j <= i: #loop over parameters
-            for param_b in params:
+            for param_b in target_params:
                 # construct the circuits
                 for i, gates_to_insert_a in enumerate(hessian_gates[param_a]):
                     for j, gate_to_insert_a in enumerate(gates_to_insert_a):
@@ -146,18 +149,18 @@ class HessianLinComb(GradientBase):
                         if sign == -1:
                             if is_complex:
                                 self.insert_gate(hessian_circuit_temp,
-                                                 gates_to_parameters[params[0]][0],
+                                                 gates_to_parameters[target_params[0]][0],
                                                  SdgGate(),
                                                  qubits=[work_q0])
                             else:
                                 self.insert_gate(hessian_circuit_temp,
-                                                 gates_to_parameters[params[0]][0],
+                                                 gates_to_parameters[target_params[0]][0],
                                                  ZGate(),
                                                  qubits=[work_q0])
                         else:
                             if is_complex:
                                 self.insert_gate(hessian_circuit_temp,
-                                                 gates_to_parameters[params[0]][0],
+                                                 gates_to_parameters[target_params[0]][0],
                                                  SGate(),
                                                  qubits=[work_q0])
 
@@ -178,18 +181,18 @@ class HessianLinComb(GradientBase):
                                 if sign == -1:
                                     if is_complex:
                                         self.insert_gate(hessian_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          SdgGate(),
                                                          qubits=[work_q1])
                                     else:
                                         self.insert_gate(hessian_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          ZGate(),
                                                          qubits=[work_q1])
                                 else:
                                     if is_complex:
                                         self.insert_gate(hessian_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          SGate(),
                                                          qubits=[work_q1])
 

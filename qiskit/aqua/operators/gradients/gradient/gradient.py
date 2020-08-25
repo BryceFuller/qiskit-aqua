@@ -296,20 +296,25 @@ class Gradient(GradientBase):
         return partial(chain_rule_combo_fn, grad_combo_fn=grad_combo_fn)
 
     # TODO get ParameterExpression in the different gradients
-    # Working title
     def parameter_expression_grad(self,
-                                param: ParameterExpression) -> List[Union[sy.Expr, float]]:
+                                param_expr: ParameterExpression,
+                                param: Parameter) -> List[Union[sy.Expr, float]]:
+
         """Get the derivative of a parameter expression w.r.t. the underlying parameter keys.
 
         Args:
-            param: Parameter Expression  # TODO better documentation
+            param_expr: Parameter Expression  # TODO better documentation
+            param: Parameter w.r.t. which we want to take the derivative
 
         Returns:
             List of derivatives of the parameter expression w.r.t. all keys.
         """
         expr = param._symbol_expr
-        keys = param._parameter_symbols.keys()
-        return [sy.Derivative(expr, key).doit() for key in keys]
+        keys = param._parameter_symbols[param]
+        expr_grad = 0
+        for key in keys:
+            expr_grad += sy.Derivative(expr, key)
+        return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

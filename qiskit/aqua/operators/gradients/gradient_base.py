@@ -222,7 +222,6 @@ class GradientBase(ConverterBase):
     def gate_gradient_dict(self,
                            gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
 
-
         """Given a parameterized gate U(theta) with derivative dU(theta)/dtheta = sum_ia_iU(theta)V_i.
            This function returns a:=[a_0, ...] and V=[V_0, ...]
            Suppose U takes multiple parameters, i.e., U(theta^0, ... theta^k).
