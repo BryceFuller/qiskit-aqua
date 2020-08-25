@@ -115,27 +115,10 @@ class GradientLinComb(GradientBase):
                 c = []
                 g = []
                 for j, gate_param in enumerate(element[0].params):
-                    if gate_param == param:
-                            c.extend(coeffs_gates[j][0])
-                            g.extend(coeffs_gates[j][1])
-                    else:
-                        if isinstance(gate_param, ParameterExpression):
-                            if param in gate_param._parameter_symbols.keys():
-                                c.extend(coeffs_gates[j][0])
-                                g.extend(coeffs_gates[j][1])
-                                # grad_coeffs[param].append(coeffs_gates[j][0])
-                            # grad_gates[param].append(coeffs_gates[j][1])
-                    # elif gate_param == param:
-                    #         c.extend(coeffs_gates[j][0])
-                    #         g.extend(coeffs_gates[j][1])
-                            # grad_coeffs[param].append(coeffs_gates[j][0])
-                            # grad_gates[param].append(coeffs_gates[j][1])
+                    c.extend(coeffs_gates[j][0])
+                    g.extend(coeffs_gates[j][1])
                 grad_coeffs[param].append(c)
                 grad_gates[param].append(g)
-                # for c_g in coeffs_gates:
-                #     grad_coeffs[param].append(c_g[0])
-                #     grad_gates[param].append(c_g[1])
-
         states = []
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
@@ -171,17 +154,20 @@ class GradientLinComb(GradientBase):
                                              SGate(), qubits=[work_q])
 
                     # Insert controlled, intercepting gate - controlled by |0>
-                    # self.insert_gate(grad_state, gates_to_parameters[param][m],
-                    #                  gate_to_insert_i,
-                    #                  additional_qubits=additional_qubits)
+                    self.insert_gate(grad_state, gates_to_parameters[param][m],
+                                     gate_to_insert_i,
+                                     additional_qubits=additional_qubits)
                     grad_state.h(work_q)
                     state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
-                    param_expr_grad = 0
-                    for gate_param in gates_to_parameters[param][m].params:
+                    # Chain Rule parameter expressions
+                    gate_param = gates_to_parameters[param][m].params[k]
+                    if gate_param == param:
+                        pass
+                    else:
                         if isinstance(gate_param, ParameterExpression):
-                            param_expr_grad += self.parameter_expression_grad(gate_param, param)
-                    if param_expr_grad:
-                        state *= param_expr_grad
+                            state *= self.parameter_expression_grad(gate_param, param)
+                        else:
+                            state *= 0
 
                     if m == 0 and k == 0:
                         state_op = state

@@ -21,7 +21,7 @@ from functools import cmp_to_key
 import numpy as np
 from scipy.linalg import block_diag
 
-from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector
+from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 
@@ -193,12 +193,29 @@ class QFI(GradientBase):
                     grad_state = self.trim_circuit(grad_state, gates_to_parameters[param][m])
 
                     grad_state.h(work_q)
-                    if m == 0 and k == 0:
-                        phase_fix_state = np.sqrt(np.abs(coeff_i)) * \
+
+                    state = np.sqrt(np.abs(coeff_i)) * \
                                                   op.coeff * CircuitStateFn(grad_state)
+
+                    # Chain Rule parameter expressions
+                    gate_param = gates_to_parameters[param][m].params[k]
+                    if gate_param == param:
+                        pass
                     else:
-                        phase_fix_state += np.sqrt(np.abs(coeff_i)) * \
-                                                   op.coeff * CircuitStateFn(grad_state)
+                        if isinstance(gate_param, ParameterExpression):
+                            state *= self.parameter_expression_grad(gate_param, param)
+                        else:
+                            state *= 0
+
+                    if m == 0 and k == 0:
+                        state_op = state
+                    else:
+                        state_op += state
+
+                    if m == 0 and k == 0:
+                        phase_fix_state = state
+                    else:
+                        phase_fix_state += state
             phase_fix_states += [phase_fix_observable @ phase_fix_state]
 
         qfi_operators = []
@@ -289,6 +306,24 @@ class QFI(GradientBase):
 
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                     CircuitStateFn(qfi_circuit)
+                                # Chain Rule Parameter Expression
+                                gate_param = gates_to_parameters[param_i][m].params[k_i]
+                                if gate_param == param_i:
+                                    pass
+                                else:
+                                    if isinstance(gate_param, ParameterExpression):
+                                        term *= self.parameter_expression_grad(gate_param, param_i)
+                                    else:
+                                        term *= 0
+                                gate_param = gates_to_parameters[param_j][m].params[k_j]
+                                if gate_param == param_j:
+                                    pass
+                                else:
+                                    if isinstance(gate_param, ParameterExpression):
+                                        term *= self.parameter_expression_grad(gate_param, param_j)
+                                    else:
+                                        term *= 0
+
                                 if m_i == 0 and k_i == 0 and m_j == 0 and k_j == 0:
                                     qfi_op = term
                                 else:

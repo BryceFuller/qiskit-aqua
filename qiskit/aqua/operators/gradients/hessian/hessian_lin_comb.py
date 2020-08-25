@@ -18,7 +18,7 @@ from typing import Optional, Union, List
 from copy import deepcopy
 import numpy as np
 
-from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector
+from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library import HGate, SGate, SdgGate, ZGate
 
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
@@ -111,6 +111,15 @@ class HessianLinComb(GradientBase):
             for element in elements:
                 # get the coefficients and controlled gates (raises an error if the parameterized
                 # gate is not supported)
+                coeffs_gates = self.gate_gradient_dict(element[0])
+                gates_to_parameters[param].append(element[0])
+                c = []
+                g = []
+                for j, gate_param in enumerate(element[0].params):
+                    c.extend(coeffs_gates[j][0])
+                    g.extend(coeffs_gates[j][1])
+                    hessian_coeffs[param].append(c)
+                    hessian_gates[param].append(g)
                 coeffs_gates = self.gate_gradient_dict(element[0])
                 gates_to_parameters[param].append(element[0])
                 for c_g in coeffs_gates:
@@ -208,6 +217,24 @@ class HessianLinComb(GradientBase):
 
                                 term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
                                     CircuitStateFn(hessian_circuit)
+
+                                # Chain Rule Parameter Expression
+                                gate_param = gates_to_parameters[param_a][m].params[j]
+                                if gate_param == param_a:
+                                    pass
+                                else:
+                                    if isinstance(gate_param, ParameterExpression):
+                                        term *= self.parameter_expression_grad(gate_param, param_a)
+                                    else:
+                                        term *= 0
+                                gate_param = gates_to_parameters[param_b][m].params[n]
+                                if gate_param == param_b:
+                                    pass
+                                else:
+                                    if isinstance(gate_param, ParameterExpression):
+                                        term *= self.parameter_expression_grad(gate_param, param_b)
+                                    else:
+                                        term *= 0
 
                                 if i == 0 and j == 0 and m == 0 and n == 0:
                                     hessian_op = term

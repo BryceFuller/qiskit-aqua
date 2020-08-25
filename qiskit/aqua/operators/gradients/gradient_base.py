@@ -199,6 +199,8 @@ class GradientBase(ConverterBase):
                 pshift_gate = pshift_circ._parameter_table[param][i][0]
                 mshift_gate = mshift_circ._parameter_table[param][i][0]
 
+                #TODO here chain rule parameter shift
+
                 pshift_index = pshift_gate.params.index(param)
                 mshift_index = mshift_gate.params.index(param)
 
