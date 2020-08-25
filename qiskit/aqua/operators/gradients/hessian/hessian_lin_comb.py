@@ -173,7 +173,6 @@ class HessianLinComb(GradientBase):
                                 hessian_circuit.data = hessian_circuit_temp.data
 
                                 # Fix working qubit 1 phase
-                                # Fix ancilla phase
                                 sign = np.sign(coeff_b)
                                 is_complex = np.iscomplex(coeff_b)
                                 if sign == -1:
