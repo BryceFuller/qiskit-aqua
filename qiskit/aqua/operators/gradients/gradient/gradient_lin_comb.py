@@ -162,15 +162,15 @@ class GradientLinComb(GradientBase):
         else:
             def combo_fn(x):
                 # Generate the operator which computes the linear combination
-                lin_comb_op = Z ^ (I ^ op.num_qubits)
+                lin_comb_op = (I ^ op.num_qubits) ^ Z
                 lin_comb_op = lin_comb_op.to_matrix()
                 # Compute a partial trace over the working qubit needed to compute the linear combination
                 if isinstance(x, list) or isinstance(x, np.ndarray):
                     # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                    return [partial_trace(lin_comb_op.dot(np.multiply(item, np.conj(item))), [op.num_qubits]).data for item in x]
+                    return [partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data for item in x]
                 else:
                     # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                    return partial_trace(lin_comb_op.dot(np.multiply(x, np.conj(x))), [op.num_qubits]).data
+                    return partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data
 
             return ListOp(states, combo_fn=combo_fn) * op.coeff
             # return ListOp(states) * op.coeff
