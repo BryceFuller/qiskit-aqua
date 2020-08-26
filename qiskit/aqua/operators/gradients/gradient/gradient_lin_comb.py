@@ -165,7 +165,11 @@ class GradientLinComb(GradientBase):
                         pass
                     else:
                         if isinstance(gate_param, ParameterExpression):
-                            state *= self.parameter_expression_grad(gate_param, param)
+                            import sympy as sy
+                            expr_grad = self.parameter_expression_grad(gate_param, param)
+                            # Square root needed bc the coefficients are squared in the expectation value
+                            expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                            state *= expr_grad
                         else:
                             state *= 0
 

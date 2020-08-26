@@ -48,7 +48,7 @@ class HessianLinComb(GradientBase):
             d^2⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω_kdω_l
         """
         self._params = params
-        return 4 * self._prepare_operator(operator)
+        return self._prepare_operator(operator)
 
     def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
@@ -224,7 +224,11 @@ class HessianLinComb(GradientBase):
                                     pass
                                 else:
                                     if isinstance(gate_param, ParameterExpression):
-                                        term *= self.parameter_expression_grad(gate_param, param_a)
+                                        import sympy as sy
+                                        expr_grad = self.parameter_expression_grad(gate_param, param_a)
+                                        # Square root needed bc the coefficients are squared in the expectation value
+                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                        term *= expr_grad
                                     else:
                                         term *= 0
                                 gate_param = gates_to_parameters[param_b][m].params[n]
@@ -232,7 +236,11 @@ class HessianLinComb(GradientBase):
                                     pass
                                 else:
                                     if isinstance(gate_param, ParameterExpression):
-                                        term *= self.parameter_expression_grad(gate_param, param_b)
+                                        import sympy as sy
+                                        expr_grad = self.parameter_expression_grad(gate_param, param_b)
+                                        # Square root needed bc the coefficients are squared in the expectation value
+                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                        term *= expr_grad
                                     else:
                                         term *= 0
 

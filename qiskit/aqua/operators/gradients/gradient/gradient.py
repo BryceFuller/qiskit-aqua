@@ -13,7 +13,7 @@
 # that they have been altered from the originals.
 
 """The base interface for Aqua's gradient."""
-
+from collections.abc import Iterable
 from functools import partial
 from typing import Optional, Union, List, Callable
 import numpy as np
@@ -292,6 +292,7 @@ class Gradient(GradientBase):
 
         return partial(chain_rule_combo_fn, grad_combo_fn=grad_combo_fn)
 
+
     # TODO get ParameterExpression in the different gradients
     def parameter_expression_grad(self,
                                 param_expr: ParameterExpression,
@@ -342,3 +343,5 @@ class Gradient(GradientBase):
         # TODO deepcopy qc and replace the parameters by independent parameters such that they can
         # be shifted independently by pi/2
         return qc._parameter_table[param]
+
+
