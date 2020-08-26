@@ -96,9 +96,6 @@ class Gradient(GradientBase):
 
         return self.autograd(operator, param, method)
 
-    # NOTE, the coeff of the highest level operator is not handled by any of this code.
-    # Can assume only 1 parameter. If more are passed in we immediately reduce to the case of 1 at
-    # a time.
     def autograd(self,
                  operator: OperatorBase,
                  params: Union[ParameterExpression, ParameterVector, List[ParameterExpression]],
@@ -309,12 +306,30 @@ class Gradient(GradientBase):
         Returns:
             List of derivatives of the parameter expression w.r.t. all keys.
         """
-        expr = param._symbol_expr
+        deriv =sy.diff(sy.sympify(str(param_expr)), param)
+        
+        symbol_map = {}
+        symbols = deriv.free_symbols
+        
+        for s in symbols:
+            for p in param_expr.parameters:
+                if s.name == p.name:
+                    symbol_map[p] = s
+                    break
+
+        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+        
+        return ParameterExpression(symbol_map, deriv)
+
+
+        """#I don't understand how this function works or what exactly it's trying to do
+        expr = param_expr._symbol_expr
         keys = param._parameter_symbols[param]
         expr_grad = 0
         for key in keys:
             expr_grad += sy.Derivative(expr, key)
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
+        #"""
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,
