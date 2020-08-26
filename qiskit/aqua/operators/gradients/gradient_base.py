@@ -243,16 +243,31 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
-        expr = param_expr._symbol_expr
-        keys = param_expr._parameter_symbols[param]
-        if isinstance(keys, Iterable):
-            expr_grad = 0
-            for key in keys:
-                expr_grad += sy.Derivative(expr, key).doit()
-        else:
-            expr_grad = sy.Derivative(expr, keys).doit()
-        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
+        deriv =sy.diff(sy.sympify(str(param_expr)), param)
+        
+        symbol_map = {}
+        symbols = deriv.free_symbols
+        
+        for s in symbols:
+            for p in param_expr.parameters:
+                if s.name == p.name:
+                    symbol_map[p] = s
+                    break
 
+        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+        
+        return ParameterExpression(symbol_map, deriv)
+
+
+        """#I don't understand how this function works or what exactly it's trying to do
+        # I'm not deleting it, but I need to use the old implementation for now so my code doesn't break.
+        expr = param_expr._symbol_expr
+        keys = param._parameter_symbols[param]
+        expr_grad = 0
+        for key in keys:
+            expr_grad += sy.Derivative(expr, key)
+        return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
+        #"""
 
     def unroll_operator(self, operator):
     
