@@ -203,7 +203,11 @@ class QFI(GradientBase):
                         pass
                     else:
                         if isinstance(gate_param, ParameterExpression):
-                            state *= self.parameter_expression_grad(gate_param, param)
+                            import sympy as sy
+                            expr_grad = self.parameter_expression_grad(gate_param, param)
+                            # Square root needed bc the coefficients are squared in the expectation value
+                            expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                            state *= expr_grad
                         else:
                             state *= 0
 
@@ -312,7 +316,11 @@ class QFI(GradientBase):
                                     pass
                                 else:
                                     if isinstance(gate_param, ParameterExpression):
-                                        term *= self.parameter_expression_grad(gate_param, param_i)
+                                        import sympy as sy
+                                        expr_grad = self.parameter_expression_grad(gate_param, param_i)
+                                        # Square root needed bc the coefficients are squared in the expectation value
+                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                        term *= expr_grad
                                     else:
                                         term *= 0
                                 gate_param = gates_to_parameters[param_j][m].params[k_j]
@@ -320,7 +328,11 @@ class QFI(GradientBase):
                                     pass
                                 else:
                                     if isinstance(gate_param, ParameterExpression):
-                                        term *= self.parameter_expression_grad(gate_param, param_j)
+                                        import sympy as sy
+                                        expr_grad = self.parameter_expression_grad(gate_param, param_j)
+                                        # Square root needed bc the coefficients are squared in the expectation value
+                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                        term *= expr_grad
                                     else:
                                         term *= 0
 

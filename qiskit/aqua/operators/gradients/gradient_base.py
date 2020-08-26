@@ -14,6 +14,8 @@
 
 """ GradientBase Class """
 
+from collections.abc import Iterable
+
 from typing import Optional, Callable, Union, List, Tuple
 import logging
 from functools import partial, reduce
@@ -129,97 +131,6 @@ class GradientBase(ConverterBase):
         
         return ParameterExpression(symbol_map, deriv)
 
-    def parameter_shift(self,
-                        operator: OperatorBase,
-                        params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
-
-        r"""
-        Args:
-            operator: the operator containing circuits we are taking the derivative of
-            params: The parameters (ω) we are taking the derivative with respect to. If
-                    a ParameterVector is provided, each parameter will be shifted.
-        Returns:
-            param_shifted_op: A ListOp of SummedOps corresponding to [r*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
-        """
-        if isinstance(params, (ParameterVector, List)):
-            param_grads = [self.parameter_shift(operator, param) for param in params]
-            absent_params = [params[i] for i,grad_ops in enumerate(param_grads) if grad_ops is None]
-            if len(absent_params) > 0:
-                raise ValueError("The following parameters do not appear in the provided operator: ", absent_params)
-            return ListOp(absent_params)
-        
-        #by this point, it's only one parameter
-        param = params
-
-        if not isinstance(param, Parameter):
-            raise ValueError
-        if isinstance(operator, ListOp) and not isinstance(operator, ComposedOp):
-            return_op = operator.traverse(partial(self.parameter_shift, params=param))
-            
-            #Remove any branch of the tree where the relevant parameter does not occur
-            trimmed_oplist = [op for op in return_op.oplist if op is not None]
-            #If all branches are None, remove the parent too
-            if len(trimmed_oplist) == 0:
-                return None
-            #Rebuild the operator with the trimmed down oplist
-            properties = {'coeff': return_op._coeff, 'abelian': return_op._abelian}
-            if return_op.__class__ == ListOp:
-                properties['combo_fn'] = return_op.combo_fn
-            return return_op.__class__(oplist=trimmed_oplist, **properties)
-        
-        else:
-            
-
-            circs = self.get_unique_circuits(operator)
-
-            if len(circs) > 1:
-                #Understand how this happens
-                raise Error
-            elif len(circs) == 0:
-                print("No circuits found in: ", operator)
-                return operator
-            circ = circs[0]
-            
-            if param not in circ._parameter_table:
-                return None
-            
-            shifted_ops = []
-            for i in range(len(circ._parameter_table[param])):
-                #Implement the gradient for this particular rotation.
-                # Here is where future logic will go that decomposes more 
-                # complicated rotations
-                pshift_op = deepcopy(operator)
-                mshift_op = deepcopy(operator)
-
-                #We need the circuit objects of the newly instantiated operators
-                pshift_circ = self.get_unique_circuits(pshift_op)[0]
-                mshift_circ = self.get_unique_circuits(mshift_op)[0]
-
-
-                pshift_gate = pshift_circ._parameter_table[param][i][0]
-                mshift_gate = mshift_circ._parameter_table[param][i][0]
-
-                #TODO here chain rule parameter shift
-
-                pshift_index = pshift_gate.params.index(param)
-                mshift_index = mshift_gate.params.index(param)
-
-                p_param = pshift_gate.params[pshift_index]
-                m_param = mshift_gate.params[mshift_index]
-
-                pshift_gate.params[pshift_index] = (p_param + (np.pi/4))
-                mshift_gate.params[mshift_index] = (m_param - (np.pi/4))
-                
-                #TODO: Add check that asserts a NotImplementedError if a non-pauli gate is given. 
-
-
-                #Assumes the gate is a pauli rotation!
-                shift_constant = 0.5
-                
-                shifted_op = shift_constant*(pshift_op - mshift_op)
-                shifted_ops.append(shifted_op)
-                
-            return SummedOp(shifted_ops).reduce()
 
     def gate_gradient_dict(self,
                            gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
@@ -242,13 +153,13 @@ class GradientBase(ConverterBase):
 
         if isinstance(gate, U1Gate):
             # theta
-            return [([0.5j, -0.5j], [IGate, CZGate])]
+            return [([0.5j, -0.5j], [IGate(), CZGate()])]
         if isinstance(gate, U2Gate): #Going to be deprecated
             # theta, phi
-            return [([-0.5j], [CZGate]), ([0.5j], [CZGate])]
+            return [([-0.5j], [CZGate()]), ([0.5j], [CZGate()])]
         if isinstance(gate, U3Gate):
             # theta, lambda, phi
-            return [([-0.5j], [CZGate]), ([+0.5j], [CZGate]), ([-0.5j], [CZGate])]
+            return [([-0.5j], [CZGate()]), ([+0.5j], [CZGate()]), ([-0.5j], [CZGate()])]
         if isinstance(gate, RXGate):
             # theta
             return [([-0.5j], [CXGate()])]
@@ -317,6 +228,31 @@ class GradientBase(ConverterBase):
             return coeffs_gates
 
         raise TypeError('Unrecognized parametrized gate, {}'.format(gate))
+
+    # TODO get ParameterExpression in the different gradients
+    def parameter_expression_grad(self,
+                                  param_expr: ParameterExpression,
+                                  param: Parameter) -> ParameterExpression:
+
+        """Get the derivative of a parameter expression w.r.t. the given parameter.
+
+        Args:
+            param_expr: The Parameter Expression for which we compute the derivative
+            param: Parameter w.r.t. which we want to take the derivative
+
+        Returns:
+            ParameterExpression representing the gradient of param_expr w.r.t. param
+        """
+        expr = param_expr._symbol_expr
+        keys = param_expr._parameter_symbols[param]
+        if isinstance(keys, Iterable):
+            expr_grad = 0
+            for key in keys:
+                expr_grad += sy.Derivative(expr, key).doit()
+        else:
+            expr_grad = sy.Derivative(expr, keys).doit()
+        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
+
 
     def unroll_operator(self, operator):
     
@@ -399,8 +335,6 @@ class GradientBase(ConverterBase):
                     circuit.data.insert(insertion_index, op_to_insert)
                     return
             raise AquaError('Could not insert the controlled gate, something went wrong!')
-
-
 
     def trim_circuit(self,
                      circuit: QuantumCircuit,
