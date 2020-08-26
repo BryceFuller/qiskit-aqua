@@ -383,17 +383,17 @@ class GradientBase(ConverterBase):
     def unroll_operator(self, 
                         operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
         if isinstance(operator, ListOp):
-            return [self.unroll_traverse(op) for op in operator]
+            return [self.unroll_operator(op) for op in operator]
         if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
             return [operator.__class__(op) for op in operator.primitive]
         return operator
 
-    def get_unique_circuits(operator):
+    def get_unique_circuits(self, operator):
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
         
-        unrolled_op = unroll_operator(operator)
+        unrolled_op = self.unroll_operator(operator)
         circs = []
         for ops in unrolled_op:
             if not isinstance(ops, List):

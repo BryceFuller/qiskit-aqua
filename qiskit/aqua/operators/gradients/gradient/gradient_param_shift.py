@@ -144,8 +144,8 @@ class GradientParamShift(GradientBase):
                 # Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
 
-                pshift_gate.params[pshift_index] = (p_param + (np.pi / (4*r)))
-                mshift_gate.params[mshift_index] = (m_param - (np.pi / (4*r)))
+                pshift_gate.params[pshift_index] = (p_param + (np.pi / (4*shift_constant)))
+                mshift_gate.params[mshift_index] = (m_param - (np.pi / (4*shift_constant)))
 
                 shifted_op = shift_constant * (pshift_op - mshift_op)
 
