@@ -215,8 +215,11 @@ class HessianLinComb(GradientBase):
                                 hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
 
-                                term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
+                                term = op.coeff * (np.abs(coeff_a) * np.abs(coeff_b)) * \
                                     CircuitStateFn(hessian_circuit)
+
+                                # term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
+                                #     CircuitStateFn(hessian_circuit)
 
                                 # Chain Rule Parameter Expression
                                 gate_param = gates_to_parameters[param_a][m].params[j]

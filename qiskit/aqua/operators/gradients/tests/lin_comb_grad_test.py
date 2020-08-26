@@ -29,16 +29,16 @@ params = [a, b]
 q = QuantumRegister(1)
 qc = QuantumCircuit(q)
 qc.h(q)
-# qc.u2(b, b, q[0])
+qc.u2(b, b, q[0])
 qc.rz(c, q[0])
 qc.rx(c, q[0])
 
 # op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 op = CircuitStateFn(primitive=qc, coeff=1.)
 
-# state_grad = GradientLinComb().convert(operator=op, params=params)
+state_grad = GradientLinComb().convert(operator=op, params=params)
 # qfi = QFI().convert(operator=op, params=params)
-state_grad = GradientParamShift().convert(operator=op, params=params)
+# state_grad = GradientParamShift().convert(operator=op, params=params)
 
 values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                {params[0]: np.pi / 2, params[1]: np.pi / 4}]

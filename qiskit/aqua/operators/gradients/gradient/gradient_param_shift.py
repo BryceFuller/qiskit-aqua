@@ -151,9 +151,12 @@ class GradientParamShift(GradientBase):
                 shifted_op = shift_constant * (pshift_op - mshift_op)
 
                 # TODO Check this
-                if isinstance(pshift_gate.params[pshift_index], ParameterExpression):
-                    expr_grad = self.parameter_expression_grad(pshift_gate.params[pshift_index], param)
-                    shifted_op *= expr_grad
+                if pshift_gate.params[pshift_index] == param:
+                    pass
+                else:
+                    if isinstance(pshift_gate.params[pshift_index], ParameterExpression):
+                        expr_grad = self.parameter_expression_grad(pshift_gate.params[pshift_index], param)
+                        shifted_op *= expr_grad
 
                 shifted_ops.append(shifted_op)
 

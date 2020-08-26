@@ -88,8 +88,6 @@ class GradientLinComb(GradientBase):
         gates_to_parameters = {}
         # Dictionary which relates the coefficients needed for the grad for every parameter
         grad_coeffs = {}
-        # # Dictionary which relates the coefficients needed for the grad for every parameter
-        # grad_param_expr_grad = {}
         # Dictionary which relates the gates needed for the grad for every parameter
         grad_gates = {}
         # # Loop throuh the parameters in the circuit
@@ -98,7 +96,6 @@ class GradientLinComb(GradientBase):
         # for param, elements in state_qc._parameter_table.items():
         for param in target_params:
             elements = state_qc._parameter_table[param]
-            # TODO param expressions
             # if param not in target_params:
             #     continue
             # if param not in params:
@@ -158,7 +155,9 @@ class GradientLinComb(GradientBase):
                                      gate_to_insert_i,
                                      additional_qubits=additional_qubits)
                     grad_state.h(work_q)
-                    state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
+                    state = np.abs(coeff_i) * CircuitStateFn(grad_state)
+                    # TODO fix coeff propagation in ListOps
+                    # state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
                     if gate_param == param:
@@ -168,7 +167,8 @@ class GradientLinComb(GradientBase):
                             import sympy as sy
                             expr_grad = self.parameter_expression_grad(gate_param, param)
                             # Square root needed bc the coefficients are squared in the expectation value
-                            expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                            # TODO enable complex parameter expressions
+                            # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
                             state *= expr_grad
                         else:
                             state *= 0
@@ -179,7 +179,6 @@ class GradientLinComb(GradientBase):
                         state_op += state
 
             states += [state_op]
-            #  TODO check that all properties of op are carried over but I think so
         if self._operator_has_measurement:
             return ListOp(states) * op.coeff
         else:
@@ -197,4 +196,3 @@ class GradientLinComb(GradientBase):
                     return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
 
             return ListOp(states, combo_fn=combo_fn) * op.coeff
-            # return ListOp(states) * op.coeff
