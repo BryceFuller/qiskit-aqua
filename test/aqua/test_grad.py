@@ -307,7 +307,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.rx(params[1], q[0])
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
-        state_grad = GradientLinComb().convert(operator=op, params=params)
+        state_grad = Gradient().convert(operator=op, params=params, method='lin_comb')
         values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-1., 0.], [-0.76029, 0.2397], [0., 0.45936]]
