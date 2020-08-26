@@ -394,6 +394,7 @@ class QFI(GradientBase):
 
         blocks = []
 
+        #Psi_i = layer_i @ layer_i-1 @ ... @ layer_0 @ Zero
         for k, psi_i in enumerate(psis):
             params = block_params[k]
             block = np.zeros((len(params), len(params))).tolist()
