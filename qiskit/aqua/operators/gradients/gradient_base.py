@@ -116,20 +116,20 @@ class GradientBase(ConverterBase):
     #  for example, if operator contains multiple different circuits,
     #  then we may need to worry about name collisions!
 
-    def parameter_expression_grad(self, pe, param):
-        deriv =sy.diff(sy.sympify(str(pe)), param)
-        
-        symbol_map = {}
-        symbols = deriv.free_symbols
-        
-        for s in symbols:
-            for p in pe.parameters:
-                if s.name == p.name:
-                    symbol_map[p] = s
-                    break
-        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-        
-        return ParameterExpression(symbol_map, deriv)
+    # def parameter_expression_grad(self, pe, param):
+    #     deriv =sy.diff(sy.sympify(str(pe)), param)
+    #
+    #     symbol_map = {}
+    #     symbols = deriv.free_symbols
+    #
+    #     for s in symbols:
+    #         for p in pe.parameters:
+    #             if s.name == p.name:
+    #                 symbol_map[p] = s
+    #                 break
+    #     assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+    #
+    #     return ParameterExpression(symbol_map, deriv)
 
 
     def gate_gradient_dict(self,
