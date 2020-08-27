@@ -13,7 +13,7 @@
 # that they have been altered from the originals.
 
 """The module to compute the state gradient with the linear combination method."""
-
+from collections.abc import Iterable
 from typing import Optional, Union, List
 from copy import deepcopy
 import numpy as np
@@ -94,6 +94,8 @@ class GradientLinComb(GradientBase):
         # params = []
         state_qc = deepcopy(op.primitive)
         # for param, elements in state_qc._parameter_table.items():
+        if not isinstance(target_params, Iterable):
+            target_params = [target_params]
         for param in target_params:
             elements = state_qc._parameter_table[param]
             # if param not in target_params:
@@ -155,9 +157,9 @@ class GradientLinComb(GradientBase):
                                      gate_to_insert_i,
                                      additional_qubits=additional_qubits)
                     grad_state.h(work_q)
-                    state = np.abs(coeff_i) * CircuitStateFn(grad_state)
+                    # state = np.abs(coeff_i) * CircuitStateFn(grad_state)
                     # TODO fix coeff propagation in ListOps
-                    # state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
+                    state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
                     if gate_param == param:
