@@ -33,22 +33,20 @@ from .gradient_lin_comb import GradientLinComb
 from .gradient_param_shift import GradientParamShift
 
 from ..gradient_base import GradientBase
-
-# Structure:
-#     - grads = []
-#     - For param in params:
-#         - Get Grad of ComboFn (trivial if sum or Identity)
-#         - If operator has measurement
-#             - If param in state (potentially within a parameter expression)
-#                 - StateGradient
-#             - Else OperatorGradient (potentially within a parameter expression)
-#         - Else ProbabilityGradient (potentially within a parameter expression)
-
-#         - If param was in param_expr:
-#             - grads.append(dOperator/d_param_expr * d_param_expr)
-#         - Else grads.append(dOperator/d_param)
-
-#     Return ListOp[grads]
+from ...operator_base import OperatorBase
+from ...primitive_ops.primitive_op import PrimitiveOp
+from ...primitive_ops.pauli_op import PauliOp
+from ...primitive_ops.circuit_op import CircuitOp
+from ...list_ops.list_op import ListOp
+from ...list_ops.composed_op import ComposedOp
+from ...list_ops.summed_op import SummedOp
+from ...list_ops.tensored_op import TensoredOp
+from ...state_fns.state_fn import StateFn
+from ...state_fns.circuit_state_fn import CircuitStateFn
+from ...state_fns.vector_state_fn import VectorStateFn
+from ...state_fns.dict_state_fn import DictStateFn
+from ...operator_globals import H, S, I, Zero, One
+from ...converters.converter_base import ConverterBase
 
 
 class Gradient(GradientBase):
@@ -89,7 +87,7 @@ class Gradient(GradientBase):
                 raise ValueError(
                     "The following parameters do not appear in the provided operator: ",
                     absent_params
-                    )
+                )
             return ListOp(param_grads)
 
         param = params
@@ -117,6 +115,7 @@ class Gradient(GradientBase):
             NotImplementedError: If operator is a TensoredOp  # TODO support this
             Exception: Unintended code is reached  # TODO proper warnings and errors
         """
+
         def is_coeff_one(coeff):
             if isinstance(coeff, ParameterExpression):
                 expr = coeff._symbol_expr
@@ -134,7 +133,7 @@ class Gradient(GradientBase):
                 raise ValueError(
                     'The following parameters do not appear in the provided operator: ',
                     absent_params
-                    )
+                )
             return ListOp(param_grads)
 
         # by this point, it's only one parameter
@@ -144,7 +143,7 @@ class Gradient(GradientBase):
         if not is_coeff_one(operator._coeff):
             # Separate the operator from the coefficient
             coeff = operator._coeff
-            op = operator/coeff
+            op = operator / coeff
             # Get derivative of the operator (recursively)
             d_op = self.autograd(op, param, method)
             # ..get derivative of the coeff
@@ -153,12 +152,12 @@ class Gradient(GradientBase):
             if d_op is None:
                 # I need this term to evaluate to 0, but it needs to be an OperatorBase type
                 # We should find a more elegant solution for this.
-                d_op = ~Zero@One
-            grad_op = coeff*d_op
+                d_op = ~Zero @ One
+            grad_op = coeff * d_op
 
             # if the deriv of the coeff is not zero, then apply the product rule
             if d_coeff._symbol_expr != 0:
-                grad_op += d_coeff*op
+                grad_op += d_coeff * op
 
             return grad_op
 
@@ -222,22 +221,12 @@ class Gradient(GradientBase):
             # (for example, using probability gradients)
             # I think this is a problem more generally, not just in this subroutine.
             grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
 
-        elif isinstance(operator, StateFn):
-            if operator._is_measurement:
-                raise Exception  # TODO raise proper error!
-                # Doesn't make sense to have a StateFn measurement
-                # at the end of the tree.
-        else:
-            print(type(operator))
-            print(operator)
-            # TODO raise proper error!
-            raise Exception("Control Flow should never have reached this point")
-            # This should never happen. The base case in our traversal is reaching a ComposedOp or
-            # a StateFn. If a leaf of the computational graph is not one of these two, then the
-            # original operator we are trying to differentiate is not an expectation value or a
-            # state. Thus it's not clear what the user wants.
+            # ---------------------------------------------------------------------
+
+            # f(g_1(x), g_2(x)) --> df/dx = df/dg_1 dg_1/dx + df/dg_2 dg_2/dx
+            return ListOp([ListOp(operator.oplist, combo_fn=grad_combo_fn), ListOp(grad_ops)],
+                          combo_fn=lambda x: np.multiply(x[0], x[1]))
 
     def get_grad_combo_fn(self, operator: ListOp) -> Callable:
         """Get the derivative of the operator combo_fn.
@@ -253,62 +242,110 @@ class Gradient(GradientBase):
             Exception: If the operator is a ``ComposedOp``.
             Exception: If the gradient combo function could be differentiated.
         """
-        if isinstance(operator, ComposedOp):
-            # TODO don't raise bare exception, use e.g. TypeError or AquaError
-            raise Exception("FIGURE OUT HOW THIS CODE WAS REACHED")
+        # import jax.numpy as np
+        raise Warning('This automatic differentiation function is based on JAX. Please use import '
+                      'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
+        grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
+        return grad_combo_fn
 
-        n = len(operator.oplist)
-        indices = list(range(n))
+    # ---------------------------------------------------------------------
 
-        # jax needs the combo_fn to have n inputs, rather than a list of n inputs
-        def wrapped_combo_fn(*x):
-            return operator._combo_fn(list(x))
-
-        try:
-            grad_combo_fn = jit(grad(wrapped_combo_fn, indices))
-            # TODO remove this!
-            # Test to see if the grad function breaks for a trivial input
-            # grad_combo_fn(*([0] * n))
-        except Exception:
-            # TODO don't raise bare exception!!
-            raise Exception("An error occurred when attempting to differentiate a combo_fn")
-
-        # ops will be the concatenation of the original oplist with the gradients
-        # of each operator in the original oplist.
-        # If your original ListOp contains k elements, then ops will have length 2k.
-        def chain_rule_combo_fn(ops, grad_combo_fn):
-            # Get the first half of the values in ops and convert them to floats (or jax breaks)
-            opvals = [np.float(np.real(val)) for val in ops[:int(len(ops)/2)]]
-            # Get the derivatives of each op in oplist w.r.t the relevant parameter
-            derivs = [np.float(np.real(val)) for val in ops[int(len(ops)/2):]]
-            # Get the partial derivatives of the combo_fn with respect to each op in oplist
-            pderivs = [partial.tolist() for partial in grad_combo_fn(*opvals)]
-            # return the dot product to compute the final derivative of the operator with
-            # respect to the specified parameter.
-            return np.dot(pderivs, derivs)
-
-        return partial(chain_rule_combo_fn, grad_combo_fn=grad_combo_fn)
-
+    # TODO I commented this
+    # ---------------------------------------------------------------------
+    #         return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
+    #
+    #     elif isinstance(operator, StateFn):
+    #         if operator._is_measurement:
+    #             raise Exception  # TODO raise proper error!
+    #             # Doesn't make sense to have a StateFn measurement
+    #             # at the end of the tree.
+    #     else:
+    #         print(type(operator))
+    #         print(operator)
+    #         # TODO raise proper error!
+    #         raise Exception("Control Flow should never have reached this point")
+    #         # This should never happen. The base case in our traversal is reaching a ComposedOp or
+    #         # a StateFn. If a leaf of the computational graph is not one of these two, then the
+    #         # original operator we are trying to differentiate is not an expectation value or a
+    #         # state. Thus it's not clear what the user wants.
+    #
+    # def get_grad_combo_fn(self, operator: ListOp) -> Callable:
+    #     """Get the derivative of the operator combo_fn.
+    #
+    #     Args:
+    #         operator: The operator for whose combo_fn we want to get the gradient.
+    #
+    #     Returns:
+    #         function which evaluates the partial gradient of operator._combo_fn
+    #         with respect to each element of operator.oplist
+    #
+    #     Raises:
+    #         Exception: If the operator is a ``ComposedOp``.
+    #         Exception: If the gradient combo function could be differentiated.
+    #     """
+    #     # TODO commented
+    #     if isinstance(operator, ComposedOp):
+    #         # TODO don't raise bare exception, use e.g. TypeError or AquaError
+    #         raise Exception("FIGURE OUT HOW THIS CODE WAS REACHED")
+    #
+    #     n = len(operator.oplist)
+    #     indices = list(range(n))
+    #
+    #
+    #     # jax needs the combo_fn to have n inputs, rather than a list of n inputs
+    #     def wrapped_combo_fn(*x):
+    #         return operator._combo_fn(list(x))
+    #     try:
+    #         # import jax.numpy as np
+    #         grad_combo_fn = jit(grad(wrapped_combo_fn, indices))
+    #         # grad_combo_fn = jit(grad(operator._combo_fn))
+    #         # return grad_combo_fn
+    #         # TODO remove this!
+    #         # Test to see if the grad function breaks for a trivial input
+    #         # grad_combo_fn(*([0] * n))
+    #     except Exception:
+    #         # TODO don't raise bare exception!!
+    #         raise Exception("An error occurred when attempting to differentiate a combo_fn")
+    #
+    #
+    #
+    #     # ops will be the concatenation of the original oplist with the gradients
+    #     # of each operator in the original oplist.
+    #     # If your original ListOp contains k elements, then ops will have length 2k.
+    #     def chain_rule_combo_fn(ops, grad_combo_fn):
+    #         # Get the first half of the values in ops and convert them to floats (or jax breaks)
+    #         opvals = [np.float(np.real(val)) for val in ops[:int(len(ops)/2)]]
+    #         # Get the derivatives of each op in oplist w.r.t the relevant parameter
+    #         derivs = [np.float(np.real(val)) for val in ops[int(len(ops)/2):]]
+    #         # Get the partial derivatives of the combo_fn with respect to each op in oplist
+    #         pderivs = [partial.tolist() for partial in grad_combo_fn(*opvals)]
+    #         # return the dot product to compute the final derivative of the operator with
+    #         # respect to the specified parameter.
+    #         return np.dot(pderivs, derivs)
+    #
+    #     return partial(chain_rule_combo_fn, grad_combo_fn=grad_combo_fn)
+    # ---------------------------------------------------------------------
 
     # TODO get ParameterExpression in the different gradients
     def parameter_expression_grad(self,
-                                param_expr: ParameterExpression,
-                                param: Parameter) -> List[Union[sy.Expr, float]]:
+                                  param_expr: ParameterExpression,
+                                  param: Parameter) -> ParameterExpression:
 
         """Get the derivative of a parameter expression w.r.t. the underlying parameter keys.
 
         Args:
-            param_expr: Parameter Expression  # TODO better documentation
+            param_expr: Parameter Expression for which we want to find the gradient w.r.t. param
             param: Parameter w.r.t. which we want to take the derivative
 
         Returns:
-            List of derivatives of the parameter expression w.r.t. all keys.
+            Parameter expression representing the gradient of param_expr w.r.t. param
         """
-        deriv =sy.diff(sy.sympify(str(param_expr)), param)
-        
+        """
+        deriv = sy.diff(sy.sympify(str(param_expr)), param)
+
         symbol_map = {}
         symbols = deriv.free_symbols
-        
+
         for s in symbols:
             for p in param_expr.parameters:
                 if s.name == p.name:
@@ -316,18 +353,18 @@ class Gradient(GradientBase):
                     break
 
         assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-        
+
         return ParameterExpression(symbol_map, deriv)
 
-
-        """#I don't understand how this function works or what exactly it's trying to do
+        """
         expr = param_expr._symbol_expr
         keys = param._parameter_symbols[param]
         expr_grad = 0
+        if not isinstance(keys, Iterable):
+            keys = [keys]
         for key in keys:
             expr_grad += sy.Derivative(expr, key)
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
-        #"""
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,
@@ -340,5 +377,3 @@ class Gradient(GradientBase):
         # TODO deepcopy qc and replace the parameters by independent parameters such that they can
         # be shifted independently by pi/2
         return qc._parameter_table[param]
-
-
