@@ -269,34 +269,6 @@ class GradientBase(ConverterBase):
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
         #"""
 
-    @staticmethod
-    def unroll_operator(operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
-        def unroll_traverse(operator):
-            if isinstance(operator, ListOp):
-                return [unroll_traverse(op) for op in operator]
-            if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
-                return [operator.__class__(op) for op in operator.primitive]
-            return operator
-        return unroll_traverse(operator)
-
-    @classmethod
-    def get_unique_circuits(cls, operator: OperatorBase) -> List[QuantumCircuit]:
-        def get_circuit(op):
-            if isinstance(op, (CircuitStateFn, CircuitOp)):
-                return op.primitive
-        
-        unrolled_op = cls.unroll_operator(operator)
-        circuits = []
-        for ops in unrolled_op:
-            if not isinstance(ops, list):
-                ops = [ops]
-            for op in ops:
-                if isinstance(op, (CircuitStateFn, CircuitOp, QuantumCircuit)):
-                    c = get_circuit(op)
-                    if c not in circuits:
-                        circuits.append(c)
-        return circuits
-
     def insert_gate(self,
                     circuit: QuantumCircuit,
                     reference_gate: Gate,
@@ -365,31 +337,31 @@ class GradientBase(ConverterBase):
 
         raise AquaError('The reference gate is not in the given quantum circuit.')
 
-    def unroll_operator(self, 
-                        operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
+    @classmethod
+    def unroll_operator(cls, operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
         if isinstance(operator, ListOp):
-            return [self.unroll_operator(op) for op in operator]
+            return [cls.unroll_operator(op) for op in operator]
         if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
             return [operator.__class__(op) for op in operator.primitive]
         return operator
 
-    def get_unique_circuits(self, operator):
+    @classmethod
+    def get_unique_circuits(cls, operator):
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
         
-        unrolled_op = self.unroll_operator(operator)
-        circs = []
+        unrolled_op = cls.unroll_operator(operator)
+        circuits = []
         for ops in unrolled_op:
-            if not isinstance(ops, List):
+            if not isinstance(ops, list):
                 ops = [ops]
             for op in ops:
                 if isinstance(op, (CircuitStateFn, CircuitOp, QuantumCircuit)):
                     c = get_circuit(op)
-                    if c not in circs:
-                        circs.append(c)
-        #circs = [get_circuit(e) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
-        return list(circs)
+                    if c not in circuits:
+                        circuits.append(c)
+        return circuits
 
     def append_Z_measurement(self, operator):
         if isinstance(operator, ListOp):
