@@ -279,11 +279,24 @@ class ListOp(OperatorBase):
             raise NotImplementedError(r'ListOp\'s eval function is only defined for distributive '
                                       r'Listops.')
 
-        evals = [(self.coeff * op).eval(front) for op in self.oplist]  # type: ignore
+        #If any dicts are found, convert them into DictStateFns so that the combo_fn can be applied more easily.
+        filtered_oplist = [DictStateFn(op) if isinstance(op, Dict) else op for op in self.oplist ]
+        #if all(isinstance(op, DictStateFn) for op in self.oplist)
+
+        
+        evals = [(self.coeff * op).eval(front) for op in filtered_oplist]  # type: ignore
+        print(evals)
         if all(isinstance(op, OperatorBase) for op in evals):
             return self.__class__(evals)
         elif any(isinstance(op, OperatorBase) for op in evals):
             raise TypeError('Cannot handle mixed scalar and Operator eval results.')
+        elif all(isinstance(op, Dict) for op in evals):
+            inputs = list(reduce(lambda x,y: x.union(set(y.keys())), [set()]+evals))
+            outputs = []
+            for bitstr in inputs:
+                vals = [op[bitstr] if bitstr in op else 0 for op in evals]
+                outputs.append(self.combo_fn(vals))
+            return dict(zip(inputs,outputs))
         else:
             return self.combo_fn(evals)
 

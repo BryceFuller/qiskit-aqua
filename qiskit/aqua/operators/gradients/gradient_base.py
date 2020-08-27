@@ -243,16 +243,31 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
-        expr = param_expr._symbol_expr
-        keys = param_expr._parameter_symbols[param]
-        if isinstance(keys, Iterable):
-            expr_grad = 0
-            for key in keys:
-                expr_grad += sy.Derivative(expr, key).doit()
-        else:
-            expr_grad = sy.Derivative(expr, keys).doit()
-        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
+        deriv =sy.diff(sy.sympify(str(param_expr)), param)
+        
+        symbol_map = {}
+        symbols = deriv.free_symbols
+        
+        for s in symbols:
+            for p in param_expr.parameters:
+                if s.name == p.name:
+                    symbol_map[p] = s
+                    break
 
+        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+        
+        return ParameterExpression(symbol_map, deriv)
+
+
+        """#I don't understand how this function works or what exactly it's trying to do
+        # I'm not deleting it, but I need to use the old implementation for now so my code doesn't break.
+        expr = param_expr._symbol_expr
+        keys = param._parameter_symbols[param]
+        expr_grad = 0
+        for key in keys:
+            expr_grad += sy.Derivative(expr, key)
+        return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
+        #"""
 
     def unroll_operator(self, operator):
     
@@ -365,44 +380,31 @@ class GradientBase(ConverterBase):
 
         raise AquaError('The reference gate is not in the given quantum circuit.')
 
-    def unroll_operator(self, operator):
-        
-        def unroll_traverse(operator):
-            if isinstance(operator, ListOp):
-                #Traverse the elements in the ListOp
-                res = [op.traverse(unroll_traverse) for op in operator]
-                #Separate out the lists from non-list elements
-
-                lists = [l for l in res if isinstance(l, (List, ListOp))]
-                not_lists = [r for r in res if not isinstance(r, (List,ListOp))]
-                #unroll the list elements and recombine everything
-                unrolled = [y for x in lists for y in x]
-                res = not_lists + unrolled
-                return res
-            return operator
-        
-        #When unroll_traverse terminates, there will still be 
-        # one last layer of nested lists to unroll. (computational tree will be depth <=2)
-        unrolled_op = operator.traverse(unroll_traverse)
-
-        lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
-        not_lists = [r for r in unrolled_op if not isinstance(r, (List,ListOp))]
-        #unroll the list elements and recombine everything
-        unrolled = [y for x in lists for y in x]
-        return not_lists + unrolled
+    def unroll_operator(self, 
+                        operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
+        if isinstance(operator, ListOp):
+            return [self.unroll_operator(op) for op in operator]
+        if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
+            return [operator.__class__(op) for op in operator.primitive]
+        return operator
 
     def get_unique_circuits(self, operator):
-        
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
         
         unrolled_op = self.unroll_operator(operator)
-        circs = [get_circuit(op) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
-        
-        no_duplicates = []
-        [no_duplicates.append(i) for i in circs if i not in no_duplicates]
-        return no_duplicates
+        circs = []
+        for ops in unrolled_op:
+            if not isinstance(ops, List):
+                ops = [ops]
+            for op in ops:
+                if isinstance(op, (CircuitStateFn, CircuitOp, QuantumCircuit)):
+                    c = get_circuit(op)
+                    if c not in circs:
+                        circs.append(c)
+        #circs = [get_circuit(e) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
+        return list(circs)
 
     def append_Z_measurement(self, operator):
         if isinstance(operator, ListOp):
