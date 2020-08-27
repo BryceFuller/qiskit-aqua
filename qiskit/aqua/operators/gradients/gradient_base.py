@@ -346,7 +346,7 @@ class GradientBase(ConverterBase):
         return operator
 
     @classmethod
-    def get_unique_circuits(cls, operator):
+    def get_unique_circuits(cls, operator: OperatorBase) -> List[QuantumCircuit]:
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
