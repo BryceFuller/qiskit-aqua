@@ -13,7 +13,7 @@
 # that they have been altered from the originals.
 
 """ StateHessian Class """
-
+from collections.abc import Iterable
 from typing import Optional, Union, List
 from copy import deepcopy
 import numpy as np
@@ -57,7 +57,7 @@ class HessianLinComb(GradientBase):
             if operator.is_measurement:
                 return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return Z ^ I ^ operator
+            return 4 * Z ^ I ^ operator
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
             operator = self._hessian_states(operator, self._params)
@@ -86,25 +86,12 @@ class HessianLinComb(GradientBase):
         hessian_coeffs = {}
         # Dictionary which relates the gates needed for the hessian for every parameter
         hessian_gates = {}
-        # Loop throuh the parameters in the circuit
-        # params = []
-
-        # if isinstance(op, (CircuitStateFn, CircuitOp)):
-        #     pass
-        # elif isinstance(op, (DictStateFn, VectorStateFn)):
-        #     op = DictToCircuitSum().convert(op)
-        # else:
-        #     raise TypeError('Ancilla gradients only support operators whose states are either '
-        #                     'CircuitStateFn, DictStateFn, or VectorStateFn.')
+        # Get the quantum circuit corresponding to the state operator
         state_qc = deepcopy(op.primitive)
-        # for param, elements in state_qc._parameter_table.items():
+        if not isinstance(target_params, Iterable):
+            target_params = [target_params]
         for param in target_params:
             elements = state_qc._parameter_table[param]
-            # TODO param expressions
-            # if param not in target_params:
-            #     continue
-            # if param not in params:
-            #     params.append(param)
             gates_to_parameters[param] = []
             hessian_coeffs[param] = []
             hessian_gates[param] = []
@@ -131,10 +118,9 @@ class HessianLinComb(GradientBase):
         work_q0 = qr_add0[0]
         qr_add1 = QuantumRegister(1, 'work_qubit1')
         work_q1 = qr_add1[0]
-        # create a copy of the original circuit with an additional ancilla register
+        # create a copy of the original circuit with an additional working qubit register
         circuit = QuantumCircuit(*state_qc.qregs, qr_add0, qr_add1)
         circuit.data = state_qc.data
-        # params = list(gates_to_parameters.keys())
         # apply Hadamard on ancilla
         self.insert_gate(circuit, gates_to_parameters[target_params[0]][0], HGate(),
                          qubits=[work_q0])
@@ -215,11 +201,13 @@ class HessianLinComb(GradientBase):
                                 hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
 
-                                term = op.coeff * (np.abs(coeff_a) * np.abs(coeff_b)) * \
-                                    CircuitStateFn(hessian_circuit)
-
-                                # term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
+                                # term = op.coeff * (np.abs(coeff_a) * np.abs(coeff_b)) * \
                                 #     CircuitStateFn(hessian_circuit)
+
+                                #TODO fix parameter propagation
+
+                                term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
+                                    CircuitStateFn(hessian_circuit)
 
                                 # Chain Rule Parameter Expression
                                 gate_param = gates_to_parameters[param_a][m].params[j]

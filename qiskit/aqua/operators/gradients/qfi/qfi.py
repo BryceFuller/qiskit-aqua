@@ -13,7 +13,7 @@
 # that they have been altered from the originals.
 
 """The module for Quantum the Fisher Information."""
-
+from collections.abc import Iterable
 from typing import List, Union, Optional
 import copy
 from functools import cmp_to_key
@@ -121,8 +121,6 @@ class QFI(GradientBase):
         qfi_coeffs = {}
         # Dictionary which relates the gates needed for the QFI for every parameter
         qfi_gates = {}
-        # Loop throuh the parameters in the circuit
-        params = []
 
         if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
             pass
@@ -131,16 +129,14 @@ class QFI(GradientBase):
         else:
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
+
+        if not isinstance(target_params, Iterable):
+            target_params = [target_params]
         state_qc = copy.deepcopy(op.primitive)
         for param in target_params:
             elements = state_qc._parameter_table[param]
-            # if param not in target_params:
-            #     continue
-            # if param not in params:
-            #     params.append(param)
             gates_to_parameters[param] = []
             qfi_coeffs[param] = []
-            # grad_param_expr_grad[param] = []
             qfi_gates[param] = []
             for element in elements:
                 # get the coefficients and controlled gates (raises an error if the parameterized
