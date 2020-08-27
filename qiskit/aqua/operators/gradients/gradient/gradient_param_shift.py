@@ -136,6 +136,7 @@ class GradientParamShift(GradientBase):
 
                 assert len(pshift_gate.params) == 1, "Circuit was not properly decomposed"
 
+                #The parameter could be a parameter expression
                 p_param = pshift_gate.params[0]
                 m_param = mshift_gate.params[0]
 
@@ -148,7 +149,7 @@ class GradientParamShift(GradientBase):
 
                 shifted_op = shift_constant * (pshift_op - mshift_op)
 
-                # TODO Check this
+                # If the rotation angle is actually a parameter expression of param, then handle the chain rule
                 if pshift_gate.params[0] != param and isinstance(pshift_gate.params[0], ParameterExpression):
                         expr_grad = self.parameter_expression_grad(pshift_gate.params[0], param)
                         shifted_op *= expr_grad
