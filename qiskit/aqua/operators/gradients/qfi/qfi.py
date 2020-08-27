@@ -86,7 +86,7 @@ class QFI(GradientBase):
     #     elif isinstance(operator, PrimitiveOp):
     #         return 4 * Z ^ ((I ^ operator.num_qubits) - operator)
     #     if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
-    #         # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
+    #         # operator.primitive.add_register(QuantumRegister(1, name="work_qubit"))
     #         operator = self._qfi_states(operator, self._params)
     #     return operator
 
@@ -132,22 +132,28 @@ class QFI(GradientBase):
             raise TypeError('Ancilla gradients only support operators whose states are either '
                             'CircuitStateFn, DictStateFn, or VectorStateFn.')
         state_qc = copy.deepcopy(op.primitive)
-        for param, elements in state_qc._parameter_table.items():
-            if param not in target_params:
-                continue
-            if param not in params:
-                params.append(param)
-                gates_to_parameters[param] = []
+        for param in target_params:
+            elements = state_qc._parameter_table[param]
+            # if param not in target_params:
+            #     continue
+            # if param not in params:
+            #     params.append(param)
+            gates_to_parameters[param] = []
             qfi_coeffs[param] = []
+            # grad_param_expr_grad[param] = []
             qfi_gates[param] = []
             for element in elements:
                 # get the coefficients and controlled gates (raises an error if the parameterized
                 # gate is not supported)
                 coeffs_gates = self.gate_gradient_dict(element[0])
                 gates_to_parameters[param].append(element[0])
-                for c_g in coeffs_gates:
-                    qfi_coeffs[param].append(c_g[0])
-                    qfi_gates[param].append(c_g[1])
+                c = []
+                g = []
+                for j, gate_param in enumerate(element[0].params):
+                    c.extend(coeffs_gates[j][0])
+                    g.extend(coeffs_gates[j][1])
+                qfi_coeffs[param].append(c)
+                qfi_gates[param].append(g)
 
         phase_fix_states = []
         qr_work = QuantumRegister(1, 'work_qubit')
@@ -155,14 +161,14 @@ class QFI(GradientBase):
         additional_qubits = ([work_q], [])
         # create a copy of the original state with an additional work_q register
         # Get the states needed to compute the gradient
-        for param in params:  # loop over parameters
+        for param in target_params:  # loop over parameters
             # construct the states
             for m, gates_to_insert_i in enumerate(qfi_gates[param]):
                 for k, gate_to_insert_i in enumerate(gates_to_insert_i):
                     grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
                     grad_state.data = state_qc.data
                     # apply Hadamard on work_q  # TODO can this not just be grad_state.h(work_q)?
-                    self.insert_gate(grad_state, gates_to_parameters[params[0]][0], HGate(),
+                    self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0], HGate(),
                                      qubits=[work_q])
                     # Fix work_q phase
                     coeff_i = qfi_coeffs[param][m][k]
@@ -171,18 +177,18 @@ class QFI(GradientBase):
                     if sign == -1:
                         if is_complex:
                             self.insert_gate(grad_state,
-                                             gates_to_parameters[params[0]][0],
+                                             gates_to_parameters[target_params[0]][0],
                                              SdgGate(),
                                              qubits=[work_q])
                         else:
                             self.insert_gate(grad_state,
-                                             gates_to_parameters[params[0]][0],
+                                             gates_to_parameters[target_params[0]][0],
                                              ZGate(),
                                              qubits=[work_q])
                     else:
                         if is_complex:
                             self.insert_gate(grad_state,
-                                             gates_to_parameters[params[0]][0],
+                                             gates_to_parameters[target_params[0]][0],
                                              SGate(),
                                              qubits=[work_q])
                     # Insert controlled, intercepting gate - controlled by |0>
@@ -223,22 +229,22 @@ class QFI(GradientBase):
             phase_fix_states += [phase_fix_observable @ phase_fix_state]
 
         qfi_operators = []
-        qr_ancilla = QuantumRegister(1, 'ancilla')
-        ancilla = qr_ancilla[0]
-        additional_qubits = ([ancilla], [])
-        # create a copy of the original circuit with an additional ancilla register
-        circuit = QuantumCircuit(*state_qc.qregs, qr_ancilla)
+        qr_work_qubit = QuantumRegister(1, 'work_qubit')
+        work_qubit = qr_work_qubit[0]
+        additional_qubits = ([work_qubit], [])
+        # create a copy of the original circuit with an additional work_qubit register
+        circuit = QuantumCircuit(*state_qc.qregs, qr_work_qubit)
         circuit.data = state_qc.data
         # params = list(gates_to_parameters.keys())
-        # apply Hadamard on ancilla
-        self.insert_gate(circuit, gates_to_parameters[params[0]][0], HGate(), qubits=[ancilla])
+        # apply Hadamard on work_qubit
+        self.insert_gate(circuit, gates_to_parameters[target_params[0]][0], HGate(), qubits=[work_qubit])
         # Get the circuits needed to compute A_ij
-        for i, param_i in enumerate(params):  # loop over parameters
+        for i, param_i in enumerate(target_params):  # loop over parameters
             qfi_ops = []
 
             # j = 0
             # while j <= i: #loop over parameters
-            for j, param_j in enumerate(params):
+            for j, param_j in enumerate(target_params):
 
                 # construct the circuits
                 for m_i, gates_to_insert_i in enumerate(qfi_gates[param_i]):
@@ -251,31 +257,31 @@ class QFI(GradientBase):
                                 qfi_circuit = QuantumCircuit(*circuit.qregs)
                                 qfi_circuit.data = circuit.data
 
-                                # Fix ancilla phase
+                                # Fix work_qubit phase
                                 sign = np.sign(np.conj(coeff_i) * coeff_j)
                                 is_complex = np.iscomplex(np.conj(coeff_i) * coeff_j)
                                 if sign == -1:
                                     if is_complex:
                                         self.insert_gate(qfi_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          SdgGate(),
-                                                         qubits=[ancilla])
+                                                         qubits=[work_qubit])
                                     else:
                                         self.insert_gate(qfi_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          ZGate(),
-                                                         qubits=[ancilla])
+                                                         qubits=[work_qubit])
                                 else:
                                     if is_complex:
                                         self.insert_gate(qfi_circuit,
-                                                         gates_to_parameters[params[0]][0],
+                                                         gates_to_parameters[target_params[0]][0],
                                                          SGate(),
-                                                         qubits=[ancilla])
+                                                         qubits=[work_qubit])
 
                                 self.insert_gate(qfi_circuit,
-                                                 gates_to_parameters[params[0]][0],
+                                                 gates_to_parameters[target_params[0]][0],
                                                  XGate(),
-                                                 qubits=[ancilla])
+                                                 qubits=[work_qubit])
 
                                 # Insert controlled, intercepting gate - controlled by |1>
                                 self.insert_gate(qfi_circuit,
@@ -286,7 +292,7 @@ class QFI(GradientBase):
                                 self.insert_gate(qfi_circuit,
                                                  gate_to_insert_i,
                                                  XGate(),
-                                                 qubits=[ancilla],
+                                                 qubits=[work_qubit],
                                                  after=True)
 
                                 # Insert controlled, intercepting gate - controlled by |0>
@@ -306,12 +312,12 @@ class QFI(GradientBase):
                                         qfi_circuit, gates_to_parameters[param_j][m_j]
                                         )
 
-                                qfi_circuit.h(ancilla)
+                                qfi_circuit.h(work_qubit)
 
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                     CircuitStateFn(qfi_circuit)
                                 # Chain Rule Parameter Expression
-                                gate_param = gates_to_parameters[param_i][m].params[k_i]
+                                gate_param = gates_to_parameters[param_i][m_i].params[k_i]
                                 if gate_param == param_i:
                                     pass
                                 else:
@@ -323,7 +329,7 @@ class QFI(GradientBase):
                                         term *= expr_grad
                                     else:
                                         term *= 0
-                                gate_param = gates_to_parameters[param_j][m].params[k_j]
+                                gate_param = gates_to_parameters[param_j][m_j].params[k_j]
                                 if gate_param == param_j:
                                     pass
                                 else:
