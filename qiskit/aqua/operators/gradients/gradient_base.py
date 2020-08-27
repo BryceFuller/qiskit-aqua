@@ -270,8 +270,8 @@ class GradientBase(ConverterBase):
         #"""
 
     @staticmethod
-    def unroll_operator(operator) -> Union[OperatorBase, List[OperatorBase]]:
-        def unroll_traverse(operator: OperatorBase):
+    def unroll_operator(operator: OperatorBase) -> Union[OperatorBase, List[OperatorBase]]:
+        def unroll_traverse(operator):
             if isinstance(operator, ListOp):
                 return [unroll_traverse(op) for op in operator]
             if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
@@ -280,22 +280,22 @@ class GradientBase(ConverterBase):
         return unroll_traverse(operator)
 
     @classmethod
-    def get_unique_circuits(cls, operator) -> List[QuantumCircuit]:
+    def get_unique_circuits(cls, operator: OperatorBase) -> List[QuantumCircuit]:
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
         
         unrolled_op = cls.unroll_operator(operator)
-        circs = []
+        circuits = []
         for ops in unrolled_op:
             if not isinstance(ops, list):
                 ops = [ops]
             for op in ops:
                 if isinstance(op, (CircuitStateFn, CircuitOp, QuantumCircuit)):
                     c = get_circuit(op)
-                    if c not in circs:
-                        circs.append(c)
-        return list(circs)
+                    if c not in circuits:
+                        circuits.append(c)
+        return circuits
 
     def insert_gate(self,
                     circuit: QuantumCircuit,
