@@ -114,10 +114,9 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [-0.5 / np.sqrt(2) - 0.5, -1 / 2.],
                           [-0.5, -1 / np.sqrt(2)]]
-        correct_grad = True
+
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
+            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
         """
            Parameter Expression
@@ -143,8 +142,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [[-1.353553], [-0], [-0.5]]
 
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
+            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
         """
         Parameter Expression
@@ -173,10 +171,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [[-1.1220], [-0.9093], [0.0403]]
 
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
-
-        self.assertTrue(correct_grad)
+            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
     def test_state_lin_comb_hessian(self):
         """Test the linear combination state Hessian
@@ -207,13 +202,10 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [[[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), 0]],
                           [[-0.5 / np.sqrt(2) + 0.5, -1 / 2.], [-0.5, 0.5]],
                           [[1 / np.sqrt(2), 0], [0, 1 / np.sqrt(2)]]]
-        correct_grad = True
+
         for i, value_dict in enumerate(values_dict):
             # TODO coefficient propagation doesn't seem to work
-            correct_grad &= np.allclose(state_hess.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
-
-        self.assertTrue(correct_grad)
+            np.testing.assert_almost_equal(state_hess.assign_parameters(value_dict).eval(), correct_values[i])
 
     # def test_prob_lin_comb_grad(self):
     #     """Test the ancilla probability gradient
@@ -276,11 +268,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         values_dict = [{params[0]: np.pi / 4, params[1]: 0.1}, {params[0]: np.pi, params[1]: 0.1},
                        {params[0]: np.pi/2, params[1]: 0.1}]
         correct_values = [[[1, 0], [0, 0.5]], [[1, 0], [0, 0]],  [[1, 0], [0, 1]]]
-        correct_qfi = True
         for i, value_dict in enumerate(values_dict):
-            correct_qfi &= np.allclose(qfi.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
-        self.assertTrue(correct_qfi)
+            np.testing.assert_almost_equal(qfi.assign_parameters(value_dict).eval(), correct_values[i])
 
     def test_jax_chain_rule(self):
         """Test that the chain rule functionality using Jax"""
@@ -311,11 +300,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-1., 0.], [-0.76029, 0.2397], [0., 0.45936]]
-        correct_grad = True
         for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
-        self.assertTrue(correct_grad)
+            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
 
 if __name__ == '__main__':
