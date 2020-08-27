@@ -33,7 +33,6 @@ from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit import Parameter, ParameterExpression
 import numpy as np
 from sympy import Symbol, cos
-
 from qiskit.aqua import QuantumInstance, aqua_globals
 
 
@@ -248,7 +247,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                 value_dict).eval(), correct_values[i], atol=1e-6)
         self.assertTrue(correct_grad)
 
-
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct
         QFI = [[1, 0], [0, 1]] - [[0, 0], [0, cos^2(a)]]"""
@@ -281,9 +279,6 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
     def test_jax_chain_rule(self):
         """Test that the chain rule functionality using Jax"""
-        def combo_fn(x):
-            return x[0]**2 + cos(x[1])
-        H = ListOp([X, Z], combo_fn=combo_fn)
         a = Parameter('a')
         b = Parameter('b')
         params = [a, b]
@@ -302,7 +297,15 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.h(q)
         qc.rz(params[0], q[0])
         qc.rx(params[1], q[0])
-        op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
+
+        def combo_fn(x):
+            import jax.numpy as jnp
+            print(x[0])
+            print(x[1])
+            return jnp.power(x[0], 2) + jnp.cos(x[1])
+
+        op = ListOp([~StateFn(X) @ CircuitStateFn(primitive=qc, coeff=1.),
+                    ~StateFn(Z) @ CircuitStateFn(primitive=qc, coeff=1.)], combo_fn=combo_fn)
 
         state_grad = Gradient().convert(operator=op, params=params, method='lin_comb')
         values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},

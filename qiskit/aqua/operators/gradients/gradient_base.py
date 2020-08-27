@@ -261,9 +261,12 @@ class GradientBase(ConverterBase):
 
         """#I don't understand how this function works or what exactly it's trying to do
         # I'm not deleting it, but I need to use the old implementation for now so my code doesn't break.
+        from collections.abc import Iterable
         expr = param_expr._symbol_expr
         keys = param._parameter_symbols[param]
         expr_grad = 0
+        if not isinstance(keys, Iterable):
+        keys = [keys]
         for key in keys:
             expr_grad += sy.Derivative(expr, key)
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
