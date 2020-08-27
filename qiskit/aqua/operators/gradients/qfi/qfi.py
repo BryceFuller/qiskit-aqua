@@ -109,7 +109,7 @@ class QFI(GradientBase):
             TypeError: If ``operator`` is an unsupported type.
         """
         # QFI & phase fix observable
-        qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
+        qfi_observable = ~StateFn(4 * Z ^ (I ^ op.num_qubits))
         phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
         # see https://arxiv.org/pdf/quant-ph/0108146.pdf
         # Alternative
@@ -346,12 +346,12 @@ class QFI(GradientBase):
                 # qfi_ops += [qfi_observable @ qfi_op] # add phase fix
                 # phase fix component
                 def phase_fix_combo_fn(x):
-                    return (-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
+                    return 4*(-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
                 phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]],
                                    combo_fn=phase_fix_combo_fn)
                 qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
             qfi_operators.append(ListOp(qfi_ops))
-        return 4 * ListOp(qfi_operators)
+        return ListOp(qfi_operators)
 
     def block_diagonal_qfi(self,
                            operator: Union[CircuitOp, CircuitStateFn],
