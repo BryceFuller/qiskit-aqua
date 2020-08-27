@@ -243,7 +243,7 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
-        deriv =sy.diff(sy.sympify(str(param_expr)), param)
+        deriv =sy.diff(sy.sympify(str(param_expr)), str(param))
         
         symbol_map = {}
         symbols = deriv.free_symbols
@@ -269,48 +269,33 @@ class GradientBase(ConverterBase):
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
         #"""
 
-    def unroll_operator(self, operator):
-    
-        def unroll_traverse(operator):
+    @staticmethod
+    def unroll_operator(operator) -> Union[OperatorBase, List[OperatorBase]]:
+        def unroll_traverse(operator: OperatorBase):
             if isinstance(operator, ListOp):
-                #Traverse the elements in the ListOp
-                print(operator)
-                print([type(op) for op in operator])
-                res = [op.traverse(unroll_traverse) if hasattr( op,'traverse') else op for op in operator]
-                #Separate out the lists from non-list elements
-                lists = [l for l in res if isinstance(l, (List, ListOp))]
-                not_lists = [r for r in res if not isinstance(r, (List, ListOp))]
-                #unroll the list elements and recombine everything
-                unrolled = [y for x in lists for y in x]
-                res = not_lists + unrolled
-                return res
+                return [unroll_traverse(op) for op in operator]
+            if hasattr(operator, 'primitive') and isinstance(operator.primitive, ListOp):
+                return [operator.__class__(op) for op in operator.primitive]
             return operator
-        
-        #When unroll_traverse terminates, there will still be 
-        # one last layer of nested lists to unroll. (computational tree will be depth <=2)
-        unrolled_op = operator.traverse(unroll_traverse)
-        if not isinstance(unrolled_op, Iterable):
-            return [unrolled_op]
-        lists = [l for l in unrolled_op if isinstance(l, (List, ListOp))]
-        not_lists = [r for r in unrolled_op if not isinstance(r, (List, ListOp))]
-        #unroll the list elements and recombine everything
-        unrolled = [y for x in lists for y in x]
-        return not_lists + unrolled
+        return unroll_traverse(operator)
 
-    def get_unique_circuits(self, operator):
-        
+    @classmethod
+    def get_unique_circuits(cls, operator) -> List[QuantumCircuit]:
         def get_circuit(op):
             if isinstance(op, (CircuitStateFn, CircuitOp)):
                 return op.primitive
         
-        unrolled_op = self.unroll_operator(operator)
-        circs = [get_circuit(op) for op in unrolled_op if isinstance(op,(CircuitStateFn, CircuitOp, QuantumCircuit))]
-        
-        no_duplicates = []
-        [no_duplicates.append(i) for i in circs if i not in no_duplicates]
-        return no_duplicates
-
-
+        unrolled_op = cls.unroll_operator(operator)
+        circs = []
+        for ops in unrolled_op:
+            if not isinstance(ops, list):
+                ops = [ops]
+            for op in ops:
+                if isinstance(op, (CircuitStateFn, CircuitOp, QuantumCircuit)):
+                    c = get_circuit(op)
+                    if c not in circs:
+                        circs.append(c)
+        return list(circs)
 
     def insert_gate(self,
                     circuit: QuantumCircuit,
