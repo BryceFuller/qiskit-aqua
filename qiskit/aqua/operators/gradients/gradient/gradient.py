@@ -307,7 +307,7 @@ class Gradient(GradientBase):
         Returns:
             List of derivatives of the parameter expression w.r.t. all keys.
         """
-        deriv =sy.diff(sy.sympify(str(param_expr)), param)
+        deriv =sy.diff(sy.sympify(str(param_expr)), str(param))
         
         symbol_map = {}
         symbols = deriv.free_symbols
