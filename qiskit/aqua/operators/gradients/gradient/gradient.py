@@ -59,7 +59,7 @@ class Gradient(GradientBase):
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[ParameterVector, Parameter]] = None,
-                method: str = 'param_shift'
+                method: str = 'lin_comb'
                 ) -> OperatorBase:
         r"""
         Args:
@@ -217,15 +217,12 @@ class Gradient(GradientBase):
                 return SummedOp(oplist=grad_ops)
             elif isinstance(operator, TensoredOp):
                 return TensoredOp(oplist=grad_ops)
-            # else:
-            #     raise NotImplementedError
-            #     # TODO!
 
             # NOTE! This will totally break if you try to pass a DictStateFn through a combo_fn
             # (for example, using probability gradients)
             # I think this is a problem more generally, not just in this subroutine.
             grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn) # TODO why operator.oplist? -> only grad_ops
+            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
 
         elif isinstance(operator, StateFn):
             if operator._is_measurement:
