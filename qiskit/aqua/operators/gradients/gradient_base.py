@@ -243,34 +243,29 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
-        deriv =sy.diff(sy.sympify(str(param_expr)), str(param))
-        
-        symbol_map = {}
-        symbols = deriv.free_symbols
-        
-        for s in symbols:
-            for p in param_expr.parameters:
-                if s.name == p.name:
-                    symbol_map[p] = s
-                    break
+        # deriv =sy.diff(sy.sympify(str(param_expr)), str(param))
+        #
+        # symbol_map = {}
+        # symbols = deriv.free_symbols
+        #
+        # for s in symbols:
+        #     for p in param_expr.parameters:
+        #         if s.name == p.name:
+        #             symbol_map[p] = s
+        #             break
+        #
+        # assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
+        #
+        # return ParameterExpression(symbol_map, deriv)
 
-        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-        
-        return ParameterExpression(symbol_map, deriv)
-
-
-        """#I don't understand how this function works or what exactly it's trying to do
-        # I'm not deleting it, but I need to use the old implementation for now so my code doesn't break.
-        from collections.abc import Iterable
         expr = param_expr._symbol_expr
         keys = param._parameter_symbols[param]
         expr_grad = 0
         if not isinstance(keys, Iterable):
-        keys = [keys]
+            keys = [keys]
         for key in keys:
             expr_grad += sy.Derivative(expr, key)
-        return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
-        #"""
+        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
 
     def insert_gate(self,
                     circuit: QuantumCircuit,
