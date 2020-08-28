@@ -234,8 +234,9 @@ class HessianLinComb(GradientBase):
                                 if i == 0 and j == 0 and m == 0 and n == 0:
                                     hessian_op = term
                                 else:
+                                    # Product Rule
                                     hessian_op += term
-
+                # Product Rule
                 hessian_ops += [hessian_op]
             hessian_operators.append(ListOp(hessian_ops))
         return ListOp(hessian_operators)

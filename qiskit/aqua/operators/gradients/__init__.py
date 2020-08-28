@@ -17,12 +17,12 @@
 from .gradient_base import GradientBase
 from .gradient import OperatorGradient
 from .gradient import Gradient
+from .gradient import NaturalGradient
 from .hessian import Hessian
 from .qfi import QFI
-# from .ancilla_prob_grad import AncillaProbGradient
-# from .ancilla_state_grad import AncillaStateGradient
 
 __all__ = ['GradientBase',
            'Gradient',
+           'NaturalGradient',
            'Hessian',
            'QFI']

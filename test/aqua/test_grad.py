@@ -21,7 +21,7 @@ from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
 
-from qiskit.aqua.operators.gradients import Gradient
+from qiskit.aqua.operators.gradients import Gradient, NaturalGradient
 
 from qiskit.aqua.operators.gradients.gradient.gradient_lin_comb import GradientLinComb
 from qiskit.aqua.operators.gradients.hessian.hessian_lin_comb import HessianLinComb
@@ -204,7 +204,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(), correct_values[i])
 
     def test_prob_lin_comb_grad(self):
-        """Test the ancilla probability gradient
+        """Test the linear combination probability gradient
         dp0/da = cos(a)sin(b) / 2
         dp1/da = - cos(a)sin(b) / 2
         dp0/db = sin(a)cos(b) / 2
@@ -259,6 +259,31 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(qfi.assign_parameters(value_dict).eval(), correct_values[i])
 
+        # TODO block-diagonal, diagonal @Bryce
+
+    def test_natural_gradient(self):
+
+        """Test if the Natural Gradient evaluation works"""
+
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        op = CircuitStateFn(primitive=qc, coeff=1.)
+        nat_grad = NaturalGradient().convert(operator=op, params=params)
+        values_dict = [{params[0]: np.pi / 4, params[1]: 0.1}, {params[0]: np.pi, params[1]: 0.1},
+                       {params[0]: np.pi / 2, params[1]: 0.1}]
+        # TODO compute
+        correct_values = [[[1, 0], [0, 0.5]], [[1, 0], [0, 0]], [[1, 0], [0, 1]]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(), correct_values[i])
+
     def test_jax_chain_rule(self):
         """Test that the chain rule functionality using Jax"""
         a = Parameter('a')
@@ -295,6 +320,13 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i],
                                                  decimal=4)
 
+    def test_operator_coefficient_gradient(self):
+        # TODO
+        pass
+
+    def test_operator_coefficient_hessian(self):
+        # TODO
+        pass
 
 if __name__ == '__main__':
     unittest.main()

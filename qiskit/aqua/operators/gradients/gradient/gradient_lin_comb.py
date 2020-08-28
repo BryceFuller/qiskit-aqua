@@ -24,7 +24,7 @@ from qiskit.circuit.library import ZGate, SGate, SdgGate, HGate
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, ComposedOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
-from qiskit.aqua.operators.operator_globals import Z, I
+from qiskit.aqua.operators.operator_globals import Z, I, One, Zero
 from qiskit.quantum_info import partial_trace
 from ..gradient_base import GradientBase
 
@@ -53,14 +53,34 @@ class GradientLinComb(GradientBase):
         #         measurement = Z ^ deepcopy(op)
         #     else:
         #         state = deepcopy(op)
-        if isinstance(operator, ComposedOp):
-            measurement = operator[0]
-            state = operator[-1]
-
+        # if isinstance(operator, ComposedOp):
+        #     measurement = operator[0]
+        #     state = operator[-1]
+        #
 
         self._params = params
         self._operator_has_measurement = False
         return self._prepare_operator(operator)
+    #     self._params = params
+    #     self._gradient_operator = operator
+    #
+    #     return self._get_grad_states(operator)
+    #
+    # def _get_measurement(self, operator):
+    #     if isinstance(operator, ListOp):
+    #         return operator.traverse(self._get_measurement)
+    #     elif operator.is_measurement:
+    #         return Z ^ operator
+    #     else:
+    #         return None
+    #
+    # def _get_grad_states(self, operator):
+    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
+    #         return self._grad_states(operator, self._params)
+    #     elif isinstance(operator, ListOp):
+    #         return operator.traverse(self._get_grad_states)
+    #     else:
+    #         raise TypeError('Please define an operator that incorporates a CircuitStateFn.')
 
     def _prepare_operator(self, operator):
         if isinstance(operator, ListOp):
@@ -94,6 +114,8 @@ class GradientLinComb(GradientBase):
             AquaError: If one of the circuits could not be constructed.
             TypeError: If the operators is of unsupported type.
         """
+        # Get measurement operator
+        # meas_op = self._get_measurement(self._gradient_operator)
 
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
@@ -164,23 +186,36 @@ class GradientLinComb(GradientBase):
                     state = np.sqrt(np.abs(coeff_i) * 2) * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
-                    if gate_param == param:
-                        pass
-                    else:
-                        if isinstance(gate_param, ParameterExpression):
-                            import sympy as sy
-                            expr_grad = self.parameter_expression_grad(gate_param, param)
-                            # Square root needed bc the coefficients are squared in the expectation value
-                            # TODO enable complex parameter expressions
-                            # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                            state *= expr_grad
-                        else:
-                            state *= 0
-
                     if self._operator_has_measurement:
-                        pass
+                        if gate_param == param:
+                            pass
+                        else:
+                            if isinstance(gate_param, ParameterExpression):
+                                import sympy as sy
+                                expr_grad = self.parameter_expression_grad(gate_param, param)
+                                # Square root needed bc the coefficients are squared in the expectation value
+                                # TODO enable complex parameter expressions
+                                expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                state = expr_grad * state
+                            else:
+                                state = ~StateFn(One) @ Zero
+                    # if meas_op:
+                    #     if gate_param == param:
+                    #         state = meas_op @ state
+                    #     else:
+                    #         if isinstance(gate_param, ParameterExpression):
+                    #             import sympy as sy
+                    #             expr_grad = self.parameter_expression_grad(gate_param, param)
+                    #             # Square root needed bc the coefficients are squared in the expectation value
+                    #             # TODO enable complex parameter expressions
+                    #             # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                    #             state = expr_grad * meas_op @ state
+                    #         else:
+                    #             state = ~StateFn(One) @ Zero
                     else:
                         def combo_fn(x):
+                            # TODO parameter expression
+                            x = x.primitive
                             # Generate the operator which computes the linear combination
                             lin_comb_op = (I ^ op.num_qubits) ^ Z
                             lin_comb_op = lin_comb_op.to_matrix()
@@ -197,8 +232,10 @@ class GradientLinComb(GradientBase):
                     if m == 0 and k == 0:
                         state_op = state
                     else:
+                        # Product Rule
                         state_op += state
             # The division is necessary to compensate for normalization of summed StateFns
+            # states += [state_op]
             states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
 
         return ListOp(states) * op.coeff

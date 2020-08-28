@@ -15,12 +15,14 @@
 """The module for Aqua's first order derivatives."""
 
 from .gradient import Gradient
+from .natural_gradient import NaturalGradient
 from .operator_gradient import OperatorGradient
 from qiskit.aqua.operators.gradients.old.probability_gradient_param_shift import ProbabilityGradientParamShift
 from .gradient_lin_comb import GradientLinComb
 from .gradient_param_shift import GradientParamShift
 
 __all__ = ['Gradient',
+           'NaturalGradient',
            'OperatorGradient',
            'ProbabilityGradientParamShift',
            'GradientLinComb',
