@@ -78,12 +78,9 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [-0.5 / np.sqrt(2) - 0.5, -1 / 2.],
                           [-0.5, -1 / np.sqrt(2)]]
-        correct_grad = True
-        for i, value_dict in enumerate(values_dict):
-            correct_grad &= np.allclose(state_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
 
-        self.assertTrue(correct_grad)
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
     def test_state_lin_comb_grad(self):
         """Test the linear combination state gradient
@@ -231,13 +228,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                        {params[0]: np.pi / 2, params[1]: np.pi}]
         correct_values = [[[0, 0], [1/(2*np.sqrt(2)), - 1/(2*np.sqrt(2))]], [[1/4, - 1/4], [1/4, - 1/4]],
                           [[0, 0], [- 1/2, 1/2]]]
-        correct_grad = True
         for i, value_dict in enumerate(values_dict):
-            print(prob_grad.assign_parameters(value_dict).eval())
-            # print(prob_grad.assign_parameters(value_dict).eval())
-            correct_grad &= np.allclose(prob_grad.assign_parameters(
-                value_dict).eval(), correct_values[i], atol=1e-6)
-        self.assertTrue(correct_grad)
+            np.testing.assert_array_almost_equal(prob_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct
