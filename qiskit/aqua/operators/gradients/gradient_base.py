@@ -259,12 +259,12 @@ class GradientBase(ConverterBase):
         # return ParameterExpression(symbol_map, deriv)
 
         expr = param_expr._symbol_expr
-        keys = param._parameter_symbols[param]
+        keys = param_expr._parameter_symbols[param]
         expr_grad = 0
         if not isinstance(keys, Iterable):
             keys = [keys]
         for key in keys:
-            expr_grad += sy.Derivative(expr, key)
+            expr_grad += sy.Derivative(expr, key).doit()
         return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
 
     def insert_gate(self,

@@ -58,7 +58,7 @@ class Gradient(GradientBase):
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[ParameterVector, Parameter]] = None,
+                params: Optional[Union[ParameterVector, Parameter, List[Parameter]]] = None,
                 method: str = 'lin_comb'
                 ) -> OperatorBase:
         r"""

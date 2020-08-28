@@ -57,7 +57,8 @@ class HessianLinComb(GradientBase):
             if operator.is_measurement:
                 return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return 4 * Z ^ I ^ operator
+            # The division by 4 is necessary to compensate for normalization of summed StateFns
+            return Z ^ I ^ operator / 4
         if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
             # operator.primitive.add_register(QuantumRegister(1, name="ancilla"))
             operator = self._hessian_states(operator, self._params)
@@ -200,11 +201,6 @@ class HessianLinComb(GradientBase):
                                 hessian_circuit.h(work_q0)
                                 hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
-
-                                # term = op.coeff * (np.abs(coeff_a) * np.abs(coeff_b)) * \
-                                #     CircuitStateFn(hessian_circuit)
-
-                                #TODO fix parameter propagation
 
                                 term = op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
                                     CircuitStateFn(hessian_circuit)
