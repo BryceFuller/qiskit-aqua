@@ -321,12 +321,65 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                                                  decimal=4)
 
     def test_operator_coefficient_gradient(self):
-        # TODO
-        pass
+        """
+        Tr( | psi > < psi | Z) = sin(a)sin(b)
+        Tr( | psi > < psi | X) = cos(a)
+
+
+        """
+        a = Parameter('a')
+        b = Parameter('b')
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
+
+        coeff_0 = Parameter('c_0')
+        coeff_1 = Parameter('c_1')
+        H = coeff_0 * X + coeff_1 * Z
+        op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
+        gradient_coeffs = [coeff_0, coeff_1]
+        coeff_grad = Gradient.convert(op, gradient_coeffs)
+        values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
+                       {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
+        correct_values = [[np.sqrt(2), 0], [np.sqrt(2), 2]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(coeff_grad.assign_parameters(value_dict).eval(), correct_values[i],
+                                                 decimal=4)
 
     def test_operator_coefficient_hessian(self):
-        # TODO
-        pass
+        """
+        <Z> = Tr( | psi > < psi | Z) = sin(a)sin(b)
+        <X> = Tr( | psi > < psi | X) = cos(a)
+        d<H>/dc_0 = 2 * c_0 * <X> + c_1 * <Z>
+        d<H>/dc_1 = c_0 * <Z>
+        d^2<H>/dc_0^2 = 2 * <X>
+        d^2<H>/dc_0dc_1 = <Z>
+        d^2<H>/dc_1dc_0 = <Z>
+        d^2<H>/dc_1^2 = 0
+
+        """
+        a = Parameter('a')
+        b = Parameter('b')
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
+
+        coeff_0 = Parameter('c_0')
+        coeff_1 = Parameter('c_1')
+        H = coeff_0*coeff_0 * X + coeff_1*coeff_0 * Z
+        op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
+        gradient_coeffs = [coeff_0, coeff_1]
+        coeff_grad = Gradient.convert(op, gradient_coeffs)
+        values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
+                       {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
+        correct_values = [[[2*np.sqrt(2), 0], [0, 0]], [[2 * np.sqrt(2), 2], [2, 0]]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(coeff_grad.assign_parameters(value_dict).eval(), correct_values[i],
+                                                 decimal=4)
 
 if __name__ == '__main__':
     unittest.main()
