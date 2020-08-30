@@ -15,7 +15,6 @@
 """The module for Aqua's gradient."""
 
 from .gradient_base import GradientBase
-from .gradient import OperatorGradient
 from .gradient import Gradient
 from .gradient import NaturalGradient
 from .hessian import Hessian

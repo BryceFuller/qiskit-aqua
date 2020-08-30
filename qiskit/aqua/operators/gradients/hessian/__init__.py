@@ -15,11 +15,9 @@
 """The module for Aqua's first order derivatives."""
 
 from .hessian import Hessian
-from .operator_hessian import OperatorHessian
 from .hessian_lin_comb import HessianLinComb
 from .hessian_param_shift import HessianParamShift
 
 __all__ = ['Hessian',
-           'OperatorHessian',
            'HessianLinComb',
            'HessianParamShift']
