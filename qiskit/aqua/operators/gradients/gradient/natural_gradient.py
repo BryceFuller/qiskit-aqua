@@ -40,7 +40,7 @@ class NaturalGradient(Gradient):
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[ParameterVector, Parameter]] = None,
+                params: Optional[Union[ParameterVector, Parameter, List[Parameter]]] = None,
                 method: str = 'param_shift',
                 regularization: Optional[str] = None,
                 approx: Optional[str] = None
