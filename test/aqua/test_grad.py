@@ -164,7 +164,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         state_grad = GradientLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4}, {a: 0},
                        {a: np.pi / 2}]
-        correct_values = [[-1.1220], [-0.9093], [0.0403]]
+        correct_values = [-1.1220, -0.9093, 0.0403]
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
@@ -372,7 +372,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         H = coeff_0*coeff_0 * X + coeff_1*coeff_0 * Z
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
         gradient_coeffs = [coeff_0, coeff_1]
-        coeff_grad = Gradient.convert(op, gradient_coeffs)
+        coeff_grad = Hessian.convert(op, gradient_coeffs)
         values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
                        {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
         correct_values = [[[2*np.sqrt(2), 0], [0, 0]], [[2 * np.sqrt(2), 2], [2, 0]]]
