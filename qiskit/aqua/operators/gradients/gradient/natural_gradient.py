@@ -21,26 +21,29 @@ where R(x) represents the penalization term.
 """
 
 import numpy as np
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import logging
 logger = logging.getLogger(__name__)
+from typing import List
 
-from qiskit.aqua.operators import Gradient, QFI
+from ...gradients import GradientBase
+from ...gradients.qfi import QFI
+from ..gradient import Gradient
 from qiskit.circuit import Parameter, ParameterVector
 
 from qiskit.aqua.operators import (OperatorBase, ListOp)
 
 
-class NaturalGradient(Gradient):
+class NaturalGradient(GradientBase):
     """Convert an operator expression to the first-order gradient."""
 
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[ParameterVector, Parameter]] = None,
+                params: Optional[Union[ParameterVector, Parameter, List[Parameter]]] = None,
                 method: str = 'param_shift',
                 regularization: Optional[str] = None,
                 approx: Optional[str] = None

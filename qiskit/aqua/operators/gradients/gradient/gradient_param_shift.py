@@ -134,32 +134,28 @@ class GradientParamShift(GradientBase):
 
                 # TODO here chain rule parameter shift
 
-                pshift_index = pshift_gate.params.index(param)
-                mshift_index = mshift_gate.params.index(param)
-                print(pshift_gate.params.index(param))
-                print(pshift_index)
+                assert len(pshift_gate.params) == 1, "Circuit was not properly decomposed"
 
-                p_param = pshift_gate.params[pshift_index]
-                m_param = mshift_gate.params[mshift_index]
+                #The parameter could be a parameter expression
+                p_param = pshift_gate.params[0]
+                m_param = mshift_gate.params[0]
 
                 # TODO: Add check that asserts a NotImplementedError if gate is not a standard qiskit gate.
                 # Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
 
-                pshift_gate.params[pshift_index] = (p_param + (np.pi / (4*shift_constant)))
-                mshift_gate.params[mshift_index] = (m_param - (np.pi / (4*shift_constant)))
+                pshift_gate.params[0] = (p_param + (np.pi / (4*shift_constant)))
+                mshift_gate.params[0] = (m_param - (np.pi / (4*shift_constant)))
 
                 shifted_op = shift_constant * (pshift_op - mshift_op)
 
-                # TODO Check this
-                if pshift_gate.params[pshift_index] == param:
-                    pass
-                else:
-                    if isinstance(pshift_gate.params[pshift_index], ParameterExpression):
-                        expr_grad = self.parameter_expression_grad(pshift_gate.params[pshift_index], param)
+                # If the rotation angle is actually a parameter expression of param, then handle the chain rule
+                if pshift_gate.params[0] != param and isinstance(pshift_gate.params[0], ParameterExpression):
+                        expr_grad = self.parameter_expression_grad(pshift_gate.params[0], param)
                         shifted_op *= expr_grad
 
                 shifted_ops.append(shifted_op)
 
-            return SummedOp(shifted_ops).reduce()
+            return shifted_op.reduce()
+            #return SummedOp(shifted_ops).reduce()
 

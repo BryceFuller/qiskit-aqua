@@ -15,16 +15,17 @@
 """The module to compute the state gradient with the linear combination method."""
 from collections.abc import Iterable
 from typing import Optional, Union, List
+from functools import partial
 from copy import deepcopy
 import numpy as np
 
 from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library import ZGate, SGate, SdgGate, HGate
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, ComposedOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
-from qiskit.aqua.operators.operator_globals import Z, I
+from qiskit.aqua.operators.operator_globals import Z, I, One, Zero
 from qiskit.quantum_info import partial_trace
 from ..gradient_base import GradientBase
 
@@ -47,31 +48,97 @@ class GradientLinComb(GradientBase):
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
-        self._params = params
-        self._operator_has_measurement = False
-        return self._prepare_operator(operator)
 
-    def _prepare_operator(self, operator):
-        if isinstance(operator, ListOp):
-            return operator.traverse(self._prepare_operator)
+
+        # self._meas_op = None
+        # for op in operator.oplist:
+        #     if op.is_measurement:
+        #         measurement = Z ^ deepcopy(op)
+        #     else:
+        #         state = deepcopy(op)
+        # if isinstance(operator, ComposedOp):
+        #     measurement = operator[0]
+        #     state = operator[-1]
+        #
+
+        # self._params = params
+        # self._operator_has_measurement = False
+        return self._prepare_operator(operator, params)
+    #     self._params = params
+    #     self._gradient_operator = operator
+    #
+    #     return self._get_grad_states(operator)
+    #
+    # def _get_measurement(self, operator):
+    #     if isinstance(operator, ListOp):
+    #         return operator.traverse(self._get_measurement)
+    #     elif operator.is_measurement:
+    #         return Z ^ operator
+    #     else:
+    #         return None
+    #
+    # def _get_grad_states(self, operator):
+    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
+    #         return self._grad_states(operator, self._params)
+    #     elif isinstance(operator, ListOp):
+    #         return operator.traverse(self._get_grad_states)
+    #     else:
+    #         raise TypeError('Please define an operator that incorporates a CircuitStateFn.')
+
+    # def _prepare_operator(self, operator):
+    #     if isinstance(operator, ListOp):
+    #         return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, StateFn):
+    #         if operator.is_measurement:
+    #             self._operator_has_measurement = True
+    #             return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, PrimitiveOp):
+    #         return Z ^ operator
+    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
+    #         return self._grad_states(operator, self._params)
+    #     return operator
+
+    def _prepare_operator(self, operator, params):
+        if isinstance(operator, ComposedOp):
+            if not isinstance(operator[0], StateFn) or not operator[0]._is_measurement:
+                raise ValueError("The given operator does not correspond to an expectation value")
+            if not isinstance(operator[-1], StateFn) or operator[-1]._is_measurement:
+                raise ValueError("The given operator does not correspond to an expectation value")
+            if operator[0].is_measurement:
+                if len(operator.oplist) == 2:
+                    state_op = operator[1]
+                    return self._grad_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
+                                                     target_params=params)
+                else:
+                    state_op = deepcopy(operator)
+                    state_op.oplist.pop(0)
+                    return state_op.traverse(partial(self._grad_states, meas_op=(~StateFn(Z) ^ operator[0]),
+                                                 target_params=params))
+
+            else:
+                return operator.traverse(partial(self._prepare_operator, params=params))
+        elif isinstance(operator, ListOp):
+            return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, StateFn):
             if operator.is_measurement:
                 self._operator_has_measurement = True
-                return operator.traverse(self._prepare_operator)
+                return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, PrimitiveOp):
-            return 2 * Z ^ operator
-        if isinstance(operator, (CircuitStateFn, CircuitOp)):
-            operator = self._grad_states(operator, self._params)
+            return operator
+        elif isinstance(operator, (CircuitStateFn, CircuitOp)):
+            return self._grad_states(operator, target_params=params)
         return operator
 
     def _grad_states(self,
-                     op: OperatorBase,
+                     state_op: OperatorBase,
+                     meas_op: Optional[OperatorBase] = None,
                      target_params: Optional[Union[Parameter, ParameterVector, List]] = None
                      ) -> ListOp:
         """Generate the gradient states.
 
         Args:
-            op: The operator representing the quantum state for which we compute the gradient.
+            state_op: The operator representing the quantum state for which we compute the gradient.
+            meas_op: The operator representing the observable for which we compute the gradient.
             target_params: The parameters we are taking the gradient wrt: ω
 
         Returns:
@@ -83,6 +150,8 @@ class GradientLinComb(GradientBase):
             AquaError: If one of the circuits could not be constructed.
             TypeError: If the operators is of unsupported type.
         """
+        # Get measurement operator
+        # meas_op = self._get_measurement(self._gradient_operator)
 
         # Dictionary with the information which parameter is used in which gate
         gates_to_parameters = {}
@@ -90,21 +159,13 @@ class GradientLinComb(GradientBase):
         grad_coeffs = {}
         # Dictionary which relates the gates needed for the grad for every parameter
         grad_gates = {}
-        # # Loop throuh the parameters in the circuit
-        # params = []
-        state_qc = deepcopy(op.primitive)
-        # for param, elements in state_qc._parameter_table.items():
+        state_qc = deepcopy(state_op.primitive)
         if not isinstance(target_params, Iterable):
             target_params = [target_params]
         for param in target_params:
             elements = state_qc._parameter_table[param]
-            # if param not in target_params:
-            #     continue
-            # if param not in params:
-            #     params.append(param)
             gates_to_parameters[param] = []
             grad_coeffs[param] = []
-            # grad_param_expr_grad[param] = []
             grad_gates[param] = []
             for element in elements:
                 # get the coefficients and controlled gates (raises an error if the parameterized
@@ -118,7 +179,8 @@ class GradientLinComb(GradientBase):
                     g.extend(coeffs_gates[j][1])
                 grad_coeffs[param].append(c)
                 grad_gates[param].append(g)
-        states = []
+        if len(target_params) > 1:
+            states = []
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
         additional_qubits = ([work_q], [])
@@ -157,44 +219,63 @@ class GradientLinComb(GradientBase):
                                      gate_to_insert_i,
                                      additional_qubits=additional_qubits)
                     grad_state.h(work_q)
-                    # state = np.abs(coeff_i) * CircuitStateFn(grad_state)
-                    # TODO fix coeff propagation in ListOps
-                    state = np.sqrt(np.abs(coeff_i)) * CircuitStateFn(grad_state)
+
+                    state = np.sqrt(np.abs(coeff_i) * 2) * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
-                    if gate_param == param:
-                        pass
-                    else:
-                        if isinstance(gate_param, ParameterExpression):
-                            import sympy as sy
-                            expr_grad = self.parameter_expression_grad(gate_param, param)
-                            # Square root needed bc the coefficients are squared in the expectation value
-                            # TODO enable complex parameter expressions
-                            # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                            state *= expr_grad
+                    if meas_op:
+                        if gate_param == param:
+                            state = meas_op @ state
                         else:
-                            state *= 0
+                            if isinstance(gate_param, ParameterExpression):
+                                import sympy as sy
+                                expr_grad = self.parameter_expression_grad(gate_param, param)
+                                # Square root needed bc the coefficients are squared in the expectation value
+                                # TODO enable complex parameter expressions
+                                # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                state = (expr_grad * meas_op) @ state
+                            else:
+                                state = ~StateFn(One) @ Zero
+                    # if meas_op:
+                    #     if gate_param == param:
+                    #         state = meas_op @ state
+                    #     else:
+                    #         if isinstance(gate_param, ParameterExpression):
+                    #             import sympy as sy
+                    #             expr_grad = self.parameter_expression_grad(gate_param, param)
+                    #             # Square root needed bc the coefficients are squared in the expectation value
+                    #             # TODO enable complex parameter expressions
+                    #             # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                    #             state = expr_grad * meas_op @ state
+                    #         else:
+                    #             state = ~StateFn(One) @ Zero
+                    else:
+                        def combo_fn(x):
+                            # TODO parameter expression
+                            x = x.primitive
+                            # Generate the operator which computes the linear combination
+                            lin_comb_op = (I ^ state_op.num_qubits) ^ Z
+                            lin_comb_op = lin_comb_op.to_matrix()
+                            # Compute a partial trace over the working qubit needed to compute the linear combination
+                            if isinstance(x, list) or isinstance(x, np.ndarray):
+                                # TODO check if output is prob or sv - in case of prob get rid of np.dot
+                                return [np.diag(partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
+                                        for item in x]
+                            else:
+                                # TODO check if output is prob or sv - in case of prob get rid of np.dot
+                                return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
+                        state = ListOp(state, combo_fn=combo_fn)
 
                     if m == 0 and k == 0:
-                        state_op = state
+                        op = state
                     else:
-                        state_op += state
-
-            states += [state_op]
-        if self._operator_has_measurement:
-            return ListOp(states) * op.coeff
+                        # Product Rule
+                        op += state
+            # The division is necessary to compensate for normalization of summed StateFns
+            if len(target_params) > 1:
+                states += [op]
+            # states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
+        if len(target_params) > 1:
+            return ListOp(states) * state_op.coeff
         else:
-            def combo_fn(x):
-                # Generate the operator which computes the linear combination
-                lin_comb_op = 2 * (I ^ op.num_qubits) ^ Z
-                lin_comb_op = lin_comb_op.to_matrix()
-                # Compute a partial trace over the working qubit needed to compute the linear combination
-                if isinstance(x, list) or isinstance(x, np.ndarray):
-                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                    return [np.diag(partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
-                            for item in x]
-                else:
-                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                    return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
-
-            return ListOp(states, combo_fn=combo_fn) * op.coeff
+            return op * state_op.coeff

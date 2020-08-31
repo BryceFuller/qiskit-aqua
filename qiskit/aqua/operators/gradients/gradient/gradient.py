@@ -56,7 +56,7 @@ class Gradient(GradientBase):
     # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
-                params: Optional[Union[ParameterVector, Parameter]] = None,
+                params: Optional[Union[ParameterVector, Parameter, List[Parameter]]] = None,
                 method: str = 'lin_comb'
                 ) -> OperatorBase:
         r"""
@@ -216,7 +216,7 @@ class Gradient(GradientBase):
                 return SummedOp(oplist=grad_ops)
             elif isinstance(operator, TensoredOp):
                 return TensoredOp(oplist=grad_ops)
-
+              
             if operator.grad_combo_fn:
                 grad_combo_fn = operator.grad_combo_fn
             else:
@@ -364,6 +364,7 @@ class Gradient(GradientBase):
         for key in keys:
             expr_grad += sy.Derivative(expr, key).doit()
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
+
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

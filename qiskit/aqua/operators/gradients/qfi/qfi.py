@@ -39,7 +39,7 @@ class QFI(GradientBase):
 
     The QFI is:
 
-        [QFI]kl= Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉] * 0.25.
+        [QFI]kl= Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉] * 4.
     """
 
     def convert(self,
@@ -48,9 +48,8 @@ class QFI(GradientBase):
                 approx: Optional[str] = None) -> OperatorBase:
         r"""
         Args:
-            operator: The operator corresponding to our quantum state we are taking the gradient
-                of: |ψ(ω)〉
-            params: The parameters we are taking the gradient wrt: ω
+            operator: The operator corresponding to the quantum state |ψ(ω)〉for which we compute the QFI
+            params: The parameters we are computing the QFI wrt: ω
             approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
 
         Returns:
@@ -60,6 +59,7 @@ class QFI(GradientBase):
             ValueError: If the value for ``approx`` is not supported.
         """
 
+        #TODO what is this?
         # Currently there's some ambiguity about how parameters are ordered that needs to be
         # decided. In particular with cases where a parameter occurs more than once in a circuit,
         # where more than one circuit are provided. One option might be to include a method that
@@ -68,7 +68,7 @@ class QFI(GradientBase):
         # returned.
 
         if approx is None:
-            return self._qfi_states(operator, params)
+            return self._get_qfi(operator, params)
         elif approx == 'diagonal':
             return self.diagonal_qfi(operator)
         elif approx == 'block_diagonal':
@@ -77,23 +77,11 @@ class QFI(GradientBase):
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
 
-    # def _prepare_operator(self, operator):
-    #     if isinstance(operator, ListOp):
-    #         return operator.traverse(self._prepare_operator)
-    #     elif isinstance(operator, StateFn):
-    #         if operator.is_measurement == True:
-    #             return operator.traverse(self._prepare_operator)
-    #     elif isinstance(operator, PrimitiveOp):
-    #         return 4 * Z ^ ((I ^ operator.num_qubits) - operator)
-    #     if isinstance(operator, (QuantumCircuit, CircuitStateFn, CircuitOp)):
-    #         # operator.primitive.add_register(QuantumRegister(1, name="work_qubit"))
-    #         operator = self._qfi_states(operator, self._params)
-    #     return operator
 
     # TODO This probably should have a more intuitive name.
 
-    def _qfi_states(self, op: OperatorBase,
-                    target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
+    def _get_qfi(self, op: OperatorBase,
+                 target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
@@ -109,10 +97,10 @@ class QFI(GradientBase):
             TypeError: If ``operator`` is an unsupported type.
         """
         # QFI & phase fix observable
-        qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits))
+        qfi_observable = ~StateFn(4 * Z ^ (I ^ op.num_qubits))
         phase_fix_observable = ~StateFn((X + 1j * Y) ^ (I ^ op.num_qubits))
         # see https://arxiv.org/pdf/quant-ph/0108146.pdf
-        # Alternative
+        # Alternatively, define one operator which computes the QFI with phase fix directly
         # qfi_observable = ~StateFn(Z ^ (I ^ op.num_qubits) - op)
 
         # Dictionary with the information which parameter is used in which gate
@@ -139,9 +127,10 @@ class QFI(GradientBase):
             qfi_coeffs[param] = []
             qfi_gates[param] = []
             for element in elements:
-                # get the coefficients and controlled gates (raises an error if the parameterized
+                # Get the coefficients and controlled gates (raises an error if the parameterized
                 # gate is not supported)
                 coeffs_gates = self.gate_gradient_dict(element[0])
+                # Get the gates which are parameterized by param
                 gates_to_parameters[param].append(element[0])
                 c = []
                 g = []
@@ -151,14 +140,14 @@ class QFI(GradientBase):
                 qfi_coeffs[param].append(c)
                 qfi_gates[param].append(g)
 
+        # First, the operators are computed which can compensate for a potential phase-mismatch
+        # between target and trained state, i.e.〈ψ|∂lψ〉
         phase_fix_states = []
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
         additional_qubits = ([work_q], [])
         # create a copy of the original state with an additional work_q register
-        # Get the states needed to compute the gradient
-        for param in target_params:  # loop over parameters
-            # construct the states
+        for param in target_params:
             for m, gates_to_insert_i in enumerate(qfi_gates[param]):
                 for k, gate_to_insert_i in enumerate(gates_to_insert_i):
                     grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
@@ -224,6 +213,7 @@ class QFI(GradientBase):
                         phase_fix_state += state
             phase_fix_states += [phase_fix_observable @ phase_fix_state]
 
+        # Get  4 * Re[〈∂kψ|∂lψ]
         qfi_operators = []
         qr_work_qubit = QuantumRegister(1, 'work_qubit')
         work_qubit = qr_work_qubit[0]
@@ -231,15 +221,11 @@ class QFI(GradientBase):
         # create a copy of the original circuit with an additional work_qubit register
         circuit = QuantumCircuit(*state_qc.qregs, qr_work_qubit)
         circuit.data = state_qc.data
-        # params = list(gates_to_parameters.keys())
         # apply Hadamard on work_qubit
         self.insert_gate(circuit, gates_to_parameters[target_params[0]][0], HGate(), qubits=[work_qubit])
         # Get the circuits needed to compute A_ij
         for i, param_i in enumerate(target_params):  # loop over parameters
             qfi_ops = []
-
-            # j = 0
-            # while j <= i: #loop over parameters
             for j, param_j in enumerate(target_params):
 
                 # construct the circuits
@@ -309,7 +295,7 @@ class QFI(GradientBase):
                                         )
 
                                 qfi_circuit.h(work_qubit)
-
+                                # Convert the quantum circuit into a CircuitStateFn
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                     CircuitStateFn(qfi_circuit)
                                 # Chain Rule Parameter Expression
@@ -341,17 +327,19 @@ class QFI(GradientBase):
                                 if m_i == 0 and k_i == 0 and m_j == 0 and k_j == 0:
                                     qfi_op = term
                                 else:
+                                    # Product Rule
                                     qfi_op += term
-
-                # qfi_ops += [qfi_observable @ qfi_op] # add phase fix
-                # phase fix component
+                # Compute −4 * Re(〈∂kψ|ψ〉〈ψ|∂lψ〉)
                 def phase_fix_combo_fn(x):
-                    return (-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
+                    return 4*(-0.5)*(x[0]*np.conjugate(x[1]) + x[1]*np.conjugate(x[0]))
                 phase_fix = ListOp([phase_fix_states[i], phase_fix_states[j]],
                                    combo_fn=phase_fix_combo_fn)
+                # Add the phase fix quantities to the entries of the QFI
+                # Get 4 * Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉]
                 qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
             qfi_operators.append(ListOp(qfi_ops))
-        return 4 * ListOp(qfi_operators)
+        # Return the full QFI
+        return ListOp(qfi_operators)
 
     def block_diagonal_qfi(self,
                            operator: Union[CircuitOp, CircuitStateFn],
@@ -396,6 +384,7 @@ class QFI(GradientBase):
 
         blocks = []
 
+        #Psi_i = layer_i @ layer_i-1 @ ... @ layer_0 @ Zero
         for k, psi_i in enumerate(psis):
             params = block_params[k]
             block = np.zeros((len(params), len(params))).tolist()
