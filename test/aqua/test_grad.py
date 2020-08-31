@@ -138,7 +138,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         state_grad = GradientLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4}, {a: 0},
                        {a: np.pi / 2}]
-        correct_values = [[-1.353553], [-0], [-0.5]]
+        correct_values = [-1.353553, -0, -0.5]
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i], decimal=3)
