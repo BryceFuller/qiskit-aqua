@@ -105,18 +105,16 @@ class GradientLinComb(GradientBase):
             if not isinstance(operator[-1], StateFn) or operator[-1]._is_measurement:
                 raise ValueError("The given operator does not correspond to an expectation value")
             if operator[0].is_measurement:
-                try:
-                    if len(operator.oplist) == 2:
-                        state_op = operator[1]
-                        return self._grad_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
-                                                         target_params=params)
-                    else:
-                        state_op = deepcopy(operator)
-                        state_op.oplist.pop(0)
-                        return state_op.traverse(partial(self._grad_states, meas_op=(~StateFn(Z) ^ operator[0]),
-                                                     target_params=params))
-                except Exception:
-                    pass
+                if len(operator.oplist) == 2:
+                    state_op = operator[1]
+                    return self._grad_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
+                                                     target_params=params)
+                else:
+                    state_op = deepcopy(operator)
+                    state_op.oplist.pop(0)
+                    return state_op.traverse(partial(self._grad_states, meas_op=(~StateFn(Z) ^ operator[0]),
+                                                 target_params=params))
+
             else:
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, ListOp):
@@ -132,14 +130,14 @@ class GradientLinComb(GradientBase):
         return operator
 
     def _grad_states(self,
-                     operator: OperatorBase,
+                     state_op: OperatorBase,
                      meas_op: Optional[OperatorBase] = None,
                      target_params: Optional[Union[Parameter, ParameterVector, List]] = None
                      ) -> ListOp:
         """Generate the gradient states.
 
         Args:
-            operator: The operator representing the quantum state for which we compute the gradient.
+            state_op: The operator representing the quantum state for which we compute the gradient.
             meas_op: The operator representing the observable for which we compute the gradient.
             target_params: The parameters we are taking the gradient wrt: ω
 
@@ -161,7 +159,7 @@ class GradientLinComb(GradientBase):
         grad_coeffs = {}
         # Dictionary which relates the gates needed for the grad for every parameter
         grad_gates = {}
-        state_qc = deepcopy(operator.primitive)
+        state_qc = deepcopy(state_op.primitive)
         if not isinstance(target_params, Iterable):
             target_params = [target_params]
         for param in target_params:
@@ -181,7 +179,8 @@ class GradientLinComb(GradientBase):
                     g.extend(coeffs_gates[j][1])
                 grad_coeffs[param].append(c)
                 grad_gates[param].append(g)
-        states = []
+        if len(target_params) > 1:
+            states = []
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
         additional_qubits = ([work_q], [])
@@ -255,7 +254,7 @@ class GradientLinComb(GradientBase):
                             # TODO parameter expression
                             x = x.primitive
                             # Generate the operator which computes the linear combination
-                            lin_comb_op = (I ^ operator.num_qubits) ^ Z
+                            lin_comb_op = (I ^ state_op.num_qubits) ^ Z
                             lin_comb_op = lin_comb_op.to_matrix()
                             # Compute a partial trace over the working qubit needed to compute the linear combination
                             if isinstance(x, list) or isinstance(x, np.ndarray):
@@ -268,12 +267,15 @@ class GradientLinComb(GradientBase):
                         state = ListOp(state, combo_fn=combo_fn)
 
                     if m == 0 and k == 0:
-                        operator = state
+                        op = state
                     else:
                         # Product Rule
-                        operator += state
+                        op += state
             # The division is necessary to compensate for normalization of summed StateFns
-            states += [operator]
+            if len(target_params) > 1:
+                states += [op]
             # states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
-
-        return ListOp(states) * operator.coeff
+        if len(target_params) > 1:
+            return ListOp(states) * state_op.coeff
+        else:
+            return op * state_op.coeff
