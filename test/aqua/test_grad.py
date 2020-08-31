@@ -314,7 +314,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             return jnp.power(x[0], 2) + jnp.cos(x[1])
 
         def grad_combo_fn(*x): # should be `*x` to align with autograd
-            return np.array([2 * x[0], -np.sin(x[1])]   )
+            return np.array([2 * x[0], -np.sin(x[1])])
 
         op = ListOp([~StateFn(X) @ CircuitStateFn(primitive=qc, coeff=1.),
                     ~StateFn(Z) @ CircuitStateFn(primitive=qc, coeff=1.)], combo_fn=combo_fn,
