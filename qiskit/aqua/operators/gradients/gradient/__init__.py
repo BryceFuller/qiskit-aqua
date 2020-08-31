@@ -18,8 +18,11 @@ from .gradient import Gradient
 from qiskit.aqua.operators.gradients.old.probability_gradient_param_shift import ProbabilityGradientParamShift
 from .gradient_lin_comb import GradientLinComb
 from .gradient_param_shift import GradientParamShift
+from .natural_gradient import NaturalGradient
 
 __all__ = ['Gradient',
            'ProbabilityGradientParamShift',
            'GradientLinComb',
-           'GradientParamShift']
+           'GradientParamShift',
+           'NaturalGradient',
+           ]
