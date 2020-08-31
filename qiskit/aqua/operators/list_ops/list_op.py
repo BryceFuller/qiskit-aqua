@@ -324,11 +324,13 @@ class ListOp(OperatorBase):
             #Get the actual data from each operator
             vectors = [op.primitive*op._coeff for op in evals]
             primitive_type = type(vectors[0])
-            if isinstance(primitive_type, StateVector):
-                evals = [op.data for op in vectors]
-            dim = len(evals[0])
+            # For some reason, isinstance(primitive_type, StateVector) fails. 
+            # So I had to use the below check.
+            if hasattr(primitive_type, 'data'):
+                vectors = [op.data for op in vectors]
+            dim = len(vectors[0])
             combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
-            return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=vectors[0].is_measurement)
+            return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=evals[0].is_measurement)
         else:
             return self.combo_fn(evals)
 
