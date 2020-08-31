@@ -17,6 +17,7 @@
 
 
 import unittest
+from ddt import ddt, data, unpack
 from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
@@ -37,6 +38,7 @@ from qiskit.aqua import QuantumInstance, aqua_globals
 
 
 # from .gradient import Gradient
+@ddt
 class TestQuantumFisherInf(QiskitAquaTestCase):
     """ Test Quantum Fisher Information """
 
@@ -53,7 +55,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         #                                seed_transpiler=2)
         pass
 
-    def test_gradient(self):
+    @data('linear_comb', 'parameter_shift')
+    def test_gradient(self, method):
         """Test the linear combination state gradient
         Tr(|psi><psi|Z) = sin(a)sin(b)
         Tr(|psi><psi|X) = cos(a)
@@ -73,7 +76,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.rx(params[1], q[0])
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
-        state_grad = Gradient().convert(operator=op, params=params, method='lin_comb')
+        state_grad = Gradient().convert(operator=op, params=params, method=method)
         values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [-0.5 / np.sqrt(2) - 0.5, -1 / 2.],
@@ -135,11 +138,10 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         state_grad = GradientLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4}, {a: 0},
                        {a: np.pi / 2}]
-        correct_values = [[-1.353553], [-0], [-0.5]]
+        correct_values = [-1.353553, -0, -0.5]
 
         for i, value_dict in enumerate(values_dict):
-            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i],
-                                           decimal=3)
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i], decimal=3)
 
         """
         Parameter Expression
@@ -165,7 +167,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         state_grad = GradientLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4}, {a: 0},
                        {a: np.pi / 2}]
-        correct_values = [[-1.1220], [-0.9093], [0.0403]]
+        correct_values = [-1.1220, -0.9093, 0.0403]
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
@@ -284,7 +286,9 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
-    def test_jax_chain_rule(self):
+    @data(('lin_comb', True), ('parameter_shift', True), ('lin_comb', False), ('parameter_shift', False))
+    @unpack
+    def test_jax_chain_rule(self, method: str, autograd: bool):
         """Test that the chain rule functionality using Jax"""
         a = Parameter('a')
         b = Parameter('b')
@@ -309,10 +313,14 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
             import jax.numpy as jnp
             return jnp.power(x[0], 2) + jnp.cos(x[1])
 
-        op = ListOp([~StateFn(X) @ CircuitStateFn(primitive=qc, coeff=1.),
-                    ~StateFn(Z) @ CircuitStateFn(primitive=qc, coeff=1.)], combo_fn=combo_fn)
+        def grad_combo_fn(*x): # should be `*x` to align with autograd
+            return np.array([2 * x[0], -np.sin(x[1])])
 
-        state_grad = Gradient().convert(operator=op, params=params, method='lin_comb')
+        op = ListOp([~StateFn(X) @ CircuitStateFn(primitive=qc, coeff=1.),
+                    ~StateFn(Z) @ CircuitStateFn(primitive=qc, coeff=1.)], combo_fn=combo_fn,
+                    grad_combo_fn=None if autograd else grad_combo_fn)
+
+        state_grad = Gradient().convert(operator=op, params=params, method=method)
         values_dict = [{a: np.pi / 4, b: np.pi}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                        {params[0]: np.pi / 2, params[1]: np.pi / 4}]
         correct_values = [[-1., 0.], [-1.2397, -0.2397], [0, -0.45936]]
@@ -373,7 +381,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         H = coeff_0*coeff_0 * X + coeff_1*coeff_0 * Z
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
         gradient_coeffs = [coeff_0, coeff_1]
-        coeff_grad = Gradient.convert(op, gradient_coeffs)
+        coeff_grad = Hessian.convert(op, gradient_coeffs)
         values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
                        {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
         correct_values = [[[2*np.sqrt(2), 0], [0, 0]], [[2 * np.sqrt(2), 2], [2, 0]]]
