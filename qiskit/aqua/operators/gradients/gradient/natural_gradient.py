@@ -21,7 +21,7 @@ where R(x) represents the penalization term.
 """
 
 import numpy as np
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -29,8 +29,9 @@ import logging
 logger = logging.getLogger(__name__)
 from typing import List
 
-from ...gradients import GradientBase
-from ...gradients.qfi import QFI
+
+from qiskit.aqua.operators.gradients.gradient import Gradient
+from qiskit.aqua.operators.gradients.qfi.qfi import QFI
 from qiskit.circuit import Parameter, ParameterVector
 
 from qiskit.aqua.operators import (OperatorBase, ListOp)
