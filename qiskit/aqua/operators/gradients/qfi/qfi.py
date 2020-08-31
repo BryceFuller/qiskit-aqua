@@ -67,6 +67,9 @@ class QFI(GradientBase):
         # parameters. Or create an input argument to specify if the parameter mapp_ing should be
         # returned.
 
+        if params is None:
+            raise ValueError("No parameters were provided to differentiate")
+
         if approx is None:
             return self._get_qfi(operator, params)
         elif approx == 'diagonal':

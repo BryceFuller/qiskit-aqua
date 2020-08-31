@@ -75,6 +75,9 @@ class Gradient(GradientBase):
         # grad_combo_fn: Gradient for a custom operator combo_fn. The gradient for a standard
         #     ``ListOp`` or SymPy combo_fn is automatically computed.
 
+        if params is None:
+            raise ValueError("No parameters were provided to differentiate")
+
         # TODO where is the param = None case handled?
         if isinstance(params, (ParameterVector, List)):
             param_grads = [self.convert(operator, param, method) for param in params]

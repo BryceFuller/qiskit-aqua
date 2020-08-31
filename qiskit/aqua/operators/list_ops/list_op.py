@@ -304,10 +304,6 @@ class ListOp(OperatorBase):
 
         
         evals = [(self.coeff * op).eval(front) for op in filtered_oplist]  # type: ignore
-<<<<<<< HEAD
-
-=======
->>>>>>> 0e90028e6d7a41b88747650a31398c860c5243d1
         if all(isinstance(op, OperatorBase) for op in evals):
             return self.__class__(evals)
         elif any(isinstance(op, OperatorBase) for op in evals):
