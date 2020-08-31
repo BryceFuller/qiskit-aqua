@@ -31,6 +31,7 @@ from typing import List
 
 from ...gradients import GradientBase
 from ...gradients.qfi import QFI
+from ..gradient import Gradient
 from qiskit.circuit import Parameter, ParameterVector
 
 from qiskit.aqua.operators import (OperatorBase, ListOp)
