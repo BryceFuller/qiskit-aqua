@@ -67,6 +67,9 @@ class QFI(GradientBase):
         # parameters. Or create an input argument to specify if the parameter mapp_ing should be
         # returned.
 
+        if params is None:
+            raise ValueError("No parameters were provided to differentiate")
+
         if approx is None:
             return self._get_qfi(operator, params)
         elif approx == 'diagonal':
@@ -464,7 +467,7 @@ class QFI(GradientBase):
             rotated_op = PauliExpectation().convert(op)
             diag.append(rotated_op)
 
-        grad_op = ListOp(diag, combo_fn=lambda x: np.diag([1 - y ** 2 for y in x]))
+        grad_op = ListOp(diag, combo_fn=lambda x: np.diag(np.real([1 - y ** 2 for y in x])))
         return grad_op
 
     def _partition_circuit(self, circuit):
