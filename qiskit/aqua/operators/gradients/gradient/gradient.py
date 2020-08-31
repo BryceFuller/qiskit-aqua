@@ -217,42 +217,41 @@ class Gradient(GradientBase):
             elif isinstance(operator, TensoredOp):
                 return TensoredOp(oplist=grad_ops)
 
-            # NOTE! This will totally break if you try to pass a DictStateFn through a combo_fn
-            # (for example, using probability gradients)
-            # I think this is a problem more generally, not just in this subroutine.
-            grad_combo_fn = self.get_grad_combo_fn(operator)
+            if operator.grad_combo_fn:
+                grad_combo_fn = operator.grad_combo_fn
+            else:
+                raise Warning('This automatic differentiation function is based on JAX. Please use import '
+                              'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
+                grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
 
             # ---------------------------------------------------------------------
 
             # f(g_1(x), g_2(x)) --> df/dx = df/dg_1 dg_1/dx + df/dg_2 dg_2/dx
             return ListOp([ListOp(operator.oplist, combo_fn=grad_combo_fn), ListOp(grad_ops)],
-                          combo_fn=lambda x: np.multiply(x[0], x[1]))
+                          combo_fn=lambda x: np.dot(x[0], x[1]))
 
-    def get_grad_combo_fn(self, operator: ListOp) -> Callable:
-        """Get the derivative of the operator combo_fn.
-
-        Args:
-            operator: The operator for whose combo_fn we want to get the gradient.
-
-        Returns:
-            function which evaluates the partial gradient of operator._combo_fn
-            with respect to each element of operator.oplist
-
-        Raises:
-            Exception: If the operator is a ``ComposedOp``.
-            Exception: If the gradient combo function could be differentiated.
-        """
-        # import jax.numpy as np
-        raise Warning('This automatic differentiation function is based on JAX. Please use import '
-                      'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
-        grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
-        return grad_combo_fn
+         
 
     # ---------------------------------------------------------------------
 
     # TODO I commented this
     # ---------------------------------------------------------------------
-    #         return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
+#def get_grad_combo_fn(self, operator: ListOp) -> Callable:
+    #    """Get the derivative of the operator combo_fn.
+    #
+    #    Args:
+    #        operator: The operator for whose combo_fn we want to get the gradient.
+    #
+    #    Returns:
+    #        function which evaluates the partial gradient of operator._combo_fn
+    #        with respect to each element of operator.oplist
+    #
+    #    Raises:
+    #        Exception: If the operator is a ``ComposedOp``.
+    #        Exception: If the gradient combo function could be differentiated.
+    #    """
+    # 
+    #       return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
     #
     #     elif isinstance(operator, StateFn):
     #         if operator._is_measurement:
@@ -363,7 +362,7 @@ class Gradient(GradientBase):
         if not isinstance(keys, Iterable):
             keys = [keys]
         for key in keys:
-            expr_grad += sy.Derivative(expr, key)
+            expr_grad += sy.Derivative(expr, key).doit()
         return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
 
     def _get_gates_for_param(self,
