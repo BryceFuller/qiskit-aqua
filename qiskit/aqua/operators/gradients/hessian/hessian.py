@@ -43,7 +43,9 @@ class Hessian(GradientBase):
             gradient_operator: An operator whose evaluation yeild the Hessian
         """
         # if input is a tuple instead of a list, wrap it into a list
-        if isinstance(params, tuple):
+        if params is None:
+            raise ValueError("No parameters were provided to differentiate")
+        elif isinstance(params, tuple):
             is_tuple = True
             params = [params]
         else:
