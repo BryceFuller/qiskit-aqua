@@ -27,6 +27,8 @@ import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import logging
 logger = logging.getLogger(__name__)
+from typing import List
+
 
 from qiskit.aqua.operators.gradients.gradient import Gradient
 from qiskit.aqua.operators.gradients.qfi.qfi import QFI
@@ -35,7 +37,7 @@ from qiskit.circuit import Parameter, ParameterVector
 from qiskit.aqua.operators import (OperatorBase, ListOp)
 
 
-class NaturalGradient(Gradient):
+class NaturalGradient(GradientBase):
     """Convert an operator expression to the first-order gradient."""
 
     # pylint: disable=arguments-differ

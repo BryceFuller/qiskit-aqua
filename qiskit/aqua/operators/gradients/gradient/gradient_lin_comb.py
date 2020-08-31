@@ -47,6 +47,8 @@ class GradientLinComb(GradientBase):
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
+
+
         # self._meas_op = None
         # for op in operator.oplist:
         #     if op.is_measurement:
@@ -59,7 +61,7 @@ class GradientLinComb(GradientBase):
         #
 
         self._params = params
-        self._operator_has_measurement = False
+        # self._operator_has_measurement = False
         return self._prepare_operator(operator)
     #     self._params = params
     #     self._gradient_operator = operator
@@ -82,7 +84,31 @@ class GradientLinComb(GradientBase):
     #     else:
     #         raise TypeError('Please define an operator that incorporates a CircuitStateFn.')
 
+    # def _prepare_operator(self, operator):
+    #     if isinstance(operator, ListOp):
+    #         return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, StateFn):
+    #         if operator.is_measurement:
+    #             self._operator_has_measurement = True
+    #             return operator.traverse(self._prepare_operator)
+    #     elif isinstance(operator, PrimitiveOp):
+    #         return Z ^ operator
+    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
+    #         return self._grad_states(operator, self._params)
+    #     return operator
+
     def _prepare_operator(self, operator):
+        if isinstance(operator, ComposedOp):
+            if not isinstance(operator[0], StateFn) or not operator[0]._is_measurement:
+                raise ValueError("The given operator does not correspond to an expectation value")
+            if not isinstance(operator[-1], StateFn) or operator[-1]._is_measurement:
+                raise ValueError("The given operator does not correspond to an expectation value")
+            if operator[0].is_measurement:
+                state_op = operator.oplist[1:]
+                # TODO traverse state_op and return
+                return state_op.traverse(self._grad_states(kw: Z ^ operator[0], target_params=self._params)
+            else:
+                return operator.traverse(self._prepare_operator)
         if isinstance(operator, ListOp):
             return operator.traverse(self._prepare_operator)
         elif isinstance(operator, StateFn):
@@ -90,19 +116,21 @@ class GradientLinComb(GradientBase):
                 self._operator_has_measurement = True
                 return operator.traverse(self._prepare_operator)
         elif isinstance(operator, PrimitiveOp):
-            return Z ^ operator
+            return operator
         if isinstance(operator, (CircuitStateFn, CircuitOp)):
-            return self._grad_states(operator, self._params)
+            return self._grad_states(operator, target_params=self._params)
         return operator
 
     def _grad_states(self,
-                     op: OperatorBase,
+                     state_op: OperatorBase,
+                     meas_op: Optional[OperatorBase] = None,
                      target_params: Optional[Union[Parameter, ParameterVector, List]] = None
                      ) -> ListOp:
         """Generate the gradient states.
 
         Args:
-            op: The operator representing the quantum state for which we compute the gradient.
+            state_op: The operator representing the quantum state for which we compute the gradient.
+            meas_op: The operator representing the observable for which we compute the gradient.
             target_params: The parameters we are taking the gradient wrt: ω
 
         Returns:
@@ -123,7 +151,7 @@ class GradientLinComb(GradientBase):
         grad_coeffs = {}
         # Dictionary which relates the gates needed for the grad for every parameter
         grad_gates = {}
-        state_qc = deepcopy(op.primitive)
+        state_qc = deepcopy(state_op.primitive)
         if not isinstance(target_params, Iterable):
             target_params = [target_params]
         for param in target_params:
@@ -186,17 +214,17 @@ class GradientLinComb(GradientBase):
                     state = np.sqrt(np.abs(coeff_i) * 2) * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
-                    if self._operator_has_measurement:
+                    if meas_op:
                         if gate_param == param:
-                            pass
+                            state = meas_op @ state
                         else:
                             if isinstance(gate_param, ParameterExpression):
                                 import sympy as sy
                                 expr_grad = self.parameter_expression_grad(gate_param, param)
                                 # Square root needed bc the coefficients are squared in the expectation value
                                 # TODO enable complex parameter expressions
-                                expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                                state = expr_grad * state
+                                # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                state = (expr_grad * meas_op) @ state
                             else:
                                 state = ~StateFn(One) @ Zero
                     # if meas_op:
@@ -217,7 +245,7 @@ class GradientLinComb(GradientBase):
                             # TODO parameter expression
                             x = x.primitive
                             # Generate the operator which computes the linear combination
-                            lin_comb_op = (I ^ op.num_qubits) ^ Z
+                            lin_comb_op = (I ^ state_op.num_qubits) ^ Z
                             lin_comb_op = lin_comb_op.to_matrix()
                             # Compute a partial trace over the working qubit needed to compute the linear combination
                             if isinstance(x, list) or isinstance(x, np.ndarray):
@@ -238,4 +266,4 @@ class GradientLinComb(GradientBase):
             # states += [state_op]
             states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
 
-        return ListOp(states) * op.coeff
+        return ListOp(states) * state_op.coeff
