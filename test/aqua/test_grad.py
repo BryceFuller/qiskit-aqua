@@ -22,7 +22,7 @@ from test.aqua import QiskitAquaTestCase
 
 from qiskit import BasicAer
 
-from qiskit.aqua.operators.gradients import Gradient, NaturalGradient
+from qiskit.aqua.operators.gradients import Gradient, NaturalGradient, Hessian
 
 from qiskit.aqua.operators.gradients.gradient.gradient_lin_comb import GradientLinComb
 from qiskit.aqua.operators.gradients.hessian.hessian_lin_comb import HessianLinComb
@@ -141,7 +141,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [-1.353553, -0, -0.5]
 
         for i, value_dict in enumerate(values_dict):
-            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i], decimal=3)
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i],
+                                                 decimal=3)
 
         """
         Parameter Expression
@@ -165,12 +166,11 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
         state_grad = GradientLinComb().convert(operator=op, params=params)
-        values_dict = [{a: np.pi / 4}, {a: 0},
-                       {a: np.pi / 2}]
+        values_dict = [{a: np.pi / 4}, {a: 0}, {a: np.pi / 2}]
         correct_values = [-1.1220, -0.9093, 0.0403]
-
         for i, value_dict in enumerate(values_dict):
-            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i])
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i],
+                                                 decimal=3)
 
     def test_state_lin_comb_hessian(self):
         """Test the linear combination state Hessian

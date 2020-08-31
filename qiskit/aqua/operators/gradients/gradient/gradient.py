@@ -363,7 +363,7 @@ class Gradient(GradientBase):
             keys = [keys]
         for key in keys:
             expr_grad += sy.Derivative(expr, key).doit()
-        return ParameterExpression(param_expr._parameter_symbols, expr = expr_grad)
+        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
 
 
     def _get_gates_for_param(self,

@@ -220,7 +220,7 @@ class GradientLinComb(GradientBase):
                                      additional_qubits=additional_qubits)
                     grad_state.h(work_q)
 
-                    state = np.sqrt(np.abs(coeff_i) * 2) * CircuitStateFn(grad_state)
+                    state = np.sqrt(np.abs(coeff_i) * 2) * state_op.coeff * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
                     if meas_op:
@@ -276,6 +276,6 @@ class GradientLinComb(GradientBase):
                 states += [op]
             # states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
         if len(target_params) > 1:
-            return ListOp(states) * state_op.coeff
+            return ListOp(states)
         else:
-            return op * state_op.coeff
+            return op
