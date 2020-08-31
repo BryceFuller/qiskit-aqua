@@ -136,6 +136,8 @@ class GradientParamShift(GradientBase):
 
                 pshift_index = pshift_gate.params.index(param)
                 mshift_index = mshift_gate.params.index(param)
+                print(pshift_gate.params.index(param))
+                print(pshift_index)
 
                 p_param = pshift_gate.params[pshift_index]
                 m_param = mshift_gate.params[mshift_index]
