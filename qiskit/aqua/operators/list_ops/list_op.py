@@ -25,6 +25,10 @@ from qiskit.circuit import ParameterExpression
 from ..legacy.base_operator import LegacyBaseOperator
 from ..operator_base import OperatorBase
 
+from ..state_fns.dict_state_fn import DictStateFn
+from ..state_fns.vector_state_fn import VectorStateFn
+
+
 
 class ListOp(OperatorBase):
     """
@@ -297,24 +301,34 @@ class ListOp(OperatorBase):
         if not self.distributive:
             raise NotImplementedError(r'ListOp\'s eval function is only defined for distributive '
                                       r'Listops.')
-
-        #If any dicts are found, convert them into DictStateFns so that the combo_fn can be applied more easily.
-        filtered_oplist = [DictStateFn(op) if isinstance(op, Dict) else op for op in self.oplist ]
-        #if all(isinstance(op, DictStateFn) for op in self.oplist)
-
-        
-        evals = [(self.coeff * op).eval(front) for op in filtered_oplist]  # type: ignore
+        evals = [(self.coeff * op).eval(front) for op in self.oplist]  # type: ignore
         if all(isinstance(op, OperatorBase) for op in evals):
             return self.__class__(evals)
         elif any(isinstance(op, OperatorBase) for op in evals):
             raise TypeError('Cannot handle mixed scalar and Operator eval results.')
-        elif all(isinstance(op, Dict) for op in evals):
+        elif all(isinstance(op, DictStateFn) for op in evals):
+            if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
+                raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
             inputs = list(reduce(lambda x,y: x.union(set(y.keys())), [set()]+evals))
             outputs = []
             for bitstr in inputs:
                 vals = [op[bitstr] if bitstr in op else 0 for op in evals]
                 outputs.append(self.combo_fn(vals))
             return dict(zip(inputs,outputs))
+        elif all(isinstance(op, VectorStateFn) for op in evals):
+            #All VectorStateFn's must have the same primitive type
+            if not all(isinstance(op, type(evals[0])) for op in evals):
+                raise NotImplementedError("term-wise combo_fn not yet supported for mixed VectorStateFn primitives")
+            if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
+                raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
+            #Get the actual data from each operator
+            vectors = [op.primitive*op._coeff for op in evals]
+            primitive_type = type(vectors[0])
+            if isinstance(primitive_type, StateVector):
+                evals = [op.data for op in vectors]
+            dim = len(evals[0])
+            combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
+            return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=vectors[0].is_measurement)
         else:
             return self.combo_fn(evals)
 
