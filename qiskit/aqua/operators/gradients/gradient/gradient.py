@@ -209,10 +209,10 @@ class Gradient(GradientBase):
             # default one.
             # This will work but look very ugly and may have other downsides I'm not aware of
             if operator._combo_fn == ListOp([])._combo_fn:
-                print("default combo fn")
+                #print("default combo fn")
                 return ListOp(oplist=grad_ops)
             elif isinstance(operator, SummedOp):
-                print("SummedOp combo fn")
+                #print("SummedOp combo fn")
                 return SummedOp(oplist=grad_ops)
             elif isinstance(operator, TensoredOp):
                 return TensoredOp(oplist=grad_ops)
