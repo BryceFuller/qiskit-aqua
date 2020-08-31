@@ -221,8 +221,8 @@ class Gradient(GradientBase):
             if operator.grad_combo_fn:
                 grad_combo_fn = operator.grad_combo_fn
             else:
-                raise Warning('This automatic differentiation function is based on JAX. Please use import '
-                              'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
+                #raise Warning('This automatic differentiation function is based on JAX. Please use import '
+                #              'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
                 grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
 
             # ---------------------------------------------------------------------
