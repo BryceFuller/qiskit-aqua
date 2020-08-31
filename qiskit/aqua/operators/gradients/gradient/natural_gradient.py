@@ -21,7 +21,7 @@ where R(x) represents the penalization term.
 """
 
 import numpy as np
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'

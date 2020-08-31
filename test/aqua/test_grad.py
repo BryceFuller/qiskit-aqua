@@ -138,8 +138,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         correct_values = [[-1.353553], [-0], [-0.5]]
 
         for i, value_dict in enumerate(values_dict):
-            np.testing.assert_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i],
-                                           decimal=3)
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i], decimal=3)
 
         """
         Parameter Expression
