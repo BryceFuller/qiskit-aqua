@@ -56,7 +56,8 @@ class ListOp(OperatorBase):
                  oplist: List[OperatorBase],
                  combo_fn: Callable = lambda x: x,
                  coeff: Union[int, float, complex, ParameterExpression] = 1.0,
-                 abelian: bool = False) -> None:
+                 abelian: bool = False,
+                 grad_combo_fn: Optional[Callable] = None) -> None:
         """
         Args:
             oplist: The list of ``OperatorBases`` defining this Operator's underlying function.
@@ -64,6 +65,8 @@ class ListOp(OperatorBase):
                 ``oplist`` Operators' eval functions (e.g. sum).
             coeff: A coefficient multiplying the operator
             abelian: Indicates whether the Operators in ``oplist`` are known to mutually commute.
+            grad_combo_fn: The gradient of recombination function. If None, the gradient will
+                be computed automatically.
 
             Note that the default "recombination function" lambda above is essentially the
             identity - it accepts the list of values, and returns them in a list.
@@ -72,6 +75,7 @@ class ListOp(OperatorBase):
         self._combo_fn = combo_fn
         self._coeff = coeff
         self._abelian = abelian
+        self._grad_combo_fn = grad_combo_fn
 
     @property
     def oplist(self) -> List[OperatorBase]:
@@ -93,6 +97,11 @@ class ListOp(OperatorBase):
             The combination function.
         """
         return self._combo_fn
+    
+    @property
+    def grad_combo_fn(self) -> Optional[Callable]:
+        """ The gradient of ``combo_fn``. """
+        return self._grad_combo_fn
 
     @property
     def abelian(self) -> bool:

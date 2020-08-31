@@ -260,18 +260,21 @@ class Gradient(GradientBase):
         n = len(operator.oplist)
         indices = list(range(n))
 
-        # jax needs the combo_fn to have n inputs, rather than a list of n inputs
-        def wrapped_combo_fn(*x):
-            return operator._combo_fn(list(x))
+        if operator.grad_combo_fn:
+            grad_combo_fn = operator.grad_combo_fn
+        else:
+            # jax needs the combo_fn to have n inputs, rather than a list of n inputs
+            def wrapped_combo_fn(*x):
+                return operator._combo_fn(list(x))
 
-        try:
-            grad_combo_fn = jit(grad(wrapped_combo_fn, indices))
-            # TODO remove this!
-            # Test to see if the grad function breaks for a trivial input
-            # grad_combo_fn(*([0] * n))
-        except Exception:
-            # TODO don't raise bare exception!!
-            raise Exception("An error occurred when attempting to differentiate a combo_fn")
+            try:
+                grad_combo_fn = jit(grad(wrapped_combo_fn, indices))
+                # TODO remove this!
+                # Test to see if the grad function breaks for a trivial input
+                # grad_combo_fn(*([0] * n))
+            except Exception:
+                # TODO don't raise bare exception!!
+                raise Exception("An error occurred when attempting to differentiate a combo_fn")
 
         # ops will be the concatenation of the original oplist with the gradients
         # of each operator in the original oplist.
