@@ -36,6 +36,7 @@ Optimizer Base Class
    :toctree: ../stubs/
    :nosignatures:
 
+   OptimizerSupportLevel
    Optimizer
 
 Local Optimizers
@@ -50,6 +51,7 @@ Local Optimizers
    CG
    COBYLA
    L_BFGS_B
+   GSLS
    NELDER_MEAD
    NFT
    P_BFGS
@@ -82,11 +84,12 @@ The global optimizers are as follows:
 
 """
 
-from .optimizer import Optimizer
+from .optimizer import OptimizerSupportLevel, Optimizer
 from .adam_amsgrad import ADAM
 from .cg import CG
 from .cobyla import COBYLA
 from .l_bfgs_b import L_BFGS_B
+from .gsls import GSLS
 from .nelder_mead import NELDER_MEAD
 from .p_bfgs import P_BFGS
 from .powell import POWELL
@@ -102,10 +105,12 @@ from .nlopts.esch import ESCH
 from .nlopts.isres import ISRES
 
 __all__ = ['Optimizer',
+           'OptimizerSupportLevel',
            'ADAM',
            'AQGD',
            'CG',
            'COBYLA',
+           'GSLS',
            'L_BFGS_B',
            'NELDER_MEAD',
            'NFT',

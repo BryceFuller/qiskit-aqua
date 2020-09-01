@@ -22,7 +22,8 @@ from .parser import parse
 
 
 class FCIDumpDriver(BaseDriver):
-    """Python implementation of an FCIDump driver.
+    """
+    Qiskit chemistry driver reading an FCIDump file.
 
     The FCIDump format is partially defined in Knowles1989.
 
@@ -53,7 +54,7 @@ class FCIDumpDriver(BaseDriver):
         self._fcidump_input = fcidump_input
 
         if atoms and not isinstance(atoms, list) \
-                and not all([sym in QMolecule.symbols for sym in atoms]):
+                and not all(sym in QMolecule.symbols for sym in atoms):
             raise QiskitChemistryError(
                 "The atoms must be a list of valid atomic symbols, not '{}'".format(atoms))
         self.atoms = atoms
@@ -88,7 +89,7 @@ class FCIDumpDriver(BaseDriver):
         return q_mol
 
     @staticmethod
-    def dump(q_mol: QMolecule, outpath: str, orbsym: Optional[List[int]] = None,
+    def dump(q_mol: QMolecule, outpath: str, orbsym: Optional[List[str]] = None,
              isym: int = 1) -> None:
         """Convenience method to produce an FCIDump output file.
 

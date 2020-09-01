@@ -35,13 +35,16 @@ G16PROG = which(GAUSSIAN_16)
 
 
 class GaussianDriver(BaseDriver):
-    """Python implementation of a Gaussian 16 driver.
+    """
+    Qiskit chemistry driver using the Gaussian™ 16 program.
+
+    See http://gaussian.com/gaussian16/
 
     This driver uses the Gaussian open-source Gaussian 16 interfacing code in
     order to access integrals and other electronic structure information as
     computed by G16 for the given molecule. The job control file, as provided
-    via our input file, is augmented for our needs here such as to have it
-    output a MatrixElement file.
+    here for the molecular configuration, is augmented for our needs here such
+    as to have it output a MatrixElement file.
     """
 
     def __init__(self,
@@ -49,9 +52,8 @@ class GaussianDriver(BaseDriver):
                  '# rhf/sto-3g scf(conventional)\n\n'
                  'h2 molecule\n\n0 1\nH   0.0  0.0    0.0\nH   0.0  0.0    0.735\n\n') -> None:
         """
-        Initializer
         Args:
-            config: driver configuration
+            config: A molecular configuration conforming to Gaussian™ 16 format
         Raises:
             QiskitChemistryError: Invalid Input
         """
@@ -72,7 +74,7 @@ class GaussianDriver(BaseDriver):
                 "Could not locate {} executable '{}'. Please check that it is installed correctly."
                 .format(GAUSSIAN_16_DESC, GAUSSIAN_16))
 
-    def run(self):
+    def run(self) -> QMolecule:
         cfg = self._config
         while not cfg.endswith('\n\n'):
             cfg += '\n'
@@ -186,7 +188,7 @@ class GaussianDriver(BaseDriver):
                 if mnfe.name == 'qcmatrixio' else str(mnfe)
 
             logger.info(msg)
-            raise QiskitChemistryError(msg)
+            raise QiskitChemistryError(msg) from mnfe
 
         mel = MatEl(file=fname)
         logger.debug('MatrixElement file:\n%s', mel)
@@ -342,11 +344,11 @@ class GaussianDriver(BaseDriver):
             process = Popen(GAUSSIAN_16, stdin=PIPE, stdout=PIPE, universal_newlines=True)
             stdout, _ = process.communicate(cfg)
             process.wait()
-        except Exception:
+        except Exception as ex:
             if process is not None:
                 process.kill()
 
-            raise QiskitChemistryError('{} run has failed'.format(GAUSSIAN_16_DESC))
+            raise QiskitChemistryError('{} run has failed'.format(GAUSSIAN_16_DESC)) from ex
 
         if process.returncode != 0:
             errmsg = ""

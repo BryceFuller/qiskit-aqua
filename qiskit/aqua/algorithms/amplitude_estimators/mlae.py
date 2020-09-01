@@ -13,7 +13,7 @@
 # that they have been altered from the originals.
 """The Maximum Likelihood Amplitude Estimation algorithm."""
 
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union, Tuple, Dict, Any
 import logging
 import numpy as np
 from scipy.optimize import brute
@@ -77,8 +77,8 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
             self._likelihood_evals = np.maximum(default,
                                                 int(np.pi / 2 * 1000 * 2 ** num_oracle_circuits))
 
-        self._circuits = []
-        self._ret = {}
+        self._circuits = []  # type: List[QuantumCircuit]
+        self._ret = {}  # type: Dict[str, Any]
 
     @property
     def _num_qubits(self) -> int:
@@ -158,7 +158,7 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
         """
         probabilities = []
         for sv in statevectors:
-            p_k = 0
+            p_k = 0.0
             for i, a in enumerate(sv):
                 p = np.abs(a)**2
                 b = ('{0:%sb}' % self._num_qubits).format(i)[::-1]
@@ -168,7 +168,7 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
 
         return probabilities
 
-    def _get_hits(self) -> Tuple[List[int], List[int]]:
+    def _get_hits(self) -> Tuple[List[float], List[int]]:
         """Get the good and total counts.
 
         Returns:
@@ -189,8 +189,8 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
                 for c in self._ret['counts']:
                     one_hits += [c.get('1', 0)]  # return 0 if no key '1' found
                     all_hits += [sum(c.values())]
-        except KeyError:
-            raise AquaError('Call run() first!')
+        except KeyError as ex:
+            raise AquaError('Call run() first!') from ex
 
         return one_hits, all_hits
 
@@ -227,8 +227,8 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
         if a is None:
             try:
                 a = self._ret['value']
-            except KeyError:
-                raise KeyError('Call run() first!')
+            except KeyError as ex:
+                raise KeyError('Call run() first!') from ex
 
         # Corresponding angle to the value a (only use real part of 'a')
         theta_a = np.arcsin(np.sqrt(np.real(a)))
@@ -279,8 +279,8 @@ class MaximumLikelihoodAmplitudeEstimation(AmplitudeEstimationAlgorithm):
         fisher_information = None
         try:
             fisher_information = self._ret['fisher_information']
-        except KeyError:
-            raise AssertionError("Call run() first!")
+        except KeyError as ex:
+            raise AssertionError("Call run() first!") from ex
 
         if observed:
             fisher_information = self._compute_fisher_information(observed=True)

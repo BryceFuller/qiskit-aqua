@@ -20,10 +20,10 @@ from test.chemistry import QiskitChemistryTestCase
 import numpy as np
 
 from qiskit import BasicAer
+from qiskit.circuit.library import TwoLocal
 from qiskit.aqua import QuantumInstance
-from qiskit.aqua.algorithms import NumPyMinimumEigensolver, VQE, IQPEMinimumEigensolver
+from qiskit.aqua.algorithms import NumPyMinimumEigensolver, VQE, IQPE
 from qiskit.aqua.components.optimizers import SLSQP
-from qiskit.aqua.components.variational_forms import RY
 from qiskit.chemistry import QiskitChemistryError
 from qiskit.chemistry.applications import MolecularGroundStateEnergy
 from qiskit.chemistry.components.initial_states import HartreeFock
@@ -48,7 +48,7 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         self.npme = NumPyMinimumEigensolver()
 
-        self.vqe = VQE(var_form=RY(2))
+        self.vqe = VQE(var_form=TwoLocal(rotation_blocks='ry', entanglement_blocks='cz'))
         self.vqe.set_backend(BasicAer.get_backend('statevector_simulator'))
 
         self.reference_energy = -1.137306
@@ -99,11 +99,11 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         def cb_create_solver(num_particles, num_orbitals,
                              qubit_mapping, two_qubit_reduction, z2_symmetries):
-            state_in = HartreeFock(2, num_orbitals, num_particles, qubit_mapping,
+            state_in = HartreeFock(num_orbitals, num_particles, qubit_mapping,
                                    two_qubit_reduction, z2_symmetries.sq_list)
-            iqpe = IQPEMinimumEigensolver(None, state_in, num_time_slices=1, num_iterations=6,
-                                          expansion_mode='suzuki', expansion_order=2,
-                                          shallow_circuit_concat=True)
+            iqpe = IQPE(None, state_in, num_time_slices=1, num_iterations=6,
+                        expansion_mode='suzuki', expansion_order=2,
+                        shallow_circuit_concat=True)
             iqpe.quantum_instance = QuantumInstance(BasicAer.get_backend('qasm_simulator'),
                                                     shots=100)
             return iqpe
@@ -117,10 +117,9 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         def cb_create_solver(num_particles, num_orbitals,
                              qubit_mapping, two_qubit_reduction, z2_symmetries):
-            initial_state = HartreeFock(2, num_orbitals, num_particles, qubit_mapping,
+            initial_state = HartreeFock(num_orbitals, num_particles, qubit_mapping,
                                         two_qubit_reduction, z2_symmetries.sq_list)
-            var_form = UCCSD(2, depth=1,
-                             num_orbitals=num_orbitals,
+            var_form = UCCSD(num_orbitals=num_orbitals,
                              num_particles=num_particles,
                              initial_state=initial_state,
                              qubit_mapping=qubit_mapping,
@@ -161,10 +160,9 @@ class TestAppMGSE(QiskitChemistryTestCase):
 
         def cb_create_solver(num_particles, num_orbitals,
                              qubit_mapping, two_qubit_reduction, z2_symmetries):
-            initial_state = HartreeFock(6, num_orbitals, num_particles, qubit_mapping,
+            initial_state = HartreeFock(num_orbitals, num_particles, qubit_mapping,
                                         two_qubit_reduction, z2_symmetries.sq_list)
-            var_form = UCCSD(6, depth=1,
-                             num_orbitals=num_orbitals,
+            var_form = UCCSD(num_orbitals=num_orbitals,
                              num_particles=num_particles,
                              initial_state=initial_state,
                              qubit_mapping=qubit_mapping,
@@ -180,6 +178,45 @@ class TestAppMGSE(QiskitChemistryTestCase):
                                           z2symmetry_reduction='auto')
         result = mgse.compute_energy(cb_create_solver)
         self.assertAlmostEqual(result.energy, -7.882, places=3)
+
+    def test_mgse_callback_vqe_uccsd_z2_nosymm(self):
+        """ This time we reduce the operator so it has symmetries left. Whether z2 symmetry
+            reduction is set to auto, or left turned off, the results should be same. We
+            explicitly check the Z2 symmetry to ensure it empty and use classical solver
+            to ensure the operators via the subsequent result computation are correct. """
+
+        z2_symm = None
+
+        def cb_create_solver(num_particles, num_orbitals,
+                             qubit_mapping, two_qubit_reduction, z2_symmetries):
+
+            nonlocal z2_symm
+            z2_symm = z2_symmetries
+            return NumPyMinimumEigensolver()
+
+        driver = PySCFDriver(atom='Li .0 .0 -0.8; H .0 .0 0.8')
+        mgse = MolecularGroundStateEnergy(driver, qubit_mapping=QubitMappingType.PARITY,
+                                          two_qubit_reduction=True, freeze_core=True,
+                                          orbital_reduction=[-3, -2],
+                                          z2symmetry_reduction='auto')
+        result = mgse.compute_energy(cb_create_solver)
+
+        # Check a couple of values are as expected, energy for main operator and number of
+        # particles and dipole from auxiliary operators.
+        self.assertEqual(z2_symm.is_empty(), True)
+        self.assertAlmostEqual(result.energy, -7.881, places=3)
+        self.assertAlmostEqual(result.num_particles, 2)
+        self.assertAlmostEqual(result.total_dipole_moment_in_debye, 4.667, places=3)
+
+        # Run with no symmetry reduction, which should match the prior result since there
+        # are no symmetries to be found.
+        mgse1 = MolecularGroundStateEnergy(driver, qubit_mapping=QubitMappingType.PARITY,
+                                           two_qubit_reduction=True, freeze_core=True,
+                                           orbital_reduction=[-3, -2])
+        result1 = mgse1.compute_energy(cb_create_solver)
+
+        self.assertEqual(z2_symm.is_empty(), True)
+        self.assertEqual(str(result), str(result1))  # Compare string form of results
 
 
 if __name__ == '__main__':

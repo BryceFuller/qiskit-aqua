@@ -14,17 +14,18 @@
 
 """ Test European Call Expected Value uncertainty problem """
 
+import unittest
 from test.finance import QiskitFinanceTestCase
 
 import numpy as np
 
 from qiskit import BasicAer
+from qiskit.circuit.library import TwoLocal
 from qiskit.aqua import aqua_globals, QuantumInstance
 from qiskit.aqua.algorithms import AmplitudeEstimation
 from qiskit.aqua.components.initial_states import Custom
 from qiskit.aqua.components.uncertainty_models import (UnivariateVariationalDistribution,
                                                        NormalDistribution)
-from qiskit.aqua.components.variational_forms import RY
 from qiskit.finance.components.uncertainty_problems import EuropeanCallExpectedValue
 
 
@@ -51,9 +52,10 @@ class TestEuropeanCallExpectedValue(QiskitFinanceTestCase):
         init_distribution = np.sqrt(init_dist.probabilities)
         init_distribution = Custom(num_qubits=sum(num_qubits),
                                    state_vector=init_distribution)
-        var_form = RY(int(np.sum(num_qubits)), depth=1,
-                      initial_state=init_distribution,
-                      entangler_map=entangler_map, entanglement_gate='cz')
+        var_form = TwoLocal(int(np.sum(num_qubits)), 'ry', 'cz', reps=1,
+                            initial_state=init_distribution,
+                            entanglement=entangler_map)
+
         uncertainty_model = UnivariateVariationalDistribution(
             int(sum(num_qubits)), var_form, g_params,
             low=bounds[0], high=bounds[1])
@@ -71,3 +73,7 @@ class TestEuropeanCallExpectedValue(QiskitFinanceTestCase):
         result = algo.run(quantum_instance=BasicAer.get_backend('statevector_simulator'))
         self.assertAlmostEqual(result['estimation'], 1.2580, places=4)
         self.assertAlmostEqual(result['max_probability'], 0.8785, places=4)
+
+
+if __name__ == '__main__':
+    unittest.main()

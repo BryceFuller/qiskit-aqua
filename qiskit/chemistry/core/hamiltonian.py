@@ -16,7 +16,7 @@ This module implements a molecular Hamiltonian operator, representing the
 energy of the electrons and nuclei in a molecule.
 """
 import warnings
-from typing import Optional, List, Union
+from typing import Optional, List, Union, cast
 import logging
 from enum import Enum
 
@@ -25,7 +25,9 @@ from qiskit.aqua.algorithms import MinimumEigensolverResult, EigensolverResult
 from qiskit.aqua.operators import Z2Symmetries, WeightedPauliOperator
 from qiskit.chemistry import QMolecule, QiskitChemistryError
 from qiskit.chemistry.fermionic_operator import FermionicOperator
-from .chemistry_operator import ChemistryOperator, MolecularGroundStateResult
+from .chemistry_operator import (ChemistryOperator,
+                                 MolecularGroundStateResult,
+                                 DipoleTuple)
 from ..components.initial_states import HartreeFock
 
 logger = logging.getLogger(__name__)
@@ -154,8 +156,8 @@ class Hamiltonian(ChemistryOperator):
         new_num_beta = num_beta
         if orbitals_list:
             orbitals_list = np.array(orbitals_list)
-            orbitals_list = orbitals_list[(orbitals_list >= 0) &
-                                          (orbitals_list < qmolecule.num_orbitals)]
+            orbitals_list = \
+                orbitals_list[(orbitals_list >= 0) & (orbitals_list < qmolecule.num_orbitals)]
 
             freeze_list_alpha = [i for i in orbitals_list if i < num_alpha]
             freeze_list_beta = [i for i in orbitals_list if i < num_beta]
@@ -279,13 +281,13 @@ class Hamiltonian(ChemistryOperator):
         if z2_symmetries.is_empty():
             logger.debug('No Z2 symmetries found')
             z2_qubit_op = qubit_op
-            z2_aux_ops = []
-            z2_symmetries = None
+            z2_aux_ops = aux_ops
+            z2_symmetries = Z2Symmetries([], [], [], None)
         else:
             logger.debug('%s Z2 symmetries found: %s', len(z2_symmetries.symmetries),
                          ','.join([symm.to_label() for symm in z2_symmetries.symmetries]))
 
-            # Check auxiliary operators commute with man operator's symmetry
+            # Check auxiliary operators commute with main operator's symmetry
             logger.debug('Checking operators commute with symmetry:')
             symmetry_ops = []
             for symmetry in z2_symmetries.symmetries:
@@ -300,8 +302,7 @@ class Hamiltonian(ChemistryOperator):
                     aux_ops[i] = None  # Discard since no meaningful measurement can be done
 
             if self._z2symmetry_reduction == 'auto':
-                hf_state = HartreeFock(num_qubits=qubit_op.num_qubits,
-                                       num_orbitals=self._molecule_info[self.INFO_NUM_ORBITALS],
+                hf_state = HartreeFock(num_orbitals=self._molecule_info[self.INFO_NUM_ORBITALS],
                                        qubit_mapping=self._qubit_mapping,
                                        two_qubit_reduction=self._two_qubit_reduction,
                                        num_particles=self._molecule_info[self.INFO_NUM_PARTICLES])
@@ -320,10 +321,12 @@ class Hamiltonian(ChemistryOperator):
                 z2_symmetries.tapering_values = self._z2symmetry_reduction
 
             logger.debug('Apply symmetry with tapering values %s', z2_symmetries.tapering_values)
-            z2_qubit_op = z2_symmetries.taper(qubit_op)
+            chop_to = 0.00000001  # Use same threshold as qubit mapping to chop tapered operator
+            z2_qubit_op = z2_symmetries.taper(qubit_op).chop(chop_to)
             z2_aux_ops = []
             for aux_op in aux_ops:
-                z2_aux_ops.append(z2_symmetries.taper(aux_op) if aux_op is not None else None)
+                z2_aux_ops.append(z2_symmetries.taper(aux_op).chop(chop_to) if aux_op is not None
+                                  else None)
 
         return z2_qubit_op, z2_aux_ops, z2_symmetries
 
@@ -388,7 +391,7 @@ class Hamiltonian(ChemistryOperator):
                 dipm = []
                 for i in range(dipole_idx, dipole_idx+3):  # Gets X, Y and Z components
                     dipm.append(aux_ops_vals[i][0].real if aux_ops_vals[i] is not None else None)
-                mgsr.computed_dipole_moment = tuple(dipm)
+                mgsr.computed_dipole_moment = cast(DipoleTuple, tuple(dipm))
                 mgsr.ph_extracted_dipole_moment = (self._ph_x_dipole_shift,
                                                    self._ph_y_dipole_shift,
                                                    self._ph_z_dipole_shift)
@@ -477,9 +480,9 @@ class Hamiltonian(ChemistryOperator):
         dipole_idx = 3
         if 'aux_ops' in algo_result and len(algo_result['aux_ops']) > 0 and \
                 len(algo_result['aux_ops'][0]) > dipole_idx:
-            dipole_moments_x = algo_result['aux_ops'][0][dipole_idx+0][0]
-            dipole_moments_y = algo_result['aux_ops'][0][dipole_idx+1][0]
-            dipole_moments_z = algo_result['aux_ops'][0][dipole_idx+2][0]
+            dipole_moments_x = algo_result['aux_ops'][0][dipole_idx + 0][0]
+            dipole_moments_y = algo_result['aux_ops'][0][dipole_idx + 1][0]
+            dipole_moments_z = algo_result['aux_ops'][0][dipole_idx + 2][0]
 
             _elec_dipole = \
                 np.array([dipole_moments_x + self._x_dipole_shift + self._ph_x_dipole_shift,
@@ -544,7 +547,7 @@ class Hamiltonian(ChemistryOperator):
         value = '['
         for i, _ in enumerate(dips):
             value += Hamiltonian._float_to_string(dips[i])
-            value += '  ' if i < len(dips)-1 else ']'
+            value += '  ' if i < len(dips) - 1 else ']'
         return value
 
     @staticmethod
