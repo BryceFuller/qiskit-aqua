@@ -83,8 +83,8 @@ class HessianLinComb(GradientBase):
 
     def _hessian_states(self,
                         state_op: OperatorBase,
-                        meas_op: Optional(OperatorBase) = None,
-                        target_params: Optional(Union(Parameter, ParameterVector, List)) = None) -> ListOp:
+                        meas_op: Optional[OperatorBase] = None,
+                        target_params: Optional[Union[Parameter, ParameterVector, List]] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
