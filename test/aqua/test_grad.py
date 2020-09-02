@@ -55,7 +55,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         #                                seed_transpiler=2)
         pass
 
-    @data('linear_comb', 'parameter_shift')
+    @data('lin_comb', 'param_shift', 'fin_diff')
     def test_gradient(self, method):
         """Test the linear combination state gradient
         Tr(|psi><psi|Z) = sin(a)sin(b)
@@ -83,7 +83,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
                           [-0.5, -1 / np.sqrt(2)]]
 
         for i, value_dict in enumerate(values_dict):
-            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(), correct_values[i], decimal=4)
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=4)
 
     def test_state_lin_comb_grad(self):
         """Test the linear combination state gradient
@@ -194,8 +195,8 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         qc.rx(b, q[0])
 
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
-
-        state_hess = HessianLinComb().convert(operator=op, params=params)
+        state_hess = Hessian().convert(operator=op, params=params, method='param_shift')
+        # state_hess = HessianLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4, b: np.pi}, {a: np.pi / 4, b: np.pi / 4},
                        {a: np.pi / 2, b: np.pi / 4}]
         correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2), 0],
@@ -286,7 +287,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(), correct_values[i])
 
-    @data(('lin_comb', True), ('parameter_shift', True), ('lin_comb', False), ('parameter_shift', False))
+    @data(('lin_comb', True), ('param_shift', True), ('lin_comb', False), ('param_shift', False))
     @unpack
     def test_jax_chain_rule(self, method: str, autograd: bool):
         """Test that the chain rule functionality using Jax"""
@@ -380,14 +381,17 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         coeff_1 = Parameter('c_1')
         H = coeff_0*coeff_0 * X + coeff_1*coeff_0 * Z
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
-        gradient_coeffs = [coeff_0, coeff_1]
+        gradient_coeffs = [(coeff_0, coeff_0), (coeff_0, coeff_1), (coeff_1, coeff_1)]
         coeff_grad = Hessian.convert(op, gradient_coeffs)
         values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
                        {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
-        correct_values = [[[2*np.sqrt(2), 0], [0, 0]], [[2 * np.sqrt(2), 2], [2, 0]]]
+
+        correct_values = [[2*np.sqrt(2), 0, 0], [2 * np.sqrt(2), 2, 0]]
+
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(coeff_grad.assign_parameters(value_dict).eval(), correct_values[i],
                                                  decimal=4)
+
 
 if __name__ == '__main__':
     unittest.main()
