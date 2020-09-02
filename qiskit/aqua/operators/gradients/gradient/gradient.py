@@ -170,6 +170,7 @@ class Gradient(GradientBase):
         # circuits were applied. Additionally, all coefficients within ComposedOps were collected
         # and moved out front.
         if isinstance(operator, ComposedOp):
+            # Gradient of an expectation value
             if not is_coeff_one(operator._coeff):
                 raise AquaError('Operator pre-processing failed. Coefficients were not properly '
                                 'collected inside the ComposedOp.')
@@ -189,6 +190,20 @@ class Gradient(GradientBase):
                 return GradientParamShift().convert(operator, param, analytic=False)
             elif method == 'lin_comb':
                 return GradientLinComb().convert(operator, param)
+
+        elif isinstance(operator, CircuitStateFn):
+            # Gradient of an a state's sampling probabilities
+            if not is_coeff_one(operator._coeff):
+                raise AquaError('Operator pre-processing failed. Coefficients were not properly '
+                                'collected inside the ComposedOp.')
+
+            if method == 'param_shift':
+                return GradientParamShift().convert(operator, param)
+            elif method == 'fin_diff':
+                return GradientParamShift().convert(operator, param, analytic=False)
+            elif method == 'lin_comb':
+                return GradientLinComb().convert(operator, param)
+
         # Handle the chain rule
         elif isinstance(operator, ListOp):
             grad_ops = [self.autograd(op, param, method) for op in operator.oplist]
