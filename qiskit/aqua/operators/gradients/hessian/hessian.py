@@ -46,23 +46,17 @@ class Hessian(GradientBase):
         # if input is a tuple instead of a list, wrap it into a list
         if params is None:
             raise ValueError("No parameters were provided to differentiate")
-        elif isinstance(params, tuple):
-            is_tuple = True
-            params = [params]
-        else:
-            is_tuple = False
 
-        if method == 'param_shift':
-            hessian = ListOp(
-                [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1])
-                 for pair in params]
-            )
-        elif method == 'lin_comb':
-            hessian = HessianLinComb().convert(operator, params)
+        if isinstance(params, (ParameterVector, List)):
+            # Case: a list of parameters were given, compute the Hessian for all param pairs
+            if all(isinstance(param, Parameter) for param in params):
+                return ListOp([ListOp([self.autograd(operator, (p0, p1), method) for p1 in params]) for p0 in params])
+            # Case: a list was given containing tuples of parameter pairs.
+            # Compute the Hessian entries corresponding to these pairs of parameters. 
+            elif all(isinstance(param, tuple) for param in params):
+                return ListOp([self.autograd(operator, param_pair, method) for param_pair in params])
 
-        if is_tuple:  # if input was not a list extract the single operator from the list op
-            return hessian.oplist[0]
-        return hessian
+        return self.autograd(operator, params, method)
 
     def autograd(self,
                 operator: OperatorBase,
@@ -77,8 +71,14 @@ class Hessian(GradientBase):
             return coeff == c
 
         if isinstance(params, (ParameterVector, List)):
-            return ListOp([ListOp([self.autograd(operator, (p0, p1), method) for p1 in params]) for p0 in params])
-            
+            # Case: a list of parameters were given, compute the Hessian for all param pairs
+            if all(isinstance(param, Parameter) for param in params):
+                return ListOp([ListOp([self.autograd(operator, (p0, p1), method) for p1 in params]) for p0 in params])
+            # Case: a list was given containing tuples of parameter pairs.
+            # Compute the Hessian entries corresponding to these pairs of parameters. 
+            elif all(isinstance(param, tuple) for param in params):
+                return ListOp([self.autograd(operator, param_pair, method) for param_pair in params])
+    
         # If a gradient is requested w.r.t a single parameter, then call the
         # Gradient() class' autograd method.   
         if isinstance(params, Parameter):
@@ -172,15 +172,21 @@ class Hessian(GradientBase):
                 return SummedOp(oplist=grad_ops)
             elif isinstance(operator, TensoredOp):
                 return TensoredOp(oplist=grad_ops)
-            # else:
-            #     raise NotImplementedError
-            #     # TODO!
+             
+            if operator.grad_combo_fn:
+                grad_combo_fn = operator.grad_combo_fn
+            else:
 
-            # NOTE! This will totally break if you try to pass a DictStateFn through a combo_fn
-            # (for example, using probability gradients)
-            # I think this is a problem more generally, not just in this subroutine.
-            grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
+                try:
+                    grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
+                except Exception:
+                    raise TypeError('This automatic differentiation function is based on JAX. Please use import '
+                              'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
+
+            # f(g_1(x), g_2(x)) --> df/dx = df/dg_1 dg_1/dx + df/dg_2 dg_2/dx
+            return ListOp([ListOp(operator.oplist, combo_fn=grad_combo_fn), ListOp(grad_ops)],
+                          combo_fn=lambda x: np.dot(x[0], x[1]))
+
 
         elif isinstance(operator, StateFn):
             if operator._is_measurement:

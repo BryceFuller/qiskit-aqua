@@ -22,9 +22,10 @@ from qiskit.aqua.operators import OperatorBase, ListOp, ComposedOp
 from qiskit.circuit import Parameter, ParameterVector
 
 from ..gradient_base import GradientBase
+from ..gradient.gradient import GradientParamShift
 
 
-class HessianParamShift(GradientBase):
+class HessianParamShift(GradientParamShift):
     """TODO"""
 
     def convert(self,
