@@ -208,10 +208,10 @@ class Gradient(GradientBase):
         elif isinstance(operator, ListOp):
             grad_ops = [self.autograd(op, param, method) for op in operator.oplist]
 
-            # Note that this check to see if the ListOp has a default combo_fn
+            # Note: this check to see if the ListOp has a default combo_fn
             # will fail if the user manually specifies the default combo_fn.
             # I.e operator = ListOp([...], combo_fn=lambda x:x) will not pass this check and
-            # later on jax will try to differentiate it and fail.
+            # later on jax will try to differentiate it and raise an error.
             # An alternative is to check the byte code of the operator's combo_fn against the
             # default one.
             # This will work but look very ugly and may have other downsides I'm not aware of
@@ -225,6 +225,7 @@ class Gradient(GradientBase):
             if operator.grad_combo_fn:
                 grad_combo_fn = operator.grad_combo_fn
             else:
+
                 try:
                     grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
                 except Exception:
