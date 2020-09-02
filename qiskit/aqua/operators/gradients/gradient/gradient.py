@@ -176,31 +176,20 @@ class Gradient(GradientBase):
 
             # Do some checks to make sure operator is sensible
             # TODO if this is a sum of circuit state fns - traverse including autograd
-            if isinstance(operator[-1], (CircuitStateFn, CircuitOp)):
-                # TODO check if CircuitOp/ CircuitStateFn
+            if isinstance(operator[-1], (CircuitStateFn)):
                 pass
                 # Do some checks and decide how you're planning on taking the gradient.
                 # for now we do param shift
-
-            elif isinstance(operator[-1], (VectorStateFn, DictStateFn)):
-                operator[-1] = DictToCircuitSum().convert(operator[-1])
-                # Do LCU logic # TODO what's that?
             else:
-                raise TypeError('Gradients only support operators whose states are either '
-                                'CircuitStateFn, DictStateFn, or VectorStateFn.')
+                raise TypeError('The gradient framework is compatible with states that are given as CircuitStateFn')
 
             if method == 'param_shift':
                 return GradientParamShift().convert(operator, param)
             elif method == 'fin_diff':
                 return GradientParamShift().convert(operator, param, analytic=False)
-                # return self.parameter_shift(operator, param)
             elif method == 'lin_comb':
                 return GradientLinComb().convert(operator, param)
-                # @CHRISTA, here is where you'd check if you need to
-                # decompose some operator into circuits or do
-                # something other than the parameter shift rule. # TODO is this what I need?
-
-        # This is the recursive case where the chain rule is handled
+        # Handle the chain rule
         elif isinstance(operator, ListOp):
             grad_ops = [self.autograd(op, param, method) for op in operator.oplist]
 
@@ -221,11 +210,11 @@ class Gradient(GradientBase):
             if operator.grad_combo_fn:
                 grad_combo_fn = operator.grad_combo_fn
             else:
-                raise Warning('This automatic differentiation function is based on JAX. Please use import '
+                try:
+                    grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
+                except Exception:
+                    raise TypeError('This automatic differentiation function is based on JAX. Please use import '
                               'jax.numpy as jnp instead of import numpy as np when defining a combo_fn.')
-                grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
-
-            # ---------------------------------------------------------------------
 
             # f(g_1(x), g_2(x)) --> df/dx = df/dg_1 dg_1/dx + df/dg_2 dg_2/dx
             return ListOp([ListOp(operator.oplist, combo_fn=grad_combo_fn), ListOp(grad_ops)],
