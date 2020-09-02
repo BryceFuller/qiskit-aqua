@@ -185,22 +185,22 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         H = 0.5 * X - 1 * Z
         a = Parameter('a')
         b = Parameter('b')
-        params = [a, b]
+        params = [(a, a), (a, b), (b, b)]
 
         q = QuantumRegister(1)
         qc = QuantumCircuit(q)
         qc.h(q)
-        qc.rz(params[0], q[0])
-        qc.rx(params[1], q[0])
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
 
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
 
         state_hess = HessianLinComb().convert(operator=op, params=params)
         values_dict = [{a: np.pi / 4, b: np.pi}, {a: np.pi / 4, b: np.pi / 4},
                        {a: np.pi / 2, b: np.pi / 4}]
-        correct_values = [[[-0.5 / np.sqrt(2), 1 / np.sqrt(2)], [1 / np.sqrt(2), 0]],
-                          [[-0.5 / np.sqrt(2) + 0.5, -1 / 2.], [-0.5, 0.5]],
-                          [[1 / np.sqrt(2), 0], [0, 1 / np.sqrt(2)]]]
+        correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2), 0],
+                          [-0.5 / np.sqrt(2) + 0.5, -1 / 2., 0.5],
+                          [1 / np.sqrt(2), 0, 1 / np.sqrt(2)]]
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(), correct_values[i])
