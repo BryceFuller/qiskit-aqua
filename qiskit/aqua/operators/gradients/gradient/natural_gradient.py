@@ -34,7 +34,7 @@ from ...gradients.qfi import QFI
 from ..gradient import Gradient
 from qiskit.circuit import Parameter, ParameterVector
 
-from qiskit.aqua.operators import (OperatorBase, ListOp)
+from qiskit.aqua.operators import (OperatorBase, ListOp, ComposedOp, CircuitStateFn)
 
 
 class NaturalGradient(GradientBase):
@@ -67,8 +67,12 @@ class NaturalGradient(GradientBase):
         Raises:
             ValueError: If ``params`` contains a parameter not present in ``operator``.
         """
+        if not isinstance(operator, ComposedOp) or not isinstance(operator[-1], CircuitStateFn):
+            raise TypeError('Please make sure that the operator for which you want to compute Quantum '
+                            'Fisher Information represents an expectation value and that the quantum '
+                            'state is given as CircuitStateFn.')
         grad = Gradient().convert(operator, params, method)
-        metric = QFI().convert(operator, params, approx) * 0.25
+        metric = QFI().convert(operator[-1], params, approx) * 0.25
 
         def combo_fn(x):
             c = x[0]

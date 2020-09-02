@@ -111,13 +111,10 @@ class QFI(GradientBase):
         # Dictionary which relates the gates needed for the QFI for every parameter
         qfi_gates = {}
 
-        if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
+        if isinstance(op, CircuitStateFn):
             pass
-        elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum().convert(op)
         else:
-            raise TypeError('Ancilla gradients only support operators whose states are either '
-                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
+            raise TypeError('The gradient framework is compatible with states that are given as CircuitStateFn')
 
         if not isinstance(target_params, Iterable):
             target_params = [target_params]

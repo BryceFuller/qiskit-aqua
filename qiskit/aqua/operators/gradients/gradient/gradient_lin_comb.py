@@ -22,6 +22,7 @@ import numpy as np
 from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library import ZGate, SGate, SdgGate, HGate
 
+from qiskit.aqua.aqua_globals import AquaError
 from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, ComposedOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
@@ -78,7 +79,7 @@ class GradientLinComb(GradientBase):
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, PrimitiveOp):
             return operator
-        elif isinstance(operator, (CircuitStateFn, CircuitOp)):
+        elif isinstance(operator, (CircuitStateFn)):
             return self._grad_states(operator, target_params=params)
         return operator
 
@@ -116,6 +117,8 @@ class GradientLinComb(GradientBase):
         if not isinstance(target_params, Iterable):
             target_params = [target_params]
         for param in target_params:
+            if param not in state_qc._parameter_table.get_keys():
+                continue
             elements = state_qc._parameter_table[param]
             gates_to_parameters[param] = []
             grad_coeffs[param] = []
@@ -140,89 +143,94 @@ class GradientLinComb(GradientBase):
         # create a copy of the original state with an additional work_q register
         # Get the states needed to compute the gradient
         for param in target_params:  # loop over parameters
+            if param not in state_qc._parameter_table.get_keys():
+                op = ~StateFn(One) @ Zero
+            else:
             # construct the states
-            for m, gates_to_insert_i in enumerate(grad_gates[param]):
-                for k, gate_to_insert_i in enumerate(gates_to_insert_i):
-                    grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
-                    grad_state.compose(state_qc, inplace=True)
+                for m, gates_to_insert_i in enumerate(grad_gates[param]):
+                    for k, gate_to_insert_i in enumerate(gates_to_insert_i):
+                        grad_state = QuantumCircuit(*state_qc.qregs, qr_work)
+                        grad_state.compose(state_qc, inplace=True)
 
-                    # apply Hadamard on work_q
-                    self.insert_gate(
-                        grad_state, gates_to_parameters[target_params[0]][0], HGate(), qubits=[work_q]
-                    )
+                        # apply Hadamard on work_q
+                        self.insert_gate(
+                            grad_state, gates_to_parameters[target_params[0]][0], HGate(), qubits=[work_q]
+                        )
 
-                    # Fix work_q phase
-                    coeff_i = grad_coeffs[param][m][k]
-                    sign = np.sign(coeff_i)
-                    is_complex = np.iscomplex(coeff_i)
-                    if sign == -1:
-                        if is_complex:
-                            self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
-                                             SdgGate(), qubits=[work_q])
-                        else:
-                            self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
-                                             ZGate(), qubits=[work_q])
-                    else:
-                        if is_complex:
-                            self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
-                                             SGate(), qubits=[work_q])
-
-                    # Insert controlled, intercepting gate - controlled by |0>
-                    self.insert_gate(grad_state, gates_to_parameters[param][m],
-                                     gate_to_insert_i,
-                                     additional_qubits=additional_qubits)
-                    grad_state.h(work_q)
-
-                    state = np.sqrt(np.abs(coeff_i) * 2) * state_op.coeff * CircuitStateFn(grad_state)
-                    # Chain Rule parameter expressions
-                    gate_param = gates_to_parameters[param][m].params[k]
-                    if meas_op:
-                        if gate_param == param:
-                            state = meas_op @ state
-                        else:
-                            if isinstance(gate_param, ParameterExpression):
-                                import sympy as sy
-                                expr_grad = self.parameter_expression_grad(gate_param, param)
-                                state = (expr_grad * meas_op) @ state
+                        # Fix work_q phase
+                        coeff_i = grad_coeffs[param][m][k]
+                        sign = np.sign(coeff_i)
+                        is_complex = np.iscomplex(coeff_i)
+                        if sign == -1:
+                            if is_complex:
+                                self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
+                                                 SdgGate(), qubits=[work_q])
                             else:
-                                state = ~StateFn(One) @ Zero
-                    else:
-                        def combo_fn(x):
-                            # TODO parameter expression
-                            x = x.primitive
-                            # Generate the operator which computes the linear combination
-                            lin_comb_op = (I ^ state_op.num_qubits) ^ Z
-                            lin_comb_op = lin_comb_op.to_matrix()
-                            # Compute a partial trace over the working qubit needed to compute the linear combination
-                            if isinstance(x, list) or isinstance(x, np.ndarray):
-                                # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                return [np.diag(partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
-                                        for item in x]
-                            else:
-                                # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
-
-                        if gate_param == param:
-                            pass
+                                self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
+                                                 ZGate(), qubits=[work_q])
                         else:
-                            if isinstance(gate_param, ParameterExpression):
-                                import sympy as sy
-                                expr_grad = self.parameter_expression_grad(gate_param, param)
-                                # Square root needed bc the coefficients are squared in the expectation value
-                                # TODO enable complex parameter expressions
-                                expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                                state *= expr_grad
-                            else:
-                                state = ~StateFn(One) @ Zero
-                        state = ListOp(state, combo_fn=combo_fn)
+                            if is_complex:
+                                self.insert_gate(grad_state, gates_to_parameters[target_params[0]][0],
+                                                 SGate(), qubits=[work_q])
 
-                    if m == 0 and k == 0:
-                        op = state
-                    else:
-                        # Product Rule
-                        op += state
+                        # Insert controlled, intercepting gate - controlled by |0>
+                        self.insert_gate(grad_state, gates_to_parameters[param][m],
+                                         gate_to_insert_i,
+                                         additional_qubits=additional_qubits)
+                        grad_state.h(work_q)
+
+                        state = np.sqrt(np.abs(coeff_i) * 2) * state_op.coeff * CircuitStateFn(grad_state)
+                        # Chain Rule parameter expressions
+                        gate_param = gates_to_parameters[param][m].params[k]
+                        if meas_op:
+                            if gate_param == param:
+                                state = meas_op @ state
+                            else:
+                                if isinstance(gate_param, ParameterExpression):
+                                    import sympy as sy
+                                    expr_grad = self.parameter_expression_grad(gate_param, param)
+                                    state = (expr_grad * meas_op) @ state
+                                else:
+                                    state = ~StateFn(One) @ Zero
+                        else:
+                            def combo_fn(x):
+                                # TODO parameter expression
+                                x = x.primitive
+                                # Generate the operator which computes the linear combination
+                                lin_comb_op = (I ^ state_op.num_qubits) ^ Z
+                                lin_comb_op = lin_comb_op.to_matrix()
+                                # Compute a partial trace over the working qubit needed to compute the linear combination
+                                if isinstance(x, list) or isinstance(x, np.ndarray):
+                                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
+                                    return [np.diag(partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
+                                            for item in x]
+                                else:
+                                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
+                                    return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
+
+                            if gate_param == param:
+                                pass
+                            else:
+                                if isinstance(gate_param, ParameterExpression):
+                                    import sympy as sy
+                                    expr_grad = self.parameter_expression_grad(gate_param, param)
+                                    # Square root needed bc the coefficients are squared in the expectation value
+                                    # TODO enable complex parameter expressions
+                                    expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                    state *= expr_grad
+                                else:
+                                    state = ~StateFn(One) @ Zero
+                            state = ListOp(state, combo_fn=combo_fn)
+
+                        if m == 0 and k == 0:
+                            op = state
+                        else:
+                            # Product Rule
+                            op += state
             if len(target_params) > 1:
                 states += [op]
+            else:
+                return op
         if len(target_params) > 1:
             return ListOp(states)
         else:
