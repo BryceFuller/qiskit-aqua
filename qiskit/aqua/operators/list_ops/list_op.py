@@ -26,6 +26,8 @@ from ..legacy.base_operator import LegacyBaseOperator
 from ..operator_base import OperatorBase
 
 
+
+
 class ListOp(OperatorBase):
     """
     A Class for manipulating List Operators, and parent class to ``SummedOp``, ``ComposedOp``,
@@ -294,27 +296,52 @@ class ListOp(OperatorBase):
 
         """
         # The below code only works for distributive ListOps, e.g. ListOp and SummedOp
+
+        from ..state_fns.dict_state_fn import DictStateFn       # pylint: ignore=cyclic-import
+        from ..state_fns.vector_state_fn import VectorStateFn   # pylint: ignore=cyclic-import
+
         if not self.distributive:
             raise NotImplementedError(r'ListOp\'s eval function is only defined for distributive '
                                       r'Listops.')
-
-        #If any dicts are found, convert them into DictStateFns so that the combo_fn can be applied more easily.
-        filtered_oplist = [DictStateFn(op) if isinstance(op, Dict) else op for op in self.oplist ]
-        #if all(isinstance(op, DictStateFn) for op in self.oplist)
-
+        evals = [(self.coeff * op).eval(front) for op in self.oplist]  # type: ignore
         
-        evals = [(self.coeff * op).eval(front) for op in filtered_oplist]  # type: ignore
+        # Handle termwise application of combo_fn for {Dict,Vector}StateFns
+        # but only if a non-trivial combo_fn is given
+        if self._combo_fn != ListOp([])._combo_fn:
+            if all(isinstance(op, DictStateFn) for op in evals):
+                if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
+                    raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
+                inputs = list(reduce(lambda x,y: x.union(set(y.keys())), [set()]+evals))
+                outputs = []
+                for bitstr in inputs:
+                    vals = [op[bitstr] if bitstr in op else 0 for op in evals]
+                    outputs.append(self.combo_fn(vals))
+                return dict(zip(inputs,outputs))
+            elif all(isinstance(op, VectorStateFn) for op in evals):
+                #All VectorStateFn's must have the same primitive type
+                if not all(isinstance(op, type(evals[0])) for op in evals):
+                    raise NotImplementedError("term-wise combo_fn not yet supported for mixed VectorStateFn primitives")
+                if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
+                    raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
+                #Get the actual data from each operator
+                vectors = [op.primitive*op._coeff for op in evals]
+                primitive_type = type(vectors[0])
+                # For some reason, isinstance(primitive_type, StateVector) fails. 
+                # So I had to use the below check.
+                if hasattr(primitive_type, 'data'):
+                    vectors = [op.data for op in vectors]
+                dim = len(vectors[0])
+                print(dim)
+                print([len(vec) for vec in vectors])
+                combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
+                print(combined_data)
+                print(len(combined_data))
+                return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=evals[0].is_measurement)
+
         if all(isinstance(op, OperatorBase) for op in evals):
             return self.__class__(evals)
         elif any(isinstance(op, OperatorBase) for op in evals):
             raise TypeError('Cannot handle mixed scalar and Operator eval results.')
-        elif all(isinstance(op, Dict) for op in evals):
-            inputs = list(reduce(lambda x,y: x.union(set(y.keys())), [set()]+evals))
-            outputs = []
-            for bitstr in inputs:
-                vals = [op[bitstr] if bitstr in op else 0 for op in evals]
-                outputs.append(self.combo_fn(vals))
-            return dict(zip(inputs,outputs))
         else:
             return self.combo_fn(evals)
 

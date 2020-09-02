@@ -16,6 +16,7 @@
 from collections.abc import Iterable
 from typing import List, Union, Optional
 import copy
+from copy import deepcopy
 from functools import cmp_to_key
 
 import numpy as np
@@ -71,7 +72,7 @@ class QFI(GradientBase):
             raise ValueError("No parameters were provided to differentiate")
 
         if approx is None:
-            return self._get_qfi(operator, params)
+            return self._qfi_states(operator, params)
         elif approx == 'diagonal':
             return self.diagonal_qfi(operator)
         elif approx == 'block_diagonal':
@@ -80,11 +81,8 @@ class QFI(GradientBase):
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
 
-
-    # TODO This probably should have a more intuitive name.
-
-    def _get_qfi(self, op: OperatorBase,
-                 target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
+    def _qfi_states(self, op: OperatorBase,
+                    target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
@@ -113,13 +111,10 @@ class QFI(GradientBase):
         # Dictionary which relates the gates needed for the QFI for every parameter
         qfi_gates = {}
 
-        if isinstance(op, CircuitStateFn) or isinstance(op, CircuitOp):
+        if isinstance(op, CircuitStateFn):
             pass
-        elif isinstance(op, DictStateFn) or isinstance(op, VectorStateFn):
-            op = DictToCircuitSum().convert(op)
         else:
-            raise TypeError('Ancilla gradients only support operators whose states are either '
-                            'CircuitStateFn, DictStateFn, or VectorStateFn.')
+            raise TypeError('The gradient framework is compatible with states that are given as CircuitStateFn')
 
         if not isinstance(target_params, Iterable):
             target_params = [target_params]
@@ -194,27 +189,20 @@ class QFI(GradientBase):
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
                     if gate_param == param:
-                        pass
+                        state = phase_fix_observable @ state
                     else:
                         if isinstance(gate_param, ParameterExpression):
                             import sympy as sy
                             expr_grad = self.parameter_expression_grad(gate_param, param)
-                            # Square root needed bc the coefficients are squared in the expectation value
-                            expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                            state *= expr_grad
+                            state = (expr_grad * phase_fix_observable) @ state
                         else:
                             state *= 0
 
                     if m == 0 and k == 0:
-                        state_op = state
-                    else:
-                        state_op += state
-
-                    if m == 0 and k == 0:
                         phase_fix_state = state
                     else:
-                        phase_fix_state += state
-            phase_fix_states += [phase_fix_observable @ phase_fix_state]
+                        phase_fix_state +=  state
+            phase_fix_states += [phase_fix_state]
 
         # Get  4 * Re[〈∂kψ|∂lψ]
         qfi_operators = []
@@ -301,31 +289,22 @@ class QFI(GradientBase):
                                 # Convert the quantum circuit into a CircuitStateFn
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * op.coeff * \
                                     CircuitStateFn(qfi_circuit)
+
                                 # Chain Rule Parameter Expression
-                                gate_param = gates_to_parameters[param_i][m_i].params[k_i]
-                                if gate_param == param_i:
-                                    pass
-                                else:
-                                    if isinstance(gate_param, ParameterExpression):
-                                        import sympy as sy
-                                        expr_grad = self.parameter_expression_grad(gate_param, param_i)
-                                        # Square root needed bc the coefficients are squared in the expectation value
-                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                                        term *= expr_grad
-                                    else:
-                                        term *= 0
-                                gate_param = gates_to_parameters[param_j][m_j].params[k_j]
-                                if gate_param == param_j:
-                                    pass
-                                else:
-                                    if isinstance(gate_param, ParameterExpression):
-                                        import sympy as sy
-                                        expr_grad = self.parameter_expression_grad(gate_param, param_j)
-                                        # Square root needed bc the coefficients are squared in the expectation value
-                                        expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                                        term *= expr_grad
-                                    else:
-                                        term *= 0
+
+                                gate_param_i = gates_to_parameters[param_i][m_i].params[k_i]
+                                gate_param_j = gates_to_parameters[param_j][m_j].params[k_j]
+
+                                meas = deepcopy(qfi_observable)
+                                if isinstance(gate_param_i, ParameterExpression):
+                                    import sympy as sy
+                                    expr_grad = self.parameter_expression_grad(gate_param_i, param_i)
+                                    meas *= expr_grad
+                                if isinstance(gate_param_j, ParameterExpression):
+                                    import sympy as sy
+                                    expr_grad = self.parameter_expression_grad(gate_param_j, param_j)
+                                    meas *= expr_grad
+                                term = meas @ term
 
                                 if m_i == 0 and k_i == 0 and m_j == 0 and k_j == 0:
                                     qfi_op = term
@@ -339,7 +318,7 @@ class QFI(GradientBase):
                                    combo_fn=phase_fix_combo_fn)
                 # Add the phase fix quantities to the entries of the QFI
                 # Get 4 * Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉]
-                qfi_ops += [(qfi_observable @ qfi_op) + (phase_fix)]
+                qfi_ops += [qfi_op + phase_fix]
             qfi_operators.append(ListOp(qfi_ops))
         # Return the full QFI
         return ListOp(qfi_operators)
