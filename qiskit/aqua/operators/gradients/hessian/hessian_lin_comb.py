@@ -272,5 +272,8 @@ class HessianLinComb(GradientBase):
                                 # Product Rule
                                 hessian_op += term
             # Create a list of Hessian elements w.r.t. the given parameter tuples
-            hessian_ops += [hessian_op]
+            if len(tuples_list) == 1:
+                return hessian_op
+            else:
+                hessian_ops += [hessian_op]
         return ListOp(hessian_ops)
