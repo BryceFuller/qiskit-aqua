@@ -315,12 +315,15 @@ def regularized_lse_solver(A: np.ndarray,
             alpha *= 10
         # include perturbation in A to avoid singularity
         x, res, rank, sv = np.linalg.lstsq(A + alpha * np.diag(A), C, rcond=None)
-    else:
+    elif regularization == 'perturb_diag':
         alpha = 1e-7
         while np.linalg.cond(A + alpha * np.eye(len(C))) > tol_cond_A:
             alpha *= 10
         # include perturbation in A to avoid singularity
         x, _, _, _ = np.linalg.lstsq(A + alpha * np.eye(len(C)), C, rcond=None)
+    else:
+        # include perturbation in A to avoid singularity
+        x, _, _, _ = np.linalg.lstsq(A, C, rcond=None)
 
     if np.linalg.norm(x) > tol_norm_x[1] or np.linalg.norm(x) < tol_norm_x[0]:
         if regularization == 'ridge':

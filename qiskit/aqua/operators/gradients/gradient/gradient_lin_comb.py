@@ -48,58 +48,11 @@ class GradientLinComb(GradientBase):
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
-
-
-        # self._meas_op = None
-        # for op in operator.oplist:
-        #     if op.is_measurement:
-        #         measurement = Z ^ deepcopy(op)
-        #     else:
-        #         state = deepcopy(op)
-        # if isinstance(operator, ComposedOp):
-        #     measurement = operator[0]
-        #     state = operator[-1]
-        #
-
-        # self._params = params
-        # self._operator_has_measurement = False
         return self._prepare_operator(operator, params)
-    #     self._params = params
-    #     self._gradient_operator = operator
-    #
-    #     return self._get_grad_states(operator)
-    #
-    # def _get_measurement(self, operator):
-    #     if isinstance(operator, ListOp):
-    #         return operator.traverse(self._get_measurement)
-    #     elif operator.is_measurement:
-    #         return Z ^ operator
-    #     else:
-    #         return None
-    #
-    # def _get_grad_states(self, operator):
-    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
-    #         return self._grad_states(operator, self._params)
-    #     elif isinstance(operator, ListOp):
-    #         return operator.traverse(self._get_grad_states)
-    #     else:
-    #         raise TypeError('Please define an operator that incorporates a CircuitStateFn.')
-
-    # def _prepare_operator(self, operator):
-    #     if isinstance(operator, ListOp):
-    #         return operator.traverse(self._prepare_operator)
-    #     elif isinstance(operator, StateFn):
-    #         if operator.is_measurement:
-    #             self._operator_has_measurement = True
-    #             return operator.traverse(self._prepare_operator)
-    #     elif isinstance(operator, PrimitiveOp):
-    #         return Z ^ operator
-    #     if isinstance(operator, (CircuitStateFn, CircuitOp)):
-    #         return self._grad_states(operator, self._params)
-    #     return operator
 
     def _prepare_operator(self, operator, params):
         if isinstance(operator, ComposedOp):
+            # Get the measurement and the state operator
             if not isinstance(operator[0], StateFn) or not operator[0]._is_measurement:
                 raise ValueError("The given operator does not correspond to an expectation value")
             if not isinstance(operator[-1], StateFn) or operator[-1]._is_measurement:
@@ -220,7 +173,7 @@ class GradientLinComb(GradientBase):
                                      additional_qubits=additional_qubits)
                     grad_state.h(work_q)
 
-                    state = np.sqrt(np.abs(coeff_i) * 2) * CircuitStateFn(grad_state)
+                    state = np.sqrt(np.abs(coeff_i) * 2) * state_op.coeff * CircuitStateFn(grad_state)
                     # Chain Rule parameter expressions
                     gate_param = gates_to_parameters[param][m].params[k]
                     if meas_op:
@@ -230,25 +183,9 @@ class GradientLinComb(GradientBase):
                             if isinstance(gate_param, ParameterExpression):
                                 import sympy as sy
                                 expr_grad = self.parameter_expression_grad(gate_param, param)
-                                # Square root needed bc the coefficients are squared in the expectation value
-                                # TODO enable complex parameter expressions
-                                # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
                                 state = (expr_grad * meas_op) @ state
                             else:
                                 state = ~StateFn(One) @ Zero
-                    # if meas_op:
-                    #     if gate_param == param:
-                    #         state = meas_op @ state
-                    #     else:
-                    #         if isinstance(gate_param, ParameterExpression):
-                    #             import sympy as sy
-                    #             expr_grad = self.parameter_expression_grad(gate_param, param)
-                    #             # Square root needed bc the coefficients are squared in the expectation value
-                    #             # TODO enable complex parameter expressions
-                    #             # expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
-                    #             state = expr_grad * meas_op @ state
-                    #         else:
-                    #             state = ~StateFn(One) @ Zero
                     else:
                         def combo_fn(x):
                             # TODO parameter expression
@@ -264,6 +201,19 @@ class GradientLinComb(GradientBase):
                             else:
                                 # TODO check if output is prob or sv - in case of prob get rid of np.dot
                                 return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
+
+                        if gate_param == param:
+                            pass
+                        else:
+                            if isinstance(gate_param, ParameterExpression):
+                                import sympy as sy
+                                expr_grad = self.parameter_expression_grad(gate_param, param)
+                                # Square root needed bc the coefficients are squared in the expectation value
+                                # TODO enable complex parameter expressions
+                                expr_grad._symbol_expr = sy.sqrt(expr_grad._symbol_expr)
+                                state *= expr_grad
+                            else:
+                                state = ~StateFn(One) @ Zero
                         state = ListOp(state, combo_fn=combo_fn)
 
                     if m == 0 and k == 0:
@@ -271,11 +221,9 @@ class GradientLinComb(GradientBase):
                     else:
                         # Product Rule
                         op += state
-            # The division is necessary to compensate for normalization of summed StateFns
             if len(target_params) > 1:
                 states += [op]
-            # states += [state_op / np.sqrt(len(gates_to_parameters[param]))]
         if len(target_params) > 1:
-            return ListOp(states) * state_op.coeff
+            return ListOp(states)
         else:
-            return op * state_op.coeff
+            return op

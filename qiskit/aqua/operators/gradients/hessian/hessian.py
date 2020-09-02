@@ -20,6 +20,7 @@ from typing import Optional, Union, List, Tuple
 from qiskit.circuit import Parameter
 from qiskit.aqua.operators.operator_base import OperatorBase
 from qiskit.aqua.operators.list_ops.list_op import ListOp
+from .hessian_lin_comb import HessianLinComb
 
 from ..gradient_base import GradientBase
 
@@ -37,7 +38,7 @@ class Hessian(GradientBase):
             operator: The measurement operator we are taking the gradient of
             operator:  The operator corresponding to our state preparation circuit
             params: The parameters we are taking the gradient with respect to
-            method: The method used to compute the gradient. Either 'param_shift' or 'ancilla'.
+            method: The method used to compute the gradient. Either 'param_shift' or 'fin_diff' or 'lin_comb'.
 
         Returns:
             gradient_operator: An operator whose evaluation yeild the Hessian
@@ -56,8 +57,8 @@ class Hessian(GradientBase):
                 [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1])
                  for pair in params]
             )
-        elif method == 'ancilla':
-            hessian = self.ancilla_hessian(params)
+        elif method == 'lin_comb':
+            hessian = HessianLinComb().convert(operator, params)
 
         if is_tuple:  # if input was not a list extract the single operator from the list op
             return hessian.oplist[0]
@@ -136,18 +137,10 @@ class Hessian(GradientBase):
 
             # Do some checks to make sure operator is sensible
             # TODO if this is a sum of circuit state fns - traverse including autograd
-            if isinstance(operator[-1], (CircuitStateFn, CircuitOp)):
-                # TODO check if CircuitOp/ CircuitStateFn
+            if isinstance(operator[-1], (CircuitStateFn)):
                 pass
-                # Do some checks and decide how you're planning on taking the gradient.
-                # for now we do param shift
-
-            elif isinstance(operator[-1], (VectorStateFn, DictStateFn)):
-                operator[-1] = DictToCircuitSum().convert(operator[-1])
-                # Do LCU logic # TODO what's that?
             else:
-                raise TypeError('Gradients only support operators whose states are either '
-                                'CircuitStateFn, DictStateFn, or VectorStateFn.')
+                raise TypeError('The gradient framework is compatible with states that are given as CircuitStateFn')
 
             if method == 'param_shift':
                 return HessianParamShift().convert(operator, params)
@@ -187,7 +180,7 @@ class Hessian(GradientBase):
             # (for example, using probability gradients)
             # I think this is a problem more generally, not just in this subroutine.
             grad_combo_fn = self.get_grad_combo_fn(operator)
-            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn) # TODO why operator.oplist? -> only grad_ops
+            return ListOp(oplist=operator.oplist+grad_ops, combo_fn=grad_combo_fn)
 
         elif isinstance(operator, StateFn):
             if operator._is_measurement:

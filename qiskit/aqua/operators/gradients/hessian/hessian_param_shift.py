@@ -13,11 +13,13 @@
 # that they have been altered from the originals.
 
 """The module to compute the Hessian using the parameter shift method."""
-
+from functools import partial
+import numpy as np
+from copy import deepcopy
 from typing import Optional, Union, List, Tuple
 
-from qiskit.aqua.operators import OperatorBase, ListOp
-from qiskit.circuit import Parameter
+from qiskit.aqua.operators import OperatorBase, ListOp, ComposedOp
+from qiskit.circuit import Parameter, ParameterVector
 
 from ..gradient_base import GradientBase
 

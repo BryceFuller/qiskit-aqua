@@ -144,6 +144,10 @@ class GradientParamShift(GradientBase):
                 # Assumes the gate is a pauli rotation!
                 shift_constant = 0.5
 
+                if isinstance(p_param, ParameterExpression) and not isinstance(p_param, Parameter):
+                        expr_grad = self.parameter_expression_grad(p_param, param)
+                        shifted_op *= expr_grad
+
                 pshift_gate.params[0] = (p_param + (np.pi / (4*shift_constant)))
                 mshift_gate.params[0] = (m_param - (np.pi / (4*shift_constant)))
 
@@ -152,10 +156,7 @@ class GradientParamShift(GradientBase):
 
                 """
                 # If the rotation angle is actually a parameter expression of param, then handle the chain rule
-                if pshift_gate.params[0] != param and isinstance(pshift_gate.params[0], ParameterExpression):
-                        print(pshift_gate.params, param)
-                        expr_grad = self.parameter_expression_grad(pshift_gate.params[0], param)
-                        shifted_op *= expr_grad
+                
                 """
 
                 shifted_ops.append(shifted_op)
