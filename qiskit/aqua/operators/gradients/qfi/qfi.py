@@ -25,10 +25,11 @@ from scipy.linalg import block_diag
 from qiskit.circuit import QuantumCircuit, QuantumRegister, Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library import RYGate, RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
+from qiskit.providers import BaseBackend
+from qiskit.aqua import QuantumInstance
 
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
-from qiskit.aqua.operators.converters import DictToCircuitSum
-from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn, DictStateFn, VectorStateFn
+from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, CircuitSampler
+from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
 from qiskit.aqua.operators.operator_globals import I, Z, Y, X, Zero
 
 from ..gradient_base import GradientBase
@@ -68,7 +69,7 @@ class QFI(GradientBase):
             raise ValueError("No parameters were provided to differentiate")
 
         if approx is None:
-            return self._qfi_states(operator, params)
+            return self._full_qfi(operator, params)
         elif approx == 'diagonal':
             return self.diagonal_qfi(operator, params)
         elif approx == 'block_diagonal':
@@ -77,8 +78,42 @@ class QFI(GradientBase):
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
 
-    def _qfi_states(self, op: OperatorBase,
-                    target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
+    # TODO discuss naming
+    def get_callable(self,
+                      operator: OperatorBase,
+                      params: Union[Parameter, ParameterVector, List[Parameter]],
+                      approx: Optional[str] = None,
+                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+        """
+        Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
+        This callable can be used as gradient function for optimizers.
+        Args:
+            operator: The operator for which we want to get the gradient, Hessian or QFI.
+            params: The parameters with respect to which we are taking the gradient, Hessian or QFI.
+            approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
+            backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
+        Returns:
+            callable: Function to compute a gradient, Hessian or QFI for a given parameter array.
+
+        """
+
+        if not backend:
+            converter = self.convert(operator, params, approx)
+        else:
+            if isinstance(backend, QuantumInstance):
+                if backend.is_statevector:
+                    converter = self.convert(operator, params, approx)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params, approx))
+            else:
+                if backend.name().startswith('statevector'):
+                    converter = self.convert(operator, params, approx)
+                else:
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params, approx))
+        return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
+
+    def _full_qfi(self, op: OperatorBase,
+                  target_params: Union[Parameter, ParameterVector, List] = None) -> ListOp:
         """Generate the operators whose evaluation leads to the full QFI.
 
         Args:
@@ -325,6 +360,7 @@ class QFI(GradientBase):
                                                           ParameterVector,
                                                           List[Parameter]]] = None
                            ) -> OperatorBase:
+
         """TODO"""
         if not isinstance(operator, (CircuitOp, CircuitStateFn)):
             raise NotImplementedError('operator must be a CircuitOp or CircuitStateFn')
@@ -428,6 +464,7 @@ class QFI(GradientBase):
                      operator: Union[CircuitOp, CircuitStateFn],
                      params: Union[Parameter, ParameterVector, List] = None
                      ) -> OperatorBase:
+
         """TODO"""
         if not isinstance(operator, (CircuitOp, CircuitStateFn)):
             raise NotImplementedError

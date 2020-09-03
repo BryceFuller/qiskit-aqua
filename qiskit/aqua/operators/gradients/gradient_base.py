@@ -74,33 +74,36 @@ class GradientBase(ConverterBase):
     # TODO discuss naming
     def get_callable(self,
                       operator: OperatorBase,
-                      params: Union[Parameter, ParameterVector, List[Parameter]],
+                      params: Union[Parameter, ParameterVector, List[Parameter], Tuple[Parameter, Parameter],
+                               List[Tuple[Parameter, Parameter]]],
+                      method: str = 'param_shift',
                       backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
         """
         Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
         This callable can be used as gradient function for optimizers.
         Args:
             operator: The operator for which we want to get the gradient, Hessian or QFI.
-            parameters: The parameters with respect to which we are taking the gradient, Hessian or QFI.
+            params: The parameters with respect to which we are taking the gradient, Hessian or QFI.
+            method: The method used to compute the gradient. Either 'param_shift' or 'fin_diff' or 'lin_comb'.
             backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
         Returns:
-            callable: Function to compute a gradient, Hessian or QFI for given parameters.
+            callable: Function to compute a gradient, Hessian or QFI for a given parameter array.
 
         """
 
         if not backend:
-            converter = self.convert(operator, params)
+            converter = self.convert(operator, params, method)
         else:
             if isinstance(backend, QuantumInstance):
                 if backend.is_statevector:
-                    converter = self.convert(operator, params)
+                    converter = self.convert(operator, params, method)
                 else:
-                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params, method))
             else:
                 if backend.name().startswith('statevector'):
-                    converter = self.convert(operator, params)
+                    converter = self.convert(operator, params, method)
                 else:
-                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params))
+                    converter = CircuitSampler(backend=backend).convert(self.convert(operator, params, method))
         return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
 
 
