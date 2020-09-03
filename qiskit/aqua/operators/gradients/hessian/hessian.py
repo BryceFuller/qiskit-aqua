@@ -139,7 +139,7 @@ class Hessian(GradientBase):
         # circuits were applied. Additionally, all coefficients within ComposedOps were collected
         # and moved out front.
         if isinstance(operator, ComposedOp):
-            if not is_coeff_one(operator._coeff):
+            if not is_coeff_c(operator._coeff, 1.):
                 raise AquaError('Operator pre-processing failed. Coefficients were not properly '
                                 'collected inside the ComposedOp.')
 
@@ -154,12 +154,8 @@ class Hessian(GradientBase):
                 return HessianParamShift().convert(operator, params)
             elif method == 'fin_diff':
                 return HessianParamShift().convert(operator, params, analytic=False)
-                # return self.parameter_shift(operator, param)
             elif method == 'lin_comb':
                 return HessianLinComb().convert(operator, params)
-                # @CHRISTA, here is where you'd check if you need to
-                # decompose some operator into circuits or do
-                # something other than the parameter shift rule. # TODO is this what I need?
 
         # This is the recursive case where the chain rule is handled
         elif isinstance(operator, ListOp):
@@ -194,7 +190,6 @@ class Hessian(GradientBase):
             # f(g_1(x), g_2(x)) --> df/dx = df/dg_1 dg_1/dx + df/dg_2 dg_2/dx
             return ListOp([ListOp(operator.oplist, combo_fn=grad_combo_fn), ListOp(grad_ops)],
                           combo_fn=lambda x: np.dot(x[0], x[1]))
-
 
         elif isinstance(operator, StateFn):
             if operator._is_measurement:
