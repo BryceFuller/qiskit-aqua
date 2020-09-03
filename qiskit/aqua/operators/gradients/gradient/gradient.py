@@ -225,7 +225,6 @@ class Gradient(GradientBase):
             if operator.grad_combo_fn:
                 grad_combo_fn = operator.grad_combo_fn
             else:
-
                 try:
                     grad_combo_fn = jit(grad(operator._combo_fn, holomorphic=True))
                 except Exception:
