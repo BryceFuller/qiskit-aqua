@@ -307,9 +307,7 @@ class ListOp(OperatorBase):
         
         # Handle termwise application of combo_fn for {Dict,Vector}StateFns
         # but only if a non-trivial combo_fn is given
-        print(self._combo_fn != ListOp([])._combo_fn)
         if self._combo_fn != ListOp([])._combo_fn:
-            print([type(op) for op in evals])
             if all(isinstance(op, DictStateFn) for op in evals):
                 if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
                     raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
