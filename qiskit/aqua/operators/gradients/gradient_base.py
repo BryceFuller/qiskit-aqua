@@ -16,14 +16,10 @@
 
 from collections.abc import Iterable
 
-from typing import Optional, Callable, Union, List, Tuple
+from typing import Optional, Union, List, Tuple
 import logging
-from functools import partial, reduce
-import numpy as np
-import sympy as sy
-from copy import deepcopy
 
-from qiskit.quantum_info import Pauli
+
 from qiskit import QuantumCircuit
 from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
 from qiskit.circuit.library.standard_gates import *
@@ -34,16 +30,11 @@ from qiskit.aqua import QuantumInstance, AquaError
 from ..converters import CircuitSampler
 
 from ..operator_base import OperatorBase
-from ..primitive_ops.primitive_op import PrimitiveOp
 from ..primitive_ops.pauli_op import PauliOp
 from ..primitive_ops.circuit_op import CircuitOp
 from ..list_ops.list_op import ListOp
-from ..list_ops.summed_op import SummedOp
-from ..list_ops.composed_op import ComposedOp
-from ..list_ops.tensored_op import TensoredOp
 from ..state_fns.state_fn import StateFn
 from ..state_fns.circuit_state_fn import CircuitStateFn
-from ..operator_globals import H, S, I, Zero, One
 from ..converters.converter_base import ConverterBase
 
 logger = logging.getLogger(__name__)
@@ -71,13 +62,13 @@ class GradientBase(ConverterBase):
 
         return OperatorBase
     """
-    # TODO discuss naming
-    def get_callable(self,
-                      operator: OperatorBase,
-                      params: Union[Parameter, ParameterVector, List[Parameter], Tuple[Parameter, Parameter],
+
+    def gradient_wrapper(self,
+                         operator: OperatorBase,
+                         params: Union[Parameter, ParameterVector, List[Parameter], Tuple[Parameter, Parameter],
                                List[Tuple[Parameter, Parameter]]],
-                      method: str = 'param_shift',
-                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+                         method: str = 'param_shift',
+                         backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable(Iterable):
         """
         Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
         This callable can be used as gradient function for optimizers.
@@ -87,7 +78,8 @@ class GradientBase(ConverterBase):
             method: The method used to compute the gradient. Either 'param_shift' or 'fin_diff' or 'lin_comb'.
             backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
         Returns:
-            callable: Function to compute a gradient, Hessian or QFI for a given parameter array.
+            callable(param_values): Function to compute a gradient, Hessian or QFI. The function takes an Iterable
+            as argument which holds the parameter values.
 
         """
 
@@ -105,35 +97,6 @@ class GradientBase(ConverterBase):
                 else:
                     converter = CircuitSampler(backend=backend).convert(self.convert(operator, params, method))
         return lambda p_values: converter.bind_params(dict(zip(params, p_values))).eval()
-
-
-    def _get_gate_generator(self, operator, param):
-        r"""
-        Need to figure out what gate param corresponds to and return the
-        Hermitian generator of that rotation.
-        """
-
-        return
-
-    #TODO I need to think about how this method will traverse operator,
-    #  for example, if operator contains multiple different circuits,
-    #  then we may need to worry about name collisions!
-
-    # def parameter_expression_grad(self, pe, param):
-    #     deriv =sy.diff(sy.sympify(str(pe)), param)
-    #
-    #     symbol_map = {}
-    #     symbols = deriv.free_symbols
-    #
-    #     for s in symbols:
-    #         for p in pe.parameters:
-    #             if s.name == p.name:
-    #                 symbol_map[p] = s
-    #                 break
-    #     assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-    #
-    #     return ParameterExpression(symbol_map, deriv)
-
 
     def gate_gradient_dict(self,
                            gate: Gate) -> List[Tuple[List[complex], List[Instruction]]]:
@@ -246,21 +209,7 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
-        # deriv =sy.diff(sy.sympify(str(param_expr)), str(param))
-        #
-        # symbol_map = {}
-        # symbols = deriv.free_symbols
-        #
-        # for s in symbols:
-        #     for p in param_expr.parameters:
-        #         if s.name == p.name:
-        #             symbol_map[p] = s
-        #             break
-        #
-        # assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-        #
-        # return ParameterExpression(symbol_map, deriv)
-
+        import sympy as sy
         expr = param_expr._symbol_expr
         keys = param_expr._parameter_symbols[param]
         expr_grad = 0
@@ -363,56 +312,3 @@ class GradientBase(ConverterBase):
                     if c not in circuits:
                         circuits.append(c)
         return circuits
-
-    def append_Z_measurement(self, operator):
-        if isinstance(operator, ListOp):
-            return operator.traverse(self.append_Z_measurement)
-        elif isinstance(operator,StateFn):
-            if operator.is_measurement == True:
-                return operator.traverse(self.append_Z_measurement)      
-        elif isinstance(operator, PauliOp):
-            return (Z^operator)
-        if isinstance(operator,(QuantumCircuit,CircuitStateFn, CircuitOp)):
-            #print((operator))
-            
-            operator.primitive.add_register(QuantumRegister(1, name="ancilla"))   
-        
-        return operator
-
-    # For now not needed
-    # @staticmethod
-    # def replace_gate(circuit: QuantumCircuit,
-    #                 gate_to_replace: Gate,
-    #                 gate_to_insert: Gate,
-    #                 qubits: Optional[List[Qubit]] = None,
-    #                 additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None) -> bool:
-    #     """Insert a gate into the circuit.
-    #
-    #     Args:
-    #         circuit: The circuit onto which the gare is added.
-    #         gate_to_replace: A gate instance which shall be replaced.
-    #         gate_to_insert: The gate to be inserted instead.
-    #         qubits: The qubits on which the gate is inserted. If None, the qubits of the
-    #             reference_gate are used.
-    #         additional_qubits: If qubits is None and the qubits of the reference_gate are
-    #             used, this can be used to specify additional qubits before (first list in
-    #             tuple) or after (second list in tuple) the qubits.
-    #
-    #     Returns:
-    #         True, if the insertion has been successful, False otherwise.
-    #     """
-    #     for i, op in enumerate(circuit.data):
-    #         if op[0] == gate_to_replace:
-    #             circuit.data = circuit.data.pop(i) # remove gate
-    #             if isinstance(gate_to_insert, IGate()):
-    #                 return True
-    #             #TODO check qubits placing
-    #             qubits = qubits or op[1][-(gate_to_replace.num_qubits - gate_to_replace.num_clbits):]
-    #             if additional_qubits:
-    #                 qubits = additional_qubits[0] + qubits + additional_qubits[1]
-    #             op_to_insert = (gate_to_insert, qubits, [])
-    #             insertion_index = i
-    #             circuit.data.insert(insertion_index, op_to_insert)
-    #             return True
-    #
-    #     return False

@@ -13,15 +13,12 @@
 # that they have been altered from the originals.
 
 """The module to compute the Hessian using the parameter shift method."""
-from functools import partial
-import numpy as np
-from copy import deepcopy
+
 from typing import Optional, Union, List, Tuple
 
-from qiskit.aqua.operators import OperatorBase, ListOp, ComposedOp
-from qiskit.circuit import Parameter, ParameterVector
+from qiskit.aqua.operators import OperatorBase, ListOp
+from qiskit.circuit import Parameter
 
-from ..gradient_base import GradientBase
 from ..gradient.gradient import GradientParamShift
 
 
@@ -31,20 +28,22 @@ class HessianParamShift(GradientParamShift):
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[Tuple[Parameter, Parameter],
-                                       List[Tuple[Parameter, Parameter]]]] = None
-                ) -> OperatorBase:
+                                       List[Tuple[Parameter, Parameter]]]] = None,
+                analytic: bool = True) -> OperatorBase:
         r"""
         Args:
             operator: The measurement operator we are taking the gradient of
             params: The parameters we are taking the gradient with respect to
+            analytic: If True use the parameter shift rule to compute analytic gradients,
+                      else use a finite difference approach
 
         Returns:
             An operator whose evaluation yeild the Hessian
         """
         if isinstance(params, tuple):
-            return self.parameter_shift(self.parameter_shift(operator, params[0]), params[1])
+            return self.parameter_shift(self.parameter_shift(operator, params[0]), params[1], analytic=analytic)
 
         return ListOp(
-            [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1])
+            [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1], analytic=analytic)
              for pair in params]
             )

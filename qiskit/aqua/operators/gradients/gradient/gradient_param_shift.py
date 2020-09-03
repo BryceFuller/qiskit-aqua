@@ -13,9 +13,8 @@
 # that they have been altered from the originals.
 
 """The module to compute the state gradient with the parameter shift rule."""
-from typing import Optional, Callable, Union, List, Tuple
-import logging
-from functools import partial, reduce
+from typing import Optional, Union, List
+from functools import partial
 import numpy as np
 from copy import deepcopy
 
@@ -26,7 +25,7 @@ from ...list_ops.composed_op import ComposedOp
 
 
 from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
-from qiskit.aqua.operators import OperatorBase
+from qiskit.aqua.operators import OperatorBase, StateFn, Zero, One
 from ..gradient_base import GradientBase
 
 
@@ -49,32 +48,26 @@ class GradientParamShift(GradientBase):
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
-
-        # TODO Look through state and decompose gates which cannot be evaluated with the parameter
-        # shift rule. This seems like it could be it's own converter??
-        # decomposed_state = self.decompose_to_two_unique_eigenval(state_operator, params)
-
-        # TODO Note to above --> all are pi/2
         # parameter_shift will return a ListOp of the same size as params
         # one SummedOp per parameter.
-        if analytic:
-            return self.parameter_shift(operator, params)
-            #TODO move the logic for parameter shifting from gradient_base here
-        else:
-            pass
-            # TODO add finite difference
+        return self.parameter_shift(operator, params, analytic)
 
     def parameter_shift(self,
                         operator: OperatorBase,
-                        params: Union[Parameter, ParameterVector, List]) -> OperatorBase:
+                        params: Union[Parameter, ParameterVector, List],
+                        analytic: bool = True) -> OperatorBase:
 
         r"""
         Args:
             operator: the operator containing circuits we are taking the derivative of
             params: The parameters (ω) we are taking the derivative with respect to. If
                     a ParameterVector is provided, each parameter will be shifted.
+            analytic: If True use the parameter shift rule to compute analytic gradients,
+                      else use a finite difference approach
         Returns:
-            param_shifted_op: A ListOp of SummedOps corresponding to [r*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
+            param_shifted_op: A ListOp of SummedOps corresponding to [2*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
+            or for analytic = False ListOp of SummedOps corresponding to [(V(ω_i + 1e-8) - V(ω_i - 1e-8))/2.e-8
+            for w_i in params]
         """
         if isinstance(params, (ParameterVector, List)):
             param_grads = [self.parameter_shift(operator, param) for param in params]
@@ -108,14 +101,14 @@ class GradientParamShift(GradientBase):
 
             if len(circs) > 1:
                 # Understand how this happens
-                raise Error
+                raise TypeError('Please define an operator with a single circuit representing the quantums state.')
             elif len(circs) == 0:
                 print("No circuits found in: ", operator)
                 return operator
             circ = circs[0]
 
             if param not in circ._parameter_table:
-                return None
+                return ~StateFn(Zero) @ One
 
             shifted_ops = []
             for i in range(len(circ._parameter_table[param])):
@@ -140,27 +133,28 @@ class GradientParamShift(GradientBase):
                 p_param = pshift_gate.params[0]
                 m_param = mshift_gate.params[0]
 
-                # TODO: Add check that asserts a NotImplementedError if gate is not a standard qiskit gate.
-                # Assumes the gate is a pauli rotation!
-                shift_constant = 0.5
+                # Assumes the gate is a standard qiskit gate
+
+                if analytic:
+                    shift_constant = 0.5
+                    pshift_gate.params[0] = (p_param + (np.pi / (4*shift_constant)))
+                    mshift_gate.params[0] = (m_param - (np.pi / (4*shift_constant)))
+                else:
+                    shift_constant = 1.
+                    pshift_gate.params[0] = (p_param + (1e-8 / (2.e-8)))
+                    mshift_gate.params[0] = (m_param - (1e-8 / (2.e-8)))
+
+                shifted_op = shift_constant * (pshift_op - mshift_op)
 
                 if isinstance(p_param, ParameterExpression) and not isinstance(p_param, Parameter):
                         expr_grad = self.parameter_expression_grad(p_param, param)
                         shifted_op *= expr_grad
 
-                pshift_gate.params[0] = (p_param + (np.pi / (4*shift_constant)))
-                mshift_gate.params[0] = (m_param - (np.pi / (4*shift_constant)))
-
-                shifted_op = shift_constant * (pshift_op - mshift_op)
-
-
-                """
-                # If the rotation angle is actually a parameter expression of param, then handle the chain rule
-                
-                """
-
                 shifted_ops.append(shifted_op)
 
-            return shifted_op.reduce()
+            if not shifted_op.reduce():
+                return ~StateFn(Zero) @ One
+            else:
+                return shifted_op.reduce()
             #return SummedOp(shifted_ops).reduce()
 

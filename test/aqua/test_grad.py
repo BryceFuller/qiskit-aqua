@@ -84,7 +84,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
-                                                 correct_values[i], decimal=4)
+                                                 correct_values[i], decimal=1)
 
     def test_state_lin_comb_grad(self):
         """Test the linear combination state gradient
