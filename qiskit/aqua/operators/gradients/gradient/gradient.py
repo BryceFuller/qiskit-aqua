@@ -17,7 +17,6 @@ from collections.abc import Iterable
 from functools import partial
 from typing import Optional, Union, List, Callable
 import numpy as np
-import sympy as sy
 from jax import grad, jit
 
 from qiskit import QuantumCircuit
@@ -121,6 +120,7 @@ class Gradient(GradientBase):
 
         def is_coeff_one(coeff):
             if isinstance(coeff, ParameterExpression):
+                import sympy as sy
                 expr = coeff._symbol_expr
                 return expr == 1.0
             return coeff == 1
@@ -345,23 +345,7 @@ class Gradient(GradientBase):
         Returns:
             Parameter expression representing the gradient of param_expr w.r.t. param
         """
-        """
-        deriv = sy.diff(sy.sympify(str(param_expr)), param)
-
-        symbol_map = {}
-        symbols = deriv.free_symbols
-
-        for s in symbols:
-            for p in param_expr.parameters:
-                if s.name == p.name:
-                    symbol_map[p] = s
-                    break
-
-        assert len(symbols) == len(symbol_map), "Unaccounted for symbols!"
-
-        return ParameterExpression(symbol_map, deriv)
-
-        """
+        import sympy as sy
         expr = param_expr._symbol_expr
         keys = param._parameter_symbols[param]
         expr_grad = 0
@@ -370,7 +354,6 @@ class Gradient(GradientBase):
         for key in keys:
             expr_grad += sy.Derivative(expr, key).doit()
         return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
-
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

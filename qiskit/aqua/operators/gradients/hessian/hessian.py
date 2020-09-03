@@ -14,15 +14,23 @@
 # that they have been altered from the originals.
 
 """The module to compute Hessians."""
+from functools import reduce
+import numpy as np
+from jax import grad, jit
 
 from typing import Optional, Union, List, Tuple
 
-from qiskit.circuit import Parameter
+from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
+from qiskit.aqua.aqua_globals import AquaError
 from qiskit.aqua.operators.operator_base import OperatorBase
-from qiskit.aqua.operators.list_ops.list_op import ListOp
+from qiskit.aqua.operators.list_ops import ListOp, ComposedOp, SummedOp, TensoredOp
+from qiskit.aqua.operators import Zero, One, CircuitStateFn, StateFn
+
 from .hessian_lin_comb import HessianLinComb
+from .hessian_param_shift import HessianParamShift
 
 from ..gradient_base import GradientBase
+from ..gradient import Gradient
 
 
 class Hessian(GradientBase):
@@ -148,7 +156,7 @@ class Hessian(GradientBase):
                 return HessianParamShift().convert(operator, params, analytic=False)
                 # return self.parameter_shift(operator, param)
             elif method == 'lin_comb':
-                return HessiantLinComb().convert(operator, params)
+                return HessianLinComb().convert(operator, params)
                 # @CHRISTA, here is where you'd check if you need to
                 # decompose some operator into circuits or do
                 # something other than the parameter shift rule. # TODO is this what I need?
