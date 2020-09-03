@@ -193,7 +193,7 @@ class DictStateFn(StateFn):
         """
 
         if front is None:
-            return self.primitive
+            return self
 
         if not self.is_measurement and isinstance(front, OperatorBase):
             raise ValueError(

@@ -311,12 +311,12 @@ class ListOp(OperatorBase):
             if all(isinstance(op, DictStateFn) for op in evals):
                 if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
                     raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
-                inputs = list(reduce(lambda x,y: x.union(set(y.keys())), [set()]+evals))
+                inputs = list(reduce(lambda x,y: x.union(set(y.primitive.keys())), [set()]+evals))
                 outputs = []
                 for bitstr in inputs:
-                    vals = [op[bitstr] if bitstr in op else 0 for op in evals]
+                    vals = [op.primitive[bitstr]*op._coeff if bitstr in op.primitive else 0 for op in evals]
                     outputs.append(self.combo_fn(vals))
-                return dict(zip(inputs,outputs))
+                return DictStateFn(dict(zip(inputs,outputs)))
             elif all(isinstance(op, VectorStateFn) for op in evals):
                 #All VectorStateFn's must have the same primitive type
                 if not all(isinstance(op, type(evals[0])) for op in evals):

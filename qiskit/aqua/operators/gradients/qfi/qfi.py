@@ -61,13 +61,9 @@ class QFI(GradientBase):
             ValueError: If the value for ``approx`` is not supported.
         """
 
-        #TODO what is this?
-        # Currently there's some ambiguity about how parameters are ordered that needs to be
-        # decided. In particular with cases where a parameter occurs more than once in a circuit,
-        # where more than one circuit are provided. One option might be to include a method that
-        # returns the parameter ordering and allow the user to call it directly to ask for the
-        # parameters. Or create an input argument to specify if the parameter mapp_ing should be
-        # returned.
+        #TODO: if a ComposedOp is given, try to extract the CircuitStateFn from it and discard
+        # the measurement. Throw a warning though. 
+
 
         if params is None:
             raise ValueError("No parameters were provided to differentiate")
@@ -75,9 +71,9 @@ class QFI(GradientBase):
         if approx is None:
             return self._full_qfi(operator, params)
         elif approx == 'diagonal':
-            return self._diagonal_qfi(operator)
+            return self.diagonal_qfi(operator, params)
         elif approx == 'block_diagonal':
-            return self._block_diagonal_qfi(operator)
+            return self.block_diagonal_qfi(operator, params)
         else:
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
@@ -358,12 +354,13 @@ class QFI(GradientBase):
         # Return the full QFI
         return ListOp(qfi_operators)
 
-    def _block_diagonal_qfi(self,
-                            operator: Union[CircuitOp, CircuitStateFn],
-                            # target_params: Optional[Union[Parameter,
-                            #                               ParameterVector,
-                            #                               List[Parameter]]] = None
-                            ) -> OperatorBase:
+    def block_diagonal_qfi(self,
+                           operator: Union[CircuitOp, CircuitStateFn],
+                           params: Optional[Union[Parameter,
+                                                          ParameterVector,
+                                                          List[Parameter]]] = None
+                           ) -> OperatorBase:
+
         """TODO"""
         if not isinstance(operator, (CircuitOp, CircuitStateFn)):
             raise NotImplementedError('operator must be a CircuitOp or CircuitStateFn')
@@ -375,8 +372,14 @@ class QFI(GradientBase):
         if layers[-1].num_parameters == 0:
             layers.pop(-1)
 
-        block_params = [self._sort_params(layer.parameters) for layer in layers]
-
+        block_params = [list(layer.parameters) for layer in layers]
+        # Remove any parameters found which are not in params
+        block_params = [[param for param in block if param in params] for block in block_params]
+        
+        # Determine the permutation needed to ensure that the final
+        # operator is consistent with the ordering of the input parameters
+        perm = [params.index(param) for block in block_params for param in block]
+        
         psis = [CircuitOp(layer) for layer in layers]
         for i, psi in enumerate(psis):
             if i == 0:
@@ -391,13 +394,8 @@ class QFI(GradientBase):
         # TODO: currently the input: target_params is ignored. This should either be removed,
         # or logic should be added to prevent evaluating the QFI on certain params.
 
-        # TODO this assumes a NLocal circuit, normal circuits dont have this attribute!
-        if hasattr(circuit, 'ordered_parameters'):
-            params = circuit.ordered_parameters
-        else:
-            raise NotImplementedError('TODO relying on the ordered_parameters attribute')
-
         generators = self.get_generators(params, circuit)
+        #param_expressions = 
 
         blocks = []
 
@@ -414,34 +412,59 @@ class QFI(GradientBase):
                 psi_gen_i = PauliExpectation().convert(psi_gen_i)
                 single_terms[i] = psi_gen_i
 
+            def get_parameter_expression(circuit, param):
+                if len(circuit._parameter_table[param]) > 1:
+                    raise NotImplementedError("The QFI Approximations do not yet support multiple "
+                                             "gates parameterized by a single parameter. For such circuits "
+                                             "set approx = None")
+                gate = circuit._parameter_table[param][0][0]
+                assert len(gate.params) == 1, "Circuit was not properly decomposed"
+                param_value = gate.params[0]
+                return param_value
+
             # Calculate all double-operator terms <psi_i|generator_j @ generator_i|psi_i>
             # and build composite operators for each matrix entry
             for i, p_i in enumerate(params):
                 generator_i = generators[p_i]
-                for j, p_j in enumerate(params):
+                param_expr_i = get_parameter_expression(circuit, p_i)
 
+                for j, p_j in enumerate(params):
                     if i == j:
                         block[i][i] = ListOp([single_terms[i]], combo_fn=lambda x: 1 - x[0] ** 2)
+                        if isinstance(param_expr_i, ParameterExpression) and not isinstance(param_expr_i, Parameter):
+                            expr_grad_i = self.parameter_expression_grad(param_expr_i, p_i)
+                            block[i][j] *= (expr_grad_i)*(expr_grad_i)
                         continue
 
                     generator_j = generators[p_j]
                     generator = ~generator_j @ generator_i
+                    param_expr_j = get_parameter_expression(circuit, p_j)
+
+                    
 
                     psi_gen_ij = ~StateFn(generator) @ psi_i @ Zero
                     psi_gen_ij = PauliExpectation().convert(psi_gen_ij)
                     cross_term = ListOp([single_terms[i], single_terms[j]], combo_fn=np.prod)
                     block[i][j] = psi_gen_ij - cross_term
 
+                    if isinstance(param_expr_i, ParameterExpression) and not isinstance(param_expr_i, Parameter):
+                        expr_grad_i = self.parameter_expression_grad(param_expr_i, p_i)
+                        block[i][j] *= expr_grad_i
+                    if isinstance(param_expr_j, ParameterExpression) and not isinstance(param_expr_j, Parameter):
+                        expr_grad_j = self.parameter_expression_grad(param_expr_j, p_j)
+                        block[i][j] *= expr_grad_j
+
             wrapped_block = ListOp([ListOp(row) for row in block])
             blocks.append(wrapped_block)
 
-        block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: np.real(block_diag(*x)))
+        block_diagonal_qfi = ListOp(oplist=blocks, combo_fn=lambda x: np.real(block_diag(*x))[:,perm][perm,:])
         return block_diagonal_qfi
 
-    def _diagonal_qfi(self,
-                      operator: Union[CircuitOp, CircuitStateFn],
-                      #  target_params: Union[Parameter, ParameterVector, List] = None
-                      ) -> OperatorBase:
+    def diagonal_qfi(self,
+                     operator: Union[CircuitOp, CircuitStateFn],
+                     params: Union[Parameter, ParameterVector, List] = None
+                     ) -> OperatorBase:
+
         """TODO"""
         if not isinstance(operator, (CircuitOp, CircuitStateFn)):
             raise NotImplementedError
@@ -459,18 +482,24 @@ class QFI(GradientBase):
                 continue
             psis[i] = psi @ psis[i - 1]
 
-        # Get generators
         # TODO: make this work for other types of rotations
         # NOTE: This assumes that each parameter only affects one rotation.
         # we need to think more about what happens if multiple rotations
         # are controlled with a single parameter.
-        # TODO: currently the input: target_params is ignored. This should either be removed,
-        # or logic should be added to prevent evaluating the QFI on certain params.
-        params = circuit.ordered_parameters
         generators = self.get_generators(params, circuit)
 
         diag = []
         for param in params:
+            if len(circuit._parameter_table[param]) > 1:
+                raise NotImplementedError("The QFI Approximations do not yet support multiple "
+                                         "gates parameterized by a single parameter. For such circuits "
+                                         "set approx = None")
+                
+            gate = circuit._parameter_table[param][0][0]
+            
+            assert len(gate.params) == 1, "Circuit was not properly decomposed"
+            
+            param_value = gate.params[0]
             generator = generators[param]
             meas_op = ~StateFn(generator)
 
@@ -478,6 +507,9 @@ class QFI(GradientBase):
             psi = [(psi) for psi in psis if param in psi.primitive.parameters][0]
 
             op = meas_op @ psi @ Zero
+            if isinstance(param_value, ParameterExpression) and not isinstance(param_value, Parameter):
+                            expr_grad = self.parameter_expression_grad(param_value, param)
+                            op *= expr_grad
             rotated_op = PauliExpectation().convert(op)
             diag.append(rotated_op)
 
@@ -518,7 +550,7 @@ class QFI(GradientBase):
 
         converged = False
 
-        for _ in range(dag.depth()):
+        for _ in range(dag.depth()+1):
             if converged:
                 break
 
@@ -534,8 +566,9 @@ class QFI(GradientBase):
                     qargs = next_node.qargs
                     indices = [qarg.index for qarg in qargs]
 
-                    # If the next_node can be moved back a layer without conflicting
-                    # without becoming the descendant of a parameterized gate, then do it.
+                    # If the next_node can be moved back a layer without
+                    # without becoming the descendant of a parameterized gate, 
+                    # then do it.
                     if not any([ledger[x] for x in indices]):
 
                         apply_node_op(next_node, layer)
@@ -565,8 +598,12 @@ class QFI(GradientBase):
 
         for layer in layers:
             instr = layer['graph'].op_nodes()[0].op
+            if len(instr.params) == 0:
+                continue
+            assert len(instr.params) == 1, "Circuit was not properly decomposed"
+            param_value = instr.params[0]
             for param in params:
-                if param in instr.params:
+                if param in param_value.parameters:
 
                     if isinstance(instr, RYGate):
                         generator = Y
