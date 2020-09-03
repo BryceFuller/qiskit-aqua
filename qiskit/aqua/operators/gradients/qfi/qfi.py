@@ -82,12 +82,11 @@ class QFI(GradientBase):
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
 
-    # TODO discuss naming
-    def get_callable(self,
-                      operator: OperatorBase,
-                      params: Union[Parameter, ParameterVector, List[Parameter]],
-                      approx: Optional[str] = None,
-                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+    def gradient_wrapper(self,
+                         operator: OperatorBase,
+                         params: Union[Parameter, ParameterVector, List[Parameter]],
+                         approx: Optional[str] = None,
+                         backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable(Iterable):
         """
         Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
         This callable can be used as gradient function for optimizers.
@@ -97,7 +96,8 @@ class QFI(GradientBase):
             approx: Which approximation of the QFI to use: [None, 'diagonal', 'block_diagonal']
             backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
         Returns:
-            callable: Function to compute a gradient, Hessian or QFI for a given parameter array.
+            callable(param_values): Function to compute a gradient, Hessian or QFI. The function takes an Iterable
+            as argument which holds the parameter values.
 
         """
 

@@ -62,13 +62,13 @@ class GradientBase(ConverterBase):
 
         return OperatorBase
     """
-    # TODO discuss naming
-    def get_callable(self,
-                      operator: OperatorBase,
-                      params: Union[Parameter, ParameterVector, List[Parameter], Tuple[Parameter, Parameter],
+
+    def gradient_wrapper(self,
+                         operator: OperatorBase,
+                         params: Union[Parameter, ParameterVector, List[Parameter], Tuple[Parameter, Parameter],
                                List[Tuple[Parameter, Parameter]]],
-                      method: str = 'param_shift',
-                      backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable:
+                         method: str = 'param_shift',
+                         backend: Optional[Union[BaseBackend, QuantumInstance]] = None) -> callable(Iterable):
         """
         Get a callable function which provides the respective gradient, Hessian or QFI for given parameter values.
         This callable can be used as gradient function for optimizers.
@@ -78,7 +78,8 @@ class GradientBase(ConverterBase):
             method: The method used to compute the gradient. Either 'param_shift' or 'fin_diff' or 'lin_comb'.
             backend: The quantum backend or QuantumInstance to use to evaluate the gradient, Hessian or QFI.
         Returns:
-            callable: Function to compute a gradient, Hessian or QFI for a given parameter array.
+            callable(param_values): Function to compute a gradient, Hessian or QFI. The function takes an Iterable
+            as argument which holds the parameter values.
 
         """
 
