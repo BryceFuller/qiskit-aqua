@@ -78,14 +78,15 @@ class GradientLinComb(GradientBase):
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, ListOp):
             return operator.traverse(partial(self._prepare_operator, params=params))
+        elif isinstance(operator, (CircuitStateFn)):
+            print('prob_grad situation')
+            return self._grad_states(operator, target_params=params)
         elif isinstance(operator, StateFn):
             if operator.is_measurement:
                 self._operator_has_measurement = True
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, PrimitiveOp):
             return operator
-        elif isinstance(operator, (CircuitStateFn)):
-            return self._grad_states(operator, target_params=params)
         return operator
 
     def _grad_states(self,
@@ -225,7 +226,7 @@ class GradientLinComb(GradientBase):
                                     state *= expr_grad
                                 else:
                                     state = ~StateFn(One) @ Zero
-                            state = ListOp(state, combo_fn=combo_fn)
+                            state = ListOp([state], combo_fn=combo_fn)
 
                         if m == 0 and k == 0:
                             op = state
