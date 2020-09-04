@@ -331,11 +331,7 @@ class ListOp(OperatorBase):
                 if hasattr(primitive_type, 'data'):
                     vectors = [op.data for op in vectors]
                 dim = len(vectors[0])
-                print(dim)
-                print([len(vec) for vec in vectors])
                 combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
-                print(combined_data)
-                print(len(combined_data))
                 return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=evals[0].is_measurement)
 
         if all(isinstance(op, OperatorBase) for op in evals):

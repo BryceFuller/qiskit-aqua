@@ -185,13 +185,6 @@ class DictStateFn(StateFn):
              front: Optional[Union[str, Dict[str, complex], np.ndarray, OperatorBase]] = None
              ) -> Union[OperatorBase, float, complex]:
 
-        """
-        if front is None:
-            vector_state_fn = self.to_matrix_op().eval()
-            vector_state_fn = cast(OperatorBase, vector_state_fn)
-            return vector_state_fn
-        """
-
         if front is None:
             return self
 

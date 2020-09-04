@@ -108,7 +108,7 @@ class GradientParamShift(GradientBase):
             circ = circs[0]
 
             if param not in circ._parameter_table:
-                return ~StateFn(Zero) @ One
+                return ~Zero@One
 
             shifted_ops = []
             for i in range(len(circ._parameter_table[param])):
