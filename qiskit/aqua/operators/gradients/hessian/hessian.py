@@ -118,11 +118,11 @@ class Hessian(GradientBase):
 
             grad_op = 0
             #Avoid creating operators that will evaluate to zero
-            if dd_op is not None and not is_coeff_c(coeff, 0):
+            if dd_op != ~Zero@One and not is_coeff_c(coeff, 0):
                 grad_op += coeff*dd_op
-            if d0_op is not None and not is_coeff_c(d1_coeff, 0):
+            if d0_op != ~Zero@One and not is_coeff_c(d1_coeff, 0):
                 grad_op += d1_coeff*d0_op
-            if d1_op is not None and not is_coeff_c(d0_coeff, 0):
+            if d1_op != ~Zero@One and not is_coeff_c(d0_coeff, 0):
                 grad_op += d0_coeff*d1_op
             if not is_coeff_c(dd_coeff, 0):
                 grad_op += dd_coeff*op
