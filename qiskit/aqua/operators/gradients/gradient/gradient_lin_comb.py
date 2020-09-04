@@ -79,12 +79,12 @@ class GradientLinComb(GradientBase):
         elif isinstance(operator, ListOp):
             return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, (CircuitStateFn)):
-            print('prob_grad situation')
             return self._grad_states(operator, target_params=params)
         elif isinstance(operator, StateFn):
             if operator.is_measurement:
-                self._operator_has_measurement = True
                 return operator.traverse(partial(self._prepare_operator, params=params))
+            else:
+                return self._grad_states(operator, target_params=params)
         elif isinstance(operator, PrimitiveOp):
             return operator
         return operator
@@ -149,6 +149,7 @@ class GradientLinComb(GradientBase):
         # create a copy of the original state with an additional work_q register
         # Get the states needed to compute the gradient
         for param in target_params:  # loop over parameters
+            # Check if the parameter occurs in the quantum state
             if param not in state_qc._parameter_table.get_keys():
                 op = ~StateFn(One) @ Zero
             else:
@@ -200,19 +201,10 @@ class GradientLinComb(GradientBase):
                                     state = ~StateFn(One) @ Zero
                         else:
                             def combo_fn(x):
-                                # TODO parameter expression
-                                x = x.primitive
                                 # Generate the operator which computes the linear combination
                                 lin_comb_op = (I ^ state_op.num_qubits) ^ Z
                                 lin_comb_op = lin_comb_op.to_matrix()
-                                # Compute a partial trace over the working qubit needed to compute the linear combination
-                                if isinstance(x, list) or isinstance(x, np.ndarray):
-                                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                    return [np.diag(partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
-                                            for item in x]
-                                else:
-                                    # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                    return np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
+                                return list(np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data))
 
                             if gate_param == param:
                                 pass

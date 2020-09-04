@@ -250,26 +250,18 @@ class HessianLinComb(GradientBase):
 
                                 else:
                                     def combo_fn(x):
-
-                                        x = x.primitive
                                         # Generate the operator which computes the linear combination
-                                        lin_comb_op = (I ^ state_op.num_qubits) ^ Z
+                                        lin_comb_op = 4 * (I ^ (state_op.num_qubits + 1)) ^ Z
                                         lin_comb_op = lin_comb_op.to_matrix()
-                                        # Compute a partial trace over the working qubit needed to compute the
-                                        # linear combination
-                                        if isinstance(x, list) or isinstance(x, np.ndarray):
-                                            # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                            return [np.diag(
-                                                partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data)
-                                                for item in x]
-                                        else:
-                                            # TODO check if output is prob or sv - in case of prob get rid of np.dot
-                                            return np.diag(
-                                                partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data)
-
-                                    # TODO parameter expression
-
+                                        return list(
+                                            np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0, 1]).data))
                                     term = ListOp(term, combo_fn=combo_fn)
+                                    if isinstance(gate_param_a, ParameterExpression):
+                                        expr_grad = self.parameter_expression_grad(gate_param_a, param_a)
+                                        term *= expr_grad
+                                    if isinstance(gate_param_b, ParameterExpression):
+                                        expr_grad = self.parameter_expression_grad(gate_param_a, param_a)
+                                        term *= expr_grad
 
                                 if i == 0 and j == 0 and m == 0 and n == 0:
                                     hessian_op = term
