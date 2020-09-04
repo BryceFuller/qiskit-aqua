@@ -51,8 +51,10 @@ from .primitive_op import PrimitiveOp
 from .pauli_op import PauliOp
 from .matrix_op import MatrixOp
 from .circuit_op import CircuitOp
+from .cost_fn_op import CostFnOp
 
 __all__ = ['PrimitiveOp',
            'PauliOp',
            'MatrixOp',
-           'CircuitOp']
+           'CircuitOp',
+           'CostFnOp']
