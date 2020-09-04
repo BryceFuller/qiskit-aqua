@@ -68,12 +68,15 @@ class QFI(GradientBase):
         if params is None:
             raise ValueError("No parameters were provided to differentiate")
 
+        expec_op = PauliExpectation(group_paulis=False).convert(operator).reduce()
+        cleaned_op = self.factor_coeffs_out_of_composed_op(expec_op)
+
         if approx is None:
-            return self._full_qfi(operator, params)
+            return self._full_qfi(cleaned_op, params)
         elif approx == 'diagonal':
-            return self.diagonal_qfi(operator, params)
+            return self.diagonal_qfi(cleaned_op, params)
         elif approx == 'block_diagonal':
-            return self.block_diagonal_qfi(operator, params)
+            return self.block_diagonal_qfi(cleaned_op, params)
         else:
             raise ValueError("Unrecognized input provided for approx. Valid inputs are "
                              "[None, 'diagonal', 'block_diagonal'].")
