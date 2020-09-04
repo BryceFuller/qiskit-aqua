@@ -54,6 +54,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         #                                seed_simulator=2,
         #                                seed_transpiler=2)
         pass
+    #
 
     @data('lin_comb', 'param_shift', 'fin_diff')
     def test_gradient(self, method):
@@ -206,8 +207,9 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(), correct_values[i])
 
-    def test_prob_lin_comb_grad(self):
-        """Test the linear combination probability gradient
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_prob_grad(self, method):
+        """Test the probability gradient
         dp0/da = cos(a)sin(b) / 2
         dp1/da = - cos(a)sin(b) / 2
         dp0/db = sin(a)cos(b) / 2
@@ -226,14 +228,14 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
 
         op = CircuitStateFn(primitive=qc, coeff=1.)
 
-        prob_grad = GradientLinComb().convert(operator=op, params=params)
+        prob_grad = Gradient().convert(operator=op, params=params, method=method)
         values_dict = [{a: np.pi / 4, b: 0}, {params[0]: np.pi / 4, params[1]: np.pi / 4},
                        {params[0]: np.pi / 2, params[1]: np.pi}]
         correct_values = [[[0, 0], [1/(2*np.sqrt(2)), - 1/(2*np.sqrt(2))]], [[1/4, - 1/4], [1/4, - 1/4]],
                           [[0, 0], [- 1/2, 1/2]]]
         for i, value_dict in enumerate(values_dict):
-            #TODO eval of stateFn return the primitive and compatible with ComboFn
-            np.testing.assert_array_almost_equal(prob_grad.assign_parameters(value_dict).eval(), correct_values[i])
+            for j, prob_grad_result in enumerate(prob_grad.assign_parameters(value_dict).eval()):
+                np.testing.assert_array_almost_equal(prob_grad_result.primitive.data, correct_values[i][j])
 
     def test_qfi(self):
         """Test if the quantum fisher information calculation is correct
@@ -262,9 +264,9 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(qfi.assign_parameters(value_dict).eval(), correct_values[i])
 
-        # TODO block-diagonal, diagonal @Bryce
-
-    @data(('lin_comb', None), ('param_shift', None), ('lin_comb', 'diagonal'), ('param_shift', 'diagonal'))
+    #     # TODO block-diagonal, diagonal @Bryce
+    #
+    @data(('lin_comb', None), ('param_shift', None))
     @unpack
     def test_natural_gradient(self, method, approx):
 
@@ -283,7 +285,7 @@ class TestQuantumFisherInf(QiskitAquaTestCase):
         op = ~StateFn(H) @ CircuitStateFn(primitive=qc, coeff=1.)
         nat_grad = NaturalGradient().convert(operator=op, params=params, method=method, approx=approx)
         values_dict = [{params[0]: np.pi / 4, params[1]: np.pi/2}]
-        correct_values = [[-4.24264069e+00+3.89474415e-15j, -2.40000000e-17+3.46217143e-32j]]
+        correct_values = [[-4.2, 0]]
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(), correct_values[i],
                                                  decimal=1)
