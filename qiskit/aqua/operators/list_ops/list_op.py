@@ -321,7 +321,7 @@ class ListOp(OperatorBase):
                 #All VectorStateFn's must have the same primitive type
                 if not all(isinstance(op, type(evals[0])) for op in evals):
                     raise NotImplementedError("term-wise combo_fn not yet supported for mixed VectorStateFn primitives")
-                if not all(op.is_measurement ==  evals[0].is_measurement for op in evals):
+                if not all(op.is_measurement == evals[0].is_measurement for op in evals):
                     raise NotImplementedError("term-wise combo_fn not yet supported for mixed measurement and non-measurement StateFns")
                 #Get the actual data from each operator
                 vectors = [op.primitive*op._coeff for op in evals]
@@ -330,12 +330,9 @@ class ListOp(OperatorBase):
                 # So I had to use the below check.
                 if hasattr(primitive_type, 'data'):
                     vectors = [op.data for op in vectors]
-                dim = len(vectors[0])
-                print(dim)
-                print([len(vec) for vec in vectors])
-                combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
-                print(combined_data)
-                print(len(combined_data))
+                # dim = len(vectors[0])
+                # combined_data = [self.combo_fn([vec[index] for vec in vectors]) for index in range(dim)]
+                combined_data = self.combo_fn([vec for vec in vectors])
                 return VectorStateFn(primitive=primitive_type(combined_data), is_measurement=evals[0].is_measurement)
 
         if all(isinstance(op, OperatorBase) for op in evals):
