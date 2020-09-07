@@ -23,6 +23,7 @@ from typing import Optional, Union, List, Tuple
 from qiskit.circuit import Parameter, ParameterVector, ParameterExpression
 from qiskit.aqua.aqua_globals import AquaError
 from qiskit.aqua.operators.operator_base import OperatorBase
+from qiskit.aqua.operators.expectations import PauliExpectation
 from qiskit.aqua.operators.list_ops import ListOp, ComposedOp, SummedOp, TensoredOp
 from qiskit.aqua.operators import Zero, One, CircuitStateFn, StateFn
 
@@ -58,13 +59,15 @@ class Hessian(GradientBase):
         if isinstance(params, (ParameterVector, List)):
             # Case: a list of parameters were given, compute the Hessian for all param pairs
             if all(isinstance(param, Parameter) for param in params):
-                return ListOp([ListOp([self.autograd(operator, (p0, p1), method) for p1 in params]) for p0 in params])
+                return ListOp([ListOp([self.convert(operator, (p0, p1), method) for p1 in params]) for p0 in params])
             # Case: a list was given containing tuples of parameter pairs.
             # Compute the Hessian entries corresponding to these pairs of parameters. 
             elif all(isinstance(param, tuple) for param in params):
-                return ListOp([self.autograd(operator, param_pair, method) for param_pair in params])
+                return ListOp([self.convert(operator, param_pair, method) for param_pair in params])
 
-        return self.autograd(operator, params, method)
+        expec_op = PauliExpectation(group_paulis=False).convert(operator).reduce()
+        cleaned_op = self.factor_coeffs_out_of_composed_op(expec_op)
+        return self.autograd(cleaned_op, params, method)
 
     def autograd(self,
                 operator: OperatorBase,
@@ -113,24 +116,20 @@ class Hessian(GradientBase):
             dd_op = self.autograd(op, params, method)
             dd_coeff = self.parameter_expression_grad(d0_coeff, p1)
 
-            grad_op = None
-            summands = np.array([0,0,0,0])
-
+            grad_op = 0
             #Avoid creating operators that will evaluate to zero
-            if dd_op is not None and not is_coeff_c(coeff, 0):
-                summands[0] = coeff*dd_op
-            if d0_op is not None and not is_coeff_c(d1_coeff, 0):
-                summands[0] = d1_coeff*d0_op
-            if d1_op is not None and not is_coeff_c(d0_coeff, 0):
-                summands[0] = d0_coeff*d1_op
+            if dd_op != ~Zero@One and not is_coeff_c(coeff, 0):
+                grad_op += coeff*dd_op
+            if d0_op != ~Zero@One and not is_coeff_c(d1_coeff, 0):
+                grad_op += d1_coeff*d0_op
+            if d1_op != ~Zero@One and not is_coeff_c(d0_coeff, 0):
+                grad_op += d0_coeff*d1_op
             if not is_coeff_c(dd_coeff, 0):
-                summands[0] = dd_coeff*op
+                grad_op += dd_coeff*op
 
-            if np.all(summands == 0):
+            if grad_op == 0:
                 return ~Zero@One
-
-            grad_op = reduce(lambda x,y: x if y == 0 else x+y, summands)
-
+                
             return grad_op
 
         # Base Case, you've hit a ComposedOp!

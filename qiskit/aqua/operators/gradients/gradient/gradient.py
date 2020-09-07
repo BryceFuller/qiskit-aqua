@@ -25,7 +25,7 @@ from qiskit.aqua import AquaError
 
 from qiskit.aqua.operators import (
     OperatorBase, ListOp, SummedOp, ComposedOp, TensoredOp, CircuitOp, CircuitStateFn, StateFn, DictStateFn,
-    VectorStateFn, Zero, One, DictToCircuitSum
+    VectorStateFn, Zero, One, DictToCircuitSum, PauliExpectation
 )
 
 from .gradient_lin_comb import GradientLinComb
@@ -94,7 +94,11 @@ class Gradient(GradientBase):
 
         param = params
 
-        return self.autograd(operator, param, method)
+        #Preprocessing
+        #TODO think of better names...
+        expec_op = PauliExpectation(group_paulis=False).convert(operator).reduce()
+        cleaned_op = self.factor_coeffs_out_of_composed_op(expec_op)
+        return self.autograd(cleaned_op, param, method)
 
     def autograd(self,
                  operator: OperatorBase,
@@ -118,12 +122,11 @@ class Gradient(GradientBase):
             Exception: Unintended code is reached  # TODO proper warnings and errors
         """
 
-        def is_coeff_one(coeff):
+        def is_coeff_c(coeff, c):
             if isinstance(coeff, ParameterExpression):
-                import sympy as sy
                 expr = coeff._symbol_expr
-                return expr == 1.0
-            return coeff == 1
+                return expr == c
+            return coeff == c
 
         if isinstance(params, (ParameterVector, List)):
             param_grads = [self.autograd(operator, param, method) for param in params]
@@ -141,9 +144,9 @@ class Gradient(GradientBase):
 
         # by this point, it's only one parameter
         param = params
-
         # Handle Product Rules
-        if not is_coeff_one(operator._coeff):
+        if not is_coeff_c(operator._coeff, 1.0):
+
             # Separate the operator from the coefficient
             coeff = operator._coeff
             op = operator / coeff
@@ -151,17 +154,15 @@ class Gradient(GradientBase):
             d_op = self.autograd(op, param, method)
             # ..get derivative of the coeff
             d_coeff = self.parameter_expression_grad(coeff, param)
+            
 
-            if d_op is None:
-                # I need this term to evaluate to 0, but it needs to be an OperatorBase type
-                # We should find a more elegant solution for this.
-                d_op = ~Zero @ One
-            grad_op = coeff * d_op
-
-            # if the deriv of the coeff is not zero, then apply the product rule
-            if d_coeff._symbol_expr != 0:
-                grad_op += d_coeff * op
-
+            grad_op = 0
+            if d_op != ~Zero@One and not is_coeff_c(coeff, 0.0):
+                grad_op += coeff*d_op
+            if op != ~Zero@One and not is_coeff_c(d_coeff, 0.0):
+                grad_op += d_coeff*op 
+            if grad_op == 0:
+                grad_op = ~Zero@One
             return grad_op
 
         # Base Case, you've hit a ComposedOp!
@@ -171,7 +172,7 @@ class Gradient(GradientBase):
         # and moved out front.
         if isinstance(operator, ComposedOp):
             # Gradient of an expectation value
-            if not is_coeff_one(operator._coeff):
+            if not is_coeff_c(operator._coeff, 1.0):
                 raise AquaError('Operator pre-processing failed. Coefficients were not properly '
                                 'collected inside the ComposedOp.')
 
@@ -193,7 +194,7 @@ class Gradient(GradientBase):
 
         elif isinstance(operator, CircuitStateFn):
             # Gradient of an a state's sampling probabilities
-            if not is_coeff_one(operator._coeff):
+            if not is_coeff_c(operator._coeff, 1.0):
                 raise AquaError('Operator pre-processing failed. Coefficients were not properly '
                                 'collected inside the ComposedOp.')
 
@@ -329,30 +330,6 @@ class Gradient(GradientBase):
     #
     #     return partial(chain_rule_combo_fn, grad_combo_fn=grad_combo_fn)
     # ---------------------------------------------------------------------
-
-    # TODO get ParameterExpression in the different gradients
-    def parameter_expression_grad(self,
-                                  param_expr: ParameterExpression,
-                                  param: Parameter) -> ParameterExpression:
-
-        """Get the derivative of a parameter expression w.r.t. the underlying parameter keys.
-
-        Args:
-            param_expr: Parameter Expression for which we want to find the gradient w.r.t. param
-            param: Parameter w.r.t. which we want to take the derivative
-
-        Returns:
-            Parameter expression representing the gradient of param_expr w.r.t. param
-        """
-        import sympy as sy
-        expr = param_expr._symbol_expr
-        keys = param._parameter_symbols[param]
-        expr_grad = 0
-        if not isinstance(keys, Iterable):
-            keys = [keys]
-        for key in keys:
-            expr_grad += sy.Derivative(expr, key).doit()
-        return ParameterExpression(param_expr._parameter_symbols, expr=expr_grad)
 
     def _get_gates_for_param(self,
                              param: ParameterExpression,

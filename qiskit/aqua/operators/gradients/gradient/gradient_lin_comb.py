@@ -27,6 +27,7 @@ from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp, ComposedOp
 from qiskit.aqua.operators.primitive_ops.primitive_op import PrimitiveOp
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
 from qiskit.aqua.operators.operator_globals import Z, I, One, Zero
+from qiskit.aqua.operators.expectations import PauliExpectation
 from qiskit.quantum_info import partial_trace
 from ..gradient_base import GradientBase
 
@@ -49,7 +50,11 @@ class GradientLinComb(GradientBase):
         Returns:
             ListOp where the ith operator corresponds to the gradient wrt params[i]
         """
-        return self._prepare_operator(operator, params)
+
+        expec_op = PauliExpectation(group_paulis=False).convert(operator).reduce()
+        cleaned_op = self.factor_coeffs_out_of_composed_op(expec_op)
+
+        return self._prepare_operator(cleaned_op, params)
 
     def _prepare_operator(self, operator, params):
         if isinstance(operator, ComposedOp):
@@ -73,6 +78,8 @@ class GradientLinComb(GradientBase):
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, ListOp):
             return operator.traverse(partial(self._prepare_operator, params=params))
+        elif isinstance(operator, (CircuitStateFn)):
+            return self._grad_states(operator, target_params=params)
         elif isinstance(operator, StateFn):
             if operator.is_measurement:
                 return operator.traverse(partial(self._prepare_operator, params=params))
@@ -80,8 +87,6 @@ class GradientLinComb(GradientBase):
                 return self._grad_states(operator, target_params=params)
         elif isinstance(operator, PrimitiveOp):
             return operator
-        # elif isinstance(operator, (CircuitStateFn)):
-        #     return self._grad_states(operator, target_params=params)
         return operator
 
     def _grad_states(self,

@@ -115,6 +115,7 @@ class ComposedOp(ListOp):
         eval_list = self.oplist.copy()
         # Only one op needs to be multiplied, so just multiply the first.
         eval_list[0] = eval_list[0] * self.coeff  # type: ignore
+
         if front and isinstance(front, OperatorBase):
             eval_list = eval_list + [front]
         elif front:

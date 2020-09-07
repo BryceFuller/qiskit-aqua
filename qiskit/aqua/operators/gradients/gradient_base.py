@@ -15,8 +15,10 @@
 """ GradientBase Class """
 
 from collections.abc import Iterable
+import numpy as np
 
 from typing import Optional, Union, List, Tuple
+from functools import partial
 import logging
 
 
@@ -30,11 +32,14 @@ from qiskit.aqua import QuantumInstance, AquaError
 from ..converters import CircuitSampler
 
 from ..operator_base import OperatorBase
+from ..primitive_ops.primitive_op import PrimitiveOp
 from ..primitive_ops.pauli_op import PauliOp
 from ..primitive_ops.circuit_op import CircuitOp
 from ..list_ops.list_op import ListOp
+from ..list_ops.composed_op import ComposedOp
 from ..state_fns.state_fn import StateFn
 from ..state_fns.circuit_state_fn import CircuitStateFn
+from ..state_fns.operator_state_fn import OperatorStateFn
 from ..converters.converter_base import ConverterBase
 
 logger = logging.getLogger(__name__)
@@ -209,6 +214,12 @@ class GradientBase(ConverterBase):
         Returns:
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
+        if not isinstance(param_expr, ParameterExpression):
+            return 0.0
+
+        if param not in param_expr._parameter_symbols:
+            return 0.0
+
         import sympy as sy
         expr = param_expr._symbol_expr
         keys = param_expr._parameter_symbols[param]
@@ -315,3 +326,45 @@ class GradientBase(ConverterBase):
                     if c not in circuits:
                         circuits.append(c)
         return circuits
+
+    def erase_operator_coeffs(self, operator, coeff=1.0):
+        if isinstance(operator,PrimitiveOp):
+            #print(operator)
+            return operator / operator._coeff
+        elif isinstance(operator, OperatorBase):
+            op_coeff = operator._coeff
+            return (operator/op_coeff).traverse(partial(self.erase_operator_coeffs, coeff=coeff*op_coeff))
+        return operator * coeff
+
+    def factor_coeffs_out_of_composed_op(self, operator):
+        
+        if isinstance(operator,  ListOp) and not isinstance(operator, ComposedOp):
+            return operator.traverse(self.factor_coeffs_out_of_composed_op)
+        if isinstance(operator, ComposedOp):
+            total_coeff = 1.0
+            take_norm_of_coeffs = False
+            for op in operator.oplist:
+
+                if take_norm_of_coeffs: 
+                    total_coeff *= (op._coeff * np.conj(op._coeff))
+                else:
+                    total_coeff *= op._coeff 
+                if hasattr(op,'primitive'):
+                    prim = op.primitive
+                    if isinstance(prim, ListOp):
+                        raise ValueError("This operator was not properly decomposed. "
+                                         "By this point, all operator measurements should "
+                                         "contain single operators, otherwise the coefficient "
+                                         "gradients will not be handled properly.")
+                    if hasattr(prim, 'coeff'):
+                        if take_norm_of_coeffs: 
+                            total_coeff *= (prim._coeff * np.conj(prim._coeff))
+                        else:
+                            total_coeff *= prim._coeff 
+
+                if isinstance(op, OperatorStateFn) and op._is_measurement:
+                    take_norm_of_coeffs = True
+            return total_coeff * self.erase_operator_coeffs(operator)
+        
+        else:
+            return operator
