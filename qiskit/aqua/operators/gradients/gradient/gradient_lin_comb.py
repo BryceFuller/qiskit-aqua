@@ -201,10 +201,30 @@ class GradientLinComb(GradientBase):
                                     state = ~StateFn(One) @ Zero
                         else:
                             def combo_fn(x):
-                                # Generate the operator which computes the linear combination
-                                lin_comb_op = (I ^ state_op.num_qubits) ^ Z
-                                lin_comb_op = lin_comb_op.to_matrix()
-                                return list(np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))), [0]).data))
+                                if isinstance(x, Iterable):
+                                    # Generate the operator which computes the linear combination
+                                    lin_comb_op = (I ^ state_op.num_qubits) ^ Z
+                                    lin_comb_op = lin_comb_op.to_matrix()
+                                    return list(np.diag(partial_trace(lin_comb_op.dot(np.outer(x, np.conj(x))),
+                                                                      [0]).data))
+                                elif isinstance(x, dict):
+                                    prob_dict = {}
+                                    sum_counts = 0
+                                    for key in x.keys():
+                                        prob_counts = x[key]
+                                        sum_counts += prob_counts
+                                        if int(key[-1]) == 1:
+                                            prob_counts *= -1
+                                        if key[:-1] not in prob_dict.keys():
+                                            prob_dict[key[:-1]] = prob_counts
+                                        else:
+                                            prob_dict[key[:-1]] += prob_counts
+                                    for key in prob_dict.keys():
+                                        prob_dict[key] = prob_dict[key] / sum_counts
+                                    return prob_dict
+                                else:
+                                    raise TypeError('The state result should be either a DictStateFn '
+                                                    'or a VectorStateFn.')
 
                             if gate_param == param:
                                 pass

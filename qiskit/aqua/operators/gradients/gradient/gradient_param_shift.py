@@ -101,7 +101,7 @@ class GradientParamShift(GradientBase):
 
             if len(circs) > 1:
                 # Understand how this happens
-                raise TypeError('Please define an operator with a single circuit representing the quantums state.')
+                raise TypeError('Please define an operator with a single circuit representing the quantum state.')
             elif len(circs) == 0:
                 print("No circuits found in: ", operator)
                 return operator
