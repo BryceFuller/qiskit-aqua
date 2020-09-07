@@ -80,7 +80,7 @@ class Optimizer(ABC):
             epsilon (float): the epsilon used in the numeric differentiation.
             max_evals_grouped (int): max evals grouped
         Returns:
-            grad: the gradient computed
+            gradient: the gradient computed
 
         """
         forig = f(*((x_center,)))

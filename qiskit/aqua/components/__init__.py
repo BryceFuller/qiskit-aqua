@@ -22,7 +22,7 @@ the algorithm. For example :class:`~qiskit.aqua.algorithms.VQE` takes an
 :class:`~qiskit.aqua.components.variational_forms.VariationalForm` components. There are a
 selection of both different :mod:`~qiskit.aqua.components.optimizers` and
 :mod:`~qiskit.aqua.components.variational_forms` that can be chosen from according the nature of
-the problem. Some optimizers use gradients, others have alternative techniques to finding a
+the problem. Some optimizers use gradient, others have alternative techniques to finding a
 minimum. Variational forms include heuristic ansatzes such as
 :class:`~qiskit.circuit.library.EfficientSU2` and types designed for specific problems
 such as :class:`~qiskit.chemistry.components.variational_forms.UCCSD` for chemistry and ground

@@ -201,7 +201,7 @@ class PyTorchDiscriminator(DiscriminativeNetwork):
         """
         # pylint: disable=E1101
         # pylint: disable=E1102
-        # Reset gradients
+        # Reset gradient
         self._optimizer.zero_grad()
         real_batch = data[0]
         real_prob = weights[0]
@@ -236,7 +236,7 @@ class PyTorchDiscriminator(DiscriminativeNetwork):
             self.gradient_penalty(real_batch).backward()
         # pylint: enable=E1101
         # pylint: enable=E1102
-        # Update weights with gradients
+        # Update weights with gradient
         self._optimizer.step()
 
         # Return error and predictions for real and fake inputs

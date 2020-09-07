@@ -182,6 +182,8 @@ class OperatorStateFn(StateFn):
     def eval(self,
              front: Union[str, dict, np.ndarray,
                           OperatorBase] = None) -> Union[OperatorBase, float, complex]:
+
+
         if front is None:
             matrix = self.primitive.to_matrix_op().primitive.data
             return VectorStateFn(matrix[0, :])
