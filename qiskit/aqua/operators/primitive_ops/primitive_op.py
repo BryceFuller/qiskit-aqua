@@ -14,7 +14,7 @@
 
 """ PrimitiveOp Class """
 
-from typing import Optional, Union, Set, List, Dict
+from typing import Optional, Union, Set, List, Dict, Callable
 import logging
 import numpy as np
 from scipy.sparse import spmatrix
@@ -52,6 +52,8 @@ class PrimitiveOp(OperatorBase):
     def __new__(cls,
                 primitive: Union[Instruction, QuantumCircuit, List,
                                  np.ndarray, spmatrix, MatrixOperator, Pauli] = None,
+                cost_fn: Callable = None,
+                grad_cost_fn: Callable = None,
                 coeff: Union[int, float, complex, ParameterExpression] = 1.0) -> 'PrimitiveOp':
         """ A factory method to produce the correct type of PrimitiveOp subclass
         based on the primitive passed in. Primitive and coeff arguments are passed into
@@ -69,6 +71,14 @@ class PrimitiveOp(OperatorBase):
         """
         if cls.__name__ != PrimitiveOp.__name__:
             return super().__new__(cls)
+
+        if cost_fn is not None:
+            from .cost_fn_op import CostFnOp
+            return CostFnOp.__new__(CostFnOp)
+
+        if grad_cost_fn is not None:
+            raise ValueError("grad_cost_fn should not be defined if cost_fn is None")
+
 
         # pylint: disable=cyclic-import,import-outside-toplevel
         if isinstance(primitive, (Instruction, QuantumCircuit)):

@@ -54,6 +54,8 @@ class StateFn(OperatorBase):
                                  list, np.ndarray, Statevector,
                                  QuantumCircuit, Instruction,
                                  OperatorBase] = None,
+                cost_fn: Callable = None,
+                grad_cost_fn: Callable = None,
                 coeff: Union[int, float, complex, ParameterExpression] = 1.0,
                 is_measurement: bool = False) -> 'StateFn':
         """ A factory method to produce the correct type of StateFn subclass
@@ -75,6 +77,12 @@ class StateFn(OperatorBase):
         # Prevents infinite recursion when subclasses are created
         if cls.__name__ != StateFn.__name__:
             return super().__new__(cls)
+
+        if cost_fn is not None:
+            from .cost_fn_measurement import CostFnMeasurement
+            return CostFnMeasurement.__new__(CostFnMeasurement)
+        if grad_cost_fn is not None:
+            raise ValueError("grad_cost_fn should not be defined if cost_fn is None")
 
         # pylint: disable=cyclic-import,import-outside-toplevel
         if isinstance(primitive, (str, dict, Result)):
@@ -102,6 +110,8 @@ class StateFn(OperatorBase):
                                   list, np.ndarray, Statevector,
                                   QuantumCircuit, Instruction,
                                   OperatorBase] = None,
+                 cost_fn: Callable = None,
+                 grad_cost_fn: Callable =None,
                  coeff: Union[int, float, complex, ParameterExpression] = 1.0,
                  is_measurement: bool = False) -> None:
         """
@@ -111,6 +121,8 @@ class StateFn(OperatorBase):
             is_measurement: Whether the StateFn is a measurement operator
         """
         self._primitive = primitive
+        self._cost_fn = cost_fn
+        self._grad_cost_fn = grad_cost_fn
         self._is_measurement = is_measurement
         self._coeff = coeff
 
@@ -150,6 +162,7 @@ class StateFn(OperatorBase):
         # Will return NotImplementedError if not supported
 
     def mul(self, scalar: Union[int, float, complex, ParameterExpression]) -> OperatorBase:
+
         if not isinstance(scalar, (int, float, complex, ParameterExpression)):
             raise ValueError('Operators can only be scalar multiplied by float or complex, not '
                              '{} of type {}.'.format(scalar, type(scalar)))
@@ -194,6 +207,10 @@ class StateFn(OperatorBase):
             -> Tuple[OperatorBase, OperatorBase]:
         new_self = self
         # pylint: disable=import-outside-toplevel
+        # Handle the case where a CostFnOp or CostFnMeasurement has no
+        # OperatorBase primitive (and thus no specified # of qubits)
+        if self.num_qubits is None or other.num_qubits is None:
+            return new_self, other
         if not self.num_qubits == other.num_qubits:
             from qiskit.aqua.operators import Zero
             if self == StateFn({'0': 1}, is_measurement=True):
@@ -247,15 +264,17 @@ class StateFn(OperatorBase):
             raise ValueError(
                 'Composition with a Statefunction in the first operand is not defined.')
 
-        new_self, other = self._check_zero_for_composition_and_expand(other)
-        # TODO maybe include some reduction here in the subclasses - vector and Op, op and Op, etc.
-        # pylint: disable=import-outside-toplevel
-        from qiskit.aqua.operators import CircuitOp
+        new_self = self
+        if self.num_qubits is not None:
+            new_self, other = self._check_zero_for_composition_and_expand(other)
+            # TODO maybe include some reduction here in the subclasses - vector and Op, op and Op, etc.
+            # pylint: disable=import-outside-toplevel
+            from qiskit.aqua.operators import CircuitOp
 
-        if self.primitive == {'0' * self.num_qubits: 1.0} and isinstance(other, CircuitOp):
-            # Returning CircuitStateFn
-            return StateFn(other.primitive, is_measurement=self.is_measurement,
-                           coeff=self.coeff * other.coeff)
+            if self.primitive == {'0' * self.num_qubits: 1.0} and isinstance(other, CircuitOp):
+                # Returning CircuitStateFn
+                return StateFn(other.primitive, is_measurement=self.is_measurement,
+                               coeff=self.coeff * other.coeff)
 
         from qiskit.aqua.operators import ComposedOp
         return ComposedOp([new_self, other])

@@ -14,7 +14,8 @@
 
 """ CostFnMeasurement Class """
 
-from typing import Union, Set
+
+from typing import Union, Set, Dict, Optional, cast, Callable
 import numpy as np
 
 from qiskit.circuit import ParameterExpression
@@ -36,7 +37,10 @@ class CostFnMeasurement(StateFn):
     # TODO allow normalization somehow?
     def __init__(self,
                  primitive: Union[OperatorBase] = None,
-                 coeff: Union[int, float, complex, ParameterExpression] = 1.0) -> None:
+                 cost_fn: Callable = None,
+                 grad_cost_fn: Callable = None,
+                 coeff: Union[int, float, complex, ParameterExpression] = 1.0,
+                 is_measurement: bool = True) -> None:
         """
         Args:
             primitive: The ``OperatorBase`` which defines the behavior of the underlying State
@@ -44,7 +48,13 @@ class CostFnMeasurement(StateFn):
             coeff: A coefficient by which to multiply the state function
             is_measurement: Whether the StateFn is a measurement operator
         """
+        if primitive is None and cost_fn is None:
+            raise ValueError
+        if not is_measurement:
+            raise ValueError("CostFnMeasurement is only defined as a measurement")
 
+        self.cost_fn = cost_fn
+        self.grad_cost_fn = grad_cost_fn
         super().__init__(primitive, coeff=coeff, is_measurement=True)
 
     def primitive_strings(self) -> Set[str]:
@@ -52,13 +62,28 @@ class CostFnMeasurement(StateFn):
 
     @property
     def num_qubits(self) -> int:
-        return self.primitive.num_qubits
+        if hasattr(self.primitive, 'num_qubits'):
+            return self.primitive.num_qubits
+        else:
+            return None
 
     def add(self, other: OperatorBase) -> OperatorBase:
         raise NotImplementedError
 
     def adjoint(self) -> OperatorBase:
-        return ValueError("CostFn")
+        return ValueError("Adjoint of a cost function not defined")
+
+    def mul(self, scalar: Union[int, float, complex, ParameterExpression]) -> OperatorBase:
+
+        if not isinstance(scalar, (int, float, complex, ParameterExpression)):
+            raise ValueError('Operators can only be scalar multiplied by float or complex, not '
+                             '{} of type {}.'.format(scalar, type(scalar)))
+
+        return self.__class__(self.primitive,
+                              cost_fn=self.cost_fn,
+                              grad_cost_fn=self.grad_cost_fn,
+                              coeff=self.coeff * scalar,
+                              is_measurement=self.is_measurement)
 
     def tensor(self, other: OperatorBase) -> OperatorBase:
         if isinstance(other, OperatorStateFn):
@@ -93,50 +118,10 @@ class CostFnMeasurement(StateFn):
 
     def to_matrix(self, massive: bool = False) -> np.ndarray:
         r"""
-        Note: this does not return a density matrix, it returns a classical matrix
-        containing the quantum or classical vector representing the evaluation of the state
-        function on each binary basis state. Do not assume this is is a normalized quantum or
-        classical probability vector. If we allowed this to return a density matrix,
-        then we would need to change the definition of composition to be ~Op @ StateFn @ Op for
-        those cases, whereas by this methodology we can ensure that composition always means Op
-        @ StateFn.
-
-        Return numpy vector of state vector, warn if more than 16 qubits to force the user to set
-        massive=True if they want such a large vector.
-
-        Args:
-            massive: Whether to allow large conversions, e.g. creating a matrix representing
-                over 16 qubits.
-
-        Returns:
-            np.ndarray: Vector of state vector
-
-        Raises:
-            ValueError: Invalid parameters.
+        Not Implemented
         """
+        raise NotImplementedError
 
-        if self.num_qubits > 16 and not massive:
-            raise ValueError(
-                'to_vector will return an exponentially large vector, in this case {0} elements.'
-                ' Set massive=True if you want to proceed.'.format(2 ** self.num_qubits))
-
-        # Operator - return diagonal (real values, not complex),
-        # not rank 1 decomposition (statevector)!
-        mat = self.primitive.to_matrix()
-        # TODO change to weighted sum of eigenvectors' StateFns?
-
-        # ListOp primitives can return lists of matrices (or trees for nested ListOps),
-        # so we need to recurse over the
-        # possible tree.
-        def diag_over_tree(t):
-            if isinstance(t, list):
-                return [diag_over_tree(o) for o in t]
-            else:
-                vec = np.diag(t) * self.coeff
-                # Reshape for measurements so np.dot still works for composition.
-                return vec if not self.is_measurement else vec.reshape(1, -1)
-
-        return diag_over_tree(mat)
 
     def to_circuit_op(self) -> OperatorBase:
         r""" Return ``StateFnCircuit`` corresponding to this StateFn. Ignore for now because this is
@@ -147,11 +132,10 @@ class CostFnMeasurement(StateFn):
     def __str__(self) -> str:
         prim_str = str(self.primitive)
         if self.coeff == 1.0:
-            return "{}({})".format('OperatorStateFn' if not self.is_measurement
-                                   else 'OperatorMeasurement', prim_str)
+            return "{}({})".format('CostFnMeasurement', prim_str)
         else:
             return "{}({}) * {}".format(
-                'OperatorStateFn' if not self.is_measurement else 'OperatorMeasurement',
+                'CostFnMeasurement',
                 prim_str,
                 self.coeff)
 
@@ -159,6 +143,7 @@ class CostFnMeasurement(StateFn):
     def eval(self,
              front: Union[str, dict, np.ndarray,
                           OperatorBase] = None) -> Union[OperatorBase, float, complex]:
+
         if not self.is_measurement and isinstance(front, OperatorBase):
             raise ValueError(
                 'Cannot compute overlap with StateFn or Operator if not Measurement. Try taking '
@@ -167,12 +152,9 @@ class CostFnMeasurement(StateFn):
         if not isinstance(front, OperatorBase):
             front = StateFn(front)
 
-        if isinstance(self.primitive, ListOp) and self.primitive.distributive:
-            coeff = self.coeff * self.primitive.coeff
-            evals = [OperatorStateFn(op, coeff=coeff, is_measurement=self.is_measurement).eval(
-                front) for op in self.primitive.oplist]
-            return self.primitive.combo_fn(evals)
-
+        #Convert front into a dict
+        #Save the type 
+        from .dict_state_fn import DictStateFn
         # Need an ListOp-specific carve-out here to make sure measurement over a ListOp doesn't
         # produce two-dimensional ListOp from composing from both sides of primitive.
         # Can't use isinstance because this would include subclasses.
@@ -180,8 +162,12 @@ class CostFnMeasurement(StateFn):
         if type(front) == ListOp:
             return front.combo_fn([self.eval(front.coeff * front_elem)  # type: ignore
                                    for front_elem in front.oplist])  # type: ignore
-
-        return front.adjoint().eval(self.primitive.eval(front)) * self.coeff  # type: ignore
+        if self.primitive is not None:
+            return front.adjoint().eval(self.primitive.eval(front)) * self.coeff  # type: ignore
+        elif isinstance(front, DictStateFn):
+             data = front.primitive
+             return self.cost_fn(data)
+            
 
     def sample(self,
                shots: int = 1024,

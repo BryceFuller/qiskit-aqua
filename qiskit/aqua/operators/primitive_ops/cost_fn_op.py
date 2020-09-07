@@ -41,8 +41,9 @@ class CostFnOp(PrimitiveOp):
 
     def __init__(self,
                  primitive: Union[OperatorBase] = None,
-                 coeff: Union[int, float, complex, ParameterExpression] = 1.0,
-                 cost_fn: Callable = None) -> None:
+                 cost_fn: Callable = None,
+                 grad_cost_fn: Callable = None,
+                 coeff: Union[int, float, complex, ParameterExpression] = 1.0) -> None:
         """
             Args:
                 primitive: The Pauli which defines the behavior of the underlying function.
@@ -51,7 +52,8 @@ class CostFnOp(PrimitiveOp):
             Raises:
                 TypeError: invalid parameters.
         """
-        self._cost_fn = cost_fn
+        self.cost_fn = cost_fn
+        self.grad_cost_fn = grad_cost_fn
         super().__init__(primitive, coeff=coeff)
 
     def primitive_strings(self) -> Set[str]:
@@ -73,13 +75,24 @@ class CostFnOp(PrimitiveOp):
         return SummedOp([self, other])
 
     def adjoint(self) -> OperatorBase:
-        return PauliOp(self.primitive, coeff=np.conj(self.coeff))
+        return ValueError("Adjoint of a cost function not defined")
 
     def equals(self, other: OperatorBase) -> bool:
         if not isinstance(other, PauliOp) or not self.coeff == other.coeff:
             return False
 
         return self.primitive == other.primitive
+
+    def mul(self, scalar: Union[int, float, complex, ParameterExpression]) -> OperatorBase:
+
+        if not isinstance(scalar, (int, float, complex, ParameterExpression)):
+            raise ValueError('Operators can only be scalar multiplied by float or complex, not '
+                             '{} of type {}.'.format(scalar, type(scalar)))
+
+        return self.__class__(self.primitive,
+                              cost_fn=self.cost_fn,
+                              grad_cost_fn=self.grad_cost_fn,
+                              coeff=self.coeff * scalar)
 
     def tensor(self, other: OperatorBase) -> OperatorBase:
         # Both Paulis

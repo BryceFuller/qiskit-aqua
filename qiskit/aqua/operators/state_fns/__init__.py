@@ -58,9 +58,11 @@ from .dict_state_fn import DictStateFn
 from .operator_state_fn import OperatorStateFn
 from .vector_state_fn import VectorStateFn
 from .circuit_state_fn import CircuitStateFn
+from .cost_fn_measurement import CostFnMeasurement
 
 __all__ = ['StateFn',
            'DictStateFn',
            'VectorStateFn',
            'CircuitStateFn',
-           'OperatorStateFn']
+           'OperatorStateFn',
+           'CostFnMeasurement']
