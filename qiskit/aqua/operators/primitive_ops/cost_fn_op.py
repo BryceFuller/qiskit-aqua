@@ -192,6 +192,19 @@ class CostFnOp(PrimitiveOp):
 
         return new_front
 
+    def assign_parameters(self, param_dict: dict) -> OperatorBase:
+        param_value = self.coeff
+        if isinstance(self.coeff, ParameterExpression):
+            unrolled_dict = self._unroll_param_dict(param_dict)
+            if isinstance(unrolled_dict, list):
+                # pylint: disable=import-outside-toplevel
+                from ..list_ops.list_op import ListOp
+                return ListOp([self.assign_parameters(param_dict) for param_dict in unrolled_dict])
+            if self.coeff.parameters <= set(unrolled_dict.keys()):
+                binds = {param: unrolled_dict[param] for param in self.coeff.parameters}
+                param_value = float(self.coeff.bind(binds))
+        return self.traverse(lambda x: x.assign_parameters(param_dict), coeff=param_value)
+
     def exp_i(self) -> OperatorBase:
         """ Return a ``CircuitOp`` equivalent to e^-iH for this operator H. """
         # if only one qubit is significant, we can perform the evolution
@@ -227,53 +240,25 @@ class CostFnOp(PrimitiveOp):
             from ..evolutions.evolved_op import EvolvedOp
             return EvolvedOp(self)
 
-    def commutes(self, other_op: OperatorBase) -> bool:
-        """ Returns whether self commutes with other_op.
+    def traverse(self,
+                 convert_fn: Callable,
+                 coeff: Optional[Union[int, float, complex, ParameterExpression]] = None
+                 ) -> OperatorBase:
+        r"""
+        Apply the convert_fn to the internal primitive if the primitive is an Operator (as in
+        the case of ``OperatorStateFn``). Otherwise do nothing. Used by converters.
 
         Args:
-            other_op: An ``OperatorBase`` with which to evaluate whether self commutes.
+            convert_fn: The function to apply to the internal OperatorBase.
+            coeff: A coefficient to multiply by after applying convert_fn.
 
         Returns:
-            A bool equaling whether self commutes with other_op
-
+            The converted StateFn.
         """
-        if not isinstance(other_op, PauliOp):
-            return False
-        # Don't use compose because parameters will break this
-        self_bits = self.primitive.z + 2 * self.primitive.x  # type: ignore
-        other_bits = other_op.primitive.z + 2 * other_op.primitive.x  # type: ignore
-        return all((self_bits * other_bits) * (self_bits - other_bits) == 0)
-
-    def to_circuit(self) -> QuantumCircuit:
-        # If Pauli equals identity, don't skip the IGates
-        is_identity = sum(self.primitive.x + self.primitive.z) == 0  # type: ignore
-
-        # Note: Reversing endianness!!
-        qc = QuantumCircuit(len(self.primitive))
-        for q, pauli_str in enumerate(reversed(self.primitive.to_label())):  # type: ignore
-            gate = PAULI_GATE_MAPPING[pauli_str]
-            if not pauli_str == 'I' or is_identity:
-                qc.append(gate, qargs=[q])
-        return qc
-
-    def to_instruction(self) -> Instruction:
-        # TODO should we just do the following because performance of adding and deleting IGates
-        #  doesn't matter?
-        # (Reduce removes extra IGates).
-        # return PrimitiveOp(self.primitive.to_instruction(), coeff=self.coeff).reduce()
-
-        return self.to_circuit().to_instruction()
-
-    def to_pauli_op(self, massive: bool = False) -> OperatorBase:
-        return self
-
-    def to_legacy_op(self, massive: bool = False) -> WeightedPauliOperator:
-        if isinstance(self.coeff, ParameterExpression):
-            try:
-                coeff = float(self.coeff)
-            except TypeError as ex:
-                raise TypeError('Cannot convert Operator with unbound parameter {} to Legacy '
-                                'Operator'.format(self.coeff)) from ex
+        if isinstance(self.primitive, OperatorBase):
+            return CostFnOp(convert_fn(self.primitive),
+                            cost_fn=self.cost_fn,
+                            grad_cost_fn=self.grad_cost_fn,
+                            coeff=coeff or self.coeff)
         else:
-            coeff = cast(float, self.coeff)
-        return WeightedPauliOperator(paulis=[(coeff, self.primitive)])  # type: ignore
+            return self

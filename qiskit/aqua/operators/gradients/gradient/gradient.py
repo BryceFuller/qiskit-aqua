@@ -179,18 +179,16 @@ class Gradient(GradientBase):
             # Do some checks to make sure operator is sensible
             # TODO if this is a sum of circuit state fns - traverse including autograd
             if isinstance(operator[-1], (CircuitStateFn)):
-                pass
-                # Do some checks and decide how you're planning on taking the gradient.
-                # for now we do param shift
+                if method == 'param_shift':
+                    return GradientParamShift().convert(operator, param)
+                elif method == 'fin_diff':
+                    return GradientParamShift().convert(operator, param, analytic=False)
+                elif method == 'lin_comb':
+                    return GradientLinComb().convert(operator, param)
             else:
                 raise TypeError('The gradient framework is compatible with states that are given as CircuitStateFn')
 
-            if method == 'param_shift':
-                return GradientParamShift().convert(operator, param)
-            elif method == 'fin_diff':
-                return GradientParamShift().convert(operator, param, analytic=False)
-            elif method == 'lin_comb':
-                return GradientLinComb().convert(operator, param)
+            
 
         elif isinstance(operator, CircuitStateFn):
             # Gradient of an a state's sampling probabilities
