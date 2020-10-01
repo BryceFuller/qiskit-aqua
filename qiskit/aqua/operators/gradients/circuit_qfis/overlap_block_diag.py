@@ -11,6 +11,7 @@
 # that they have been altered from the originals.
 
 """The module for Quantum the Fisher Information."""
+
 import copy
 from functools import cmp_to_key
 from typing import List, Union, Optional
@@ -27,7 +28,7 @@ from qiskit.circuit.library import RZGate, RXGate, RYGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from .circuit_qfi import CircuitQFI
-from ..derivatives_base import DerivativeBase
+from ..derivative_base import DerivativeBase
 
 
 class OverlapBlockDiag(CircuitQFI):
@@ -290,7 +291,7 @@ class OverlapBlockDiag(CircuitQFI):
                     else:
                         raise NotImplementedError
 
-                    # get all qubit indices in this layer where the param parameterizes
+                    # Get all qubit indices in this layer where the param parameterizes
                     # an operation.
                     indices = [[q.index for q in qreg] for qreg in layer['partition']]
                     indices = [item for sublist in indices for item in sublist]

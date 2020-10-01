@@ -37,14 +37,14 @@ class DerivativeBase(ConverterBase):
     r"""
     Converter for differentiating opflow objects and handling
     things like properly differentiating combo_fn's and enforcing prodct rules
-    when operator coeficients are parameterized.
+    when operator coefficients are parameterized.
 
     This is distinct from CircuitGradient converters which use quantum
     techniques such as parameter shifts and linear combination of unitaries
     to compute derivatives of circuits.
 
     CircuitGradient - uses quantum techniques to get derivatives of circuits
-    DerivativeBase    - uses classical techniques to differentiate opflow data strctures
+    DerivativeBase - uses classical techniques to differentiate opflow data structures
     """
 
     # pylint: disable=arguments-differ
@@ -56,11 +56,11 @@ class DerivativeBase(ConverterBase):
                 ) -> OperatorBase:
         r"""
         Args:
-            operator: The operator we are taking the gradient of
-            params: The parameters we are taking the gradient with respect to..
+            operator: The operator we are taking the gradient, Hessian or QFI of
+            params: The parameters we are taking the gradient, Hessian or QFI with respect to.
 
         Returns:
-            An operator whose evaluation yields the Gradient.
+            An operator whose evaluation yields the gradient, Hessian or QFI.
 
         Raises:
             ValueError: If ``params`` contains a parameter not present in ``operator``.
@@ -79,8 +79,7 @@ class DerivativeBase(ConverterBase):
                                                                 ParameterExpression]]]] = None,
                          backend: Optional[Union[BaseBackend, QuantumInstance]] = None) \
             -> Callable[[Iterable], np.ndarray]:
-        """
-        Get a callable function which provides the respective gradient, Hessian or QFI for given
+        """Get a callable function which provides the respective gradient, Hessian or QFI for given
         parameter values. This callable can be used as gradient function for optimizers.
 
         Args:

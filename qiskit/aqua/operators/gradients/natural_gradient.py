@@ -59,7 +59,7 @@ class NaturalGradient(GradientBase):
                 ``'ridge'`` and ``'lasso'`` use an automatic optimal parameter search
                 If regularization is None but the metric is ill-conditioned or singular then
                 a lstsq solver is used without regularization
-            kwargs: TODO: The offset size to use when computing finite difference gradients.
+            kwargs (dict): Optional parameters for a CircuitGradient
         """
         super().__init__(grad_method)
 
@@ -378,7 +378,6 @@ class NaturalGradient(GradientBase):
 
         """
         Solve a linear system of equations with a regularization method and automatic lambda fitting
-        cite lambda fitting
         Args:
             a: mxn matrix
             c: m vector

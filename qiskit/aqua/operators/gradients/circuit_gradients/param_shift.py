@@ -25,7 +25,7 @@ from qiskit.aqua.operators import (OperatorBase, StateFn, Zero, One, CircuitStat
 from qiskit.aqua.operators import SummedOp, ListOp, ComposedOp, DictStateFn, VectorStateFn
 from qiskit.aqua.operators.gradients.circuit_gradients.circuit_gradient \
     import CircuitGradient
-from qiskit.aqua.operators.gradients.derivatives_base import DerivativeBase
+from qiskit.aqua.operators.gradients.derivative_base import DerivativeBase
 from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 
@@ -70,6 +70,7 @@ class ParamShift(CircuitGradient):
         """
         return self._epsilon
 
+    # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[ParameterExpression, ParameterVector,

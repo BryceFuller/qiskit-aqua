@@ -29,11 +29,12 @@ from qiskit.circuit.library import RZGate, RXGate, HGate, XGate, SdgGate, SGate,
 
 from .circuit_qfi import CircuitQFI
 from ..circuit_gradients.lin_comb import LinComb
-from ..derivatives_base import DerivativeBase
+from ..derivative_base import DerivativeBase
 
 
 class LinCombFull(CircuitQFI):
-    r"""Compute the Quantum Fisher Information (QFI) given a pure, parametrized quantum state.
+    r"""Compute the full Quantum Fisher Information (QFI) given a pure, parametrized quantum state
+    with an additional working qubit and the linear combination of unitaries approach.
 
     The QFI is:
 
@@ -179,7 +180,7 @@ class LinCombFull(CircuitQFI):
         LinComb.insert_gate(circuit, state_qc._parameter_table[params[0]][0][0], HGate(),
                             qubits=[work_qubit])
 
-        # Get the circuits needed to compute A_ij
+        # Get the circuits needed to compute〈∂iψ|∂jψ〉
         for i, param_i in enumerate(params):  # loop over parameters
             qfi_ops = []
             for j, param_j in enumerate(params):
@@ -359,8 +360,8 @@ class LinCombFull(CircuitQFI):
         """Trim the given quantum circuit before the reference gate.
 
         Args:
-            circuit: The circuit onto which the gare is added.
-            reference_gate: A gate instance before or after which a gate is inserted.
+            circuit: The circuit to be trimmed.
+            reference_gate: The gate where the circuit is supposed to be trimmed.
 
         Returns:
             The trimmed circuit.

@@ -37,7 +37,7 @@ from qiskit.circuit.library.standard_gates import (CXGate, CYGate, CZGate,
 from qiskit.quantum_info import partial_trace
 
 from .circuit_gradient import CircuitGradient
-from ..derivatives_base import DerivativeBase
+from ..derivative_base import DerivativeBase
 
 
 class LinComb(CircuitGradient):
@@ -75,6 +75,7 @@ class LinComb(CircuitGradient):
 
         return self._prepare_operator(operator, params)
 
+    # pylint: disable=too-many-return-statements
     def _prepare_operator(self,
                           operator: OperatorBase,
                           params: Optional[Union[ParameterExpression, ParameterVector,

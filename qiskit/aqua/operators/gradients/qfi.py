@@ -43,9 +43,6 @@ class QFI(QFIBase):
 
         Returns:
             ListOp[ListOp] where the operator at position k,l corresponds to QFI_kl
-
-        Raises:
-            ValueError: If the value for ``approx`` is not supported.
         """
         expec_op = PauliExpectation(group_paulis=False).convert(operator).reduce()
         cleaned_op = self._factor_coeffs_out_of_composed_op(expec_op)

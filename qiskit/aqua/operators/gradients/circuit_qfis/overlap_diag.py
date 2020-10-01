@@ -25,7 +25,7 @@ from qiskit.circuit.library import RZGate, RXGate, RYGate
 from qiskit.converters import dag_to_circuit, circuit_to_dag
 
 from .circuit_qfi import CircuitQFI
-from ..derivatives_base import DerivativeBase
+from ..derivative_base import DerivativeBase
 
 
 class OverlapDiag(CircuitQFI):
