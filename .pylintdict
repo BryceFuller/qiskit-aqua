@@ -51,11 +51,9 @@ bitstring
 bitstrings
 bksf
 bmod
-bobyqa
 bohr
 bool
 boolean
-bosonic
 bpa
 brassard
 bravyi
@@ -68,7 +66,6 @@ cdf
 cdot
 ceil
 cfg
-chc
 chernoff
 chu
 chuang's
@@ -102,7 +99,6 @@ coord
 coords
 cov
 coveney
-cp
 cplex
 cr
 crs
@@ -161,7 +157,6 @@ ecc
 eckstein
 ee
 eigen
-eigenenergies
 eigensolver
 eigensolvers
 eigenstate
@@ -277,7 +272,6 @@ ij
 ijkl
 ik
 imag
-imfil
 imode
 implicant
 implicants
@@ -312,7 +306,6 @@ izaac
 jac
 jacobian
 jb
-jcf
 ji
 jl
 jordan
@@ -340,7 +333,6 @@ len
 leq
 lhs
 libname
-Libor
 lih
 lijh
 lin
@@ -368,14 +360,11 @@ matlab
 matmul
 maxcut
 maxdepth
-maxfail
 maxfev
 maxfun
 maxima
 maxiter
 maxiters
-maxmp
-McArdle
 mccluskey
 mct
 mdl
@@ -392,7 +381,6 @@ minwidth
 mitarai
 mle
 moc
-modals
 mohij
 mohijkl
 mol
@@ -451,7 +439,6 @@ observables
 oe
 oi
 ok
-Ollitrault
 onee
 online
 onodera
@@ -541,12 +528,10 @@ quadratically
 quadraticconstraint
 quadraticprogram
 quandl
-quant
 quantile
 quantized
 quantumcircuit
 quantumregister
-quartic
 qubit
 qubitization
 qubits
@@ -612,10 +597,8 @@ sigmoid
 simonetto
 sj
 sklearn
-skquant
 slsqp
 smode
-snobfit
 spsa
 sqrt
 srange
@@ -711,22 +694,17 @@ upperbound
 username
 usr
 utils
-uvcc
 vals
 varform
 variational
 vartype
 vazirani
-vecs
-Veis
 vertices
-vibrational
 ville
 visualisation
 vqc
 vqe
 vqe's
-vscf
 watrous's
 wavefunction
 wavefunctions

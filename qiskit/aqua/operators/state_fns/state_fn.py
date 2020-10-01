@@ -12,7 +12,7 @@
 
 """ StateFn Class """
 
-from typing import Union, Optional, Callable, Set, Dict, Tuple, List
+from typing import Union, Optional, Callable, Set, Dict, Tuple
 import numpy as np
 
 from qiskit.quantum_info import Statevector
@@ -140,21 +140,6 @@ class StateFn(OperatorBase):
     def adjoint(self) -> OperatorBase:
         raise NotImplementedError
 
-    def _expand_dim(self, num_qubits: int) -> 'StateFn':
-        raise NotImplementedError
-
-    def permute(self, permutation: List[int]) -> OperatorBase:
-        """Permute the qubits of the state function.
-
-        Args:
-            permutation: A list defining where each qubit should be permuted. The qubit at index
-                j of the circuit should be permuted to position permutation[j].
-
-        Returns:
-            A new StateFn containing the permuted primitive.
-        """
-        raise NotImplementedError
-
     def equals(self, other: OperatorBase) -> bool:
         if not isinstance(other, type(self)) or not self.coeff == other.coeff:
             return False
@@ -203,20 +188,24 @@ class StateFn(OperatorBase):
             temp = temp.tensor(self)
         return temp
 
-    def _expand_shorter_operator_and_permute(self, other: OperatorBase,
-                                             permutation: Optional[List[int]] = None) \
+    def _check_zero_for_composition_and_expand(self, other: OperatorBase) \
             -> Tuple[OperatorBase, OperatorBase]:
+        new_self = self
+        # pylint: disable=import-outside-toplevel
+        if not self.num_qubits == other.num_qubits:
+            from qiskit.aqua.operators import Zero
+            if self == StateFn({'0': 1}, is_measurement=True):
+                # Zero is special - we'll expand it to the correct qubit number.
+                new_self = StateFn('0' * self.num_qubits, is_measurement=True)
+            elif other == Zero:
+                # Zero is special - we'll expand it to the correct qubit number.
+                other = StateFn('0' * self.num_qubits)
+            else:
+                raise ValueError(
+                    'Composition is not defined over Operators of different dimensions, {} and {}, '
+                    'respectively.'.format(self.num_qubits, other.num_qubits))
 
-        from qiskit.aqua.operators import Zero
-
-        if self == StateFn({'0': 1}, is_measurement=True):
-            # Zero is special - we'll expand it to the correct qubit number.
-            return StateFn('0' * other.num_qubits, is_measurement=True), other
-        elif other == Zero:
-            # Zero is special - we'll expand it to the correct qubit number.
-            return self, StateFn('0' * self.num_qubits)
-
-        return super()._expand_shorter_operator_and_permute(other, permutation)
+        return new_self, other
 
     def to_matrix(self, massive: bool = False) -> np.ndarray:
         raise NotImplementedError
@@ -237,16 +226,13 @@ class StateFn(OperatorBase):
         """
         raise NotImplementedError
 
-    def compose(self, other: OperatorBase,
-                permutation: Optional[List[int]] = None, front: bool = False) -> OperatorBase:
+    def compose(self, other: OperatorBase) -> OperatorBase:
         r"""
         Composition (Linear algebra-style: A@B(x) = A(B(x))) is not well defined for states
         in the binary function model, but is well defined for measurements.
 
         Args:
             other: The Operator to compose with self.
-            permutation: ``List[int]`` which defines permutation on other operator.
-            front: If front==True, return ``other.compose(self)``.
 
         Returns:
             An Operator equivalent to the function composition of self and other.
@@ -255,14 +241,11 @@ class StateFn(OperatorBase):
             ValueError: If self is not a measurement, it cannot be composed from the right.
         """
         # TODO maybe allow outers later to produce density operators or projectors, but not yet.
-        if not self.is_measurement and not front:
+        if not self.is_measurement:
             raise ValueError(
                 'Composition with a Statefunction in the first operand is not defined.')
 
-        new_self, other = self._expand_shorter_operator_and_permute(other, permutation)
-
-        if front:
-            return other.compose(self)
+        new_self, other = self._check_zero_for_composition_and_expand(other)
         # TODO maybe include some reduction here in the subclasses - vector and Op, op and Op, etc.
         # pylint: disable=import-outside-toplevel
         from qiskit.aqua.operators import CircuitOp

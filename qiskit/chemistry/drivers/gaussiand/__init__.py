@@ -172,9 +172,5 @@ The following steps can be used with the Intel Fortran compiler on the Microsoft
 """
 
 from .gaussiandriver import GaussianDriver
-from .gaussian_log_driver import GaussianLogDriver
-from .gaussian_log_result import GaussianLogResult
 
-__all__ = ['GaussianDriver',
-           'GaussianLogDriver',
-           'GaussianLogResult']
+__all__ = ['GaussianDriver']

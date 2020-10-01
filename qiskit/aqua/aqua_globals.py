@@ -12,7 +12,6 @@
 
 """ Aqua Globals """
 
-from typing import Optional
 import logging
 
 import numpy as np
@@ -30,37 +29,33 @@ class QiskitAquaGlobals:
 
     CPU_COUNT = local_hardware_info()['cpus']
 
-    def __init__(self) -> None:
-        self._random_seed = None  # type: Optional[int]
+    def __init__(self):
+        self._random_seed = None
         self._num_processes = QiskitAquaGlobals.CPU_COUNT
         self._random = None
 
     @property
-    def random_seed(self) -> Optional[int]:
+    def random_seed(self):
         """Return random seed."""
         return self._random_seed
 
     @random_seed.setter
-    def random_seed(self, seed: Optional[int]) -> None:
+    def random_seed(self, seed):
         """Set random seed."""
         self._random_seed = seed
         self._random = None
 
     @property
-    def num_processes(self) -> int:
+    def num_processes(self):
         """Return num processes."""
         return self._num_processes
 
     @num_processes.setter
-    def num_processes(self, num_processes: Optional[int]) -> None:
-        """Set num processes.
-           If 'None' is passed, it resets to QiskitAquaGlobals.CPU_COUNT
-        """
-        if num_processes is None:
-            num_processes = QiskitAquaGlobals.CPU_COUNT
-        elif num_processes < 1:
+    def num_processes(self, num_processes):
+        """Set num processes."""
+        if num_processes < 1:
             raise AquaError('Invalid Number of Processes {}.'.format(num_processes))
-        elif num_processes > QiskitAquaGlobals.CPU_COUNT:
+        if num_processes > QiskitAquaGlobals.CPU_COUNT:
             raise AquaError('Number of Processes {} cannot be greater than cpu count {}.'
                             .format(num_processes, QiskitAquaGlobals.CPU_COUNT))
         self._num_processes = num_processes
@@ -73,7 +68,7 @@ class QiskitAquaGlobals:
                            "to value: '%s': Error: '%s'", self.num_processes, str(ex))
 
     @property
-    def random(self) -> np.random.Generator:
+    def random(self):
         """Return a numpy np.random.Generator (default_rng)."""
         if self._random is None:
             self._random = np.random.default_rng(self._random_seed)

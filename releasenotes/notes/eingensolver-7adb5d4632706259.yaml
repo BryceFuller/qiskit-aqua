@@ -1,4 +1,0 @@
----
-features:
-  - |
-    New  interface ``Eigensolver`` for Eigensolver algorithms.

@@ -155,9 +155,7 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/heads/stable') }}
       - uses: ./.github/actions/install-aqua
       - name: Install Dependencies
-        run: |
-          pip install "cvxpy>1.0.0"
-          pip install scikit-quant
+        run: pip install "cvxpy>1.0.0"
         shell: bash
       - name: Install cplex
         run: pip install cplex
