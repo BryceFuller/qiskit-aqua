@@ -11,6 +11,7 @@
 # that they have been altered from the originals.
 
 """The module to compute the state gradient with the parameter shift rule."""
+
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import partial
@@ -29,7 +30,8 @@ from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 
 class ParamShift(CircuitGradient):
-    """Compute the gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω with the parameter shift method."""
+    """Compute the gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the sampling
+    probabilities of the basis states of a state |ψ(ω)〉w.r.t. ω with the parameter shift method."""
 
     def __init__(self,
                  analytic: bool = True,
@@ -68,7 +70,6 @@ class ParamShift(CircuitGradient):
         """
         return self._epsilon
 
-    # pylint: disable=arguments-differ
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[ParameterExpression, ParameterVector,
@@ -95,15 +96,15 @@ class ParamShift(CircuitGradient):
 
         """
         if isinstance(params, (ParameterExpression, ParameterVector)):
-            return self.parameter_shift(operator, params)
+            return self._parameter_shift(operator, params)
         elif isinstance(params, tuple):
-            return self.parameter_shift(self.parameter_shift(operator, params[0]), params[1])
+            return self._parameter_shift(self._parameter_shift(operator, params[0]), params[1])
         elif isinstance(params, Iterable):
             if isinstance(params[0], ParameterExpression):
-                return self.parameter_shift(operator, params)
+                return self._parameter_shift(operator, params)
             elif isinstance(params[0], tuple):
                 return ListOp(
-                    [self.parameter_shift(self.parameter_shift(operator, pair[0]), pair[1])
+                    [self._parameter_shift(self._parameter_shift(operator, pair[0]), pair[1])
                      for pair in params])
             else:
                 raise AquaError('The linear combination gradient does only support the computation '
@@ -112,28 +113,23 @@ class ParamShift(CircuitGradient):
             raise AquaError('The linear combination gradient does only support the computation '
                             'of 1st gradients and 2nd order gradients.')
 
-    def parameter_shift(self,
-                        operator: OperatorBase,
-                        params: Union[ParameterExpression, ParameterVector, List]) -> OperatorBase:
+    def _parameter_shift(self,
+                         operator: OperatorBase,
+                         params: Union[ParameterExpression, ParameterVector, List]) -> OperatorBase:
         r"""
         Args:
-            operator: the operator containing circuits we are taking the derivative of
+            operator: The operator containing circuits we are taking the derivative of.
             params: The parameters (ω) we are taking the derivative with respect to. If
                     a ParameterVector is provided, each parameter will be shifted.
         Returns:
-            param_shifted_op: A ListOp of SummedOps corresponding to
-                [2*(V(ω_i + π/2) - V(ω_i - π/2)) for w_i in params]
-            or for analytic = False ListOp of SummedOps corresponding to
-                [(V(ω_i + 1e-8) - V(ω_i - 1e-8))/2.e-8
-            for w_i in params]
+            param_shifted_op: An operator object which evaluates to the respective gradients.
 
         Raises:
             ValueError: If the given parameters do not occur in the provided operator
             TypeError: If the operator has more than one circuit representing the quantum state
         """
-        # pylint: disable=too-many-return-statements
         if isinstance(params, (ParameterVector, list)):
-            param_grads = [self.parameter_shift(operator, param) for param in params]
+            param_grads = [self._parameter_shift(operator, param) for param in params]
             absent_params = [params[i] for i, grad_ops in enumerate(param_grads) if
                              grad_ops is None]
             if len(absent_params) > 0:
@@ -142,13 +138,13 @@ class ParamShift(CircuitGradient):
                     absent_params)
             return ListOp(absent_params)
 
-        # by this point, it's only one parameter
+        # By this point, it's only one parameter
         param = params
 
         if not isinstance(param, ParameterExpression):
             raise ValueError
         if isinstance(operator, ListOp) and not isinstance(operator, ComposedOp):
-            return_op = operator.traverse(partial(self.parameter_shift, params=param))
+            return_op = operator.traverse(partial(self._parameter_shift, params=param))
 
             # Remove any branch of the tree where the relevant parameter does not occur
             trimmed_oplist = [op for op in return_op.oplist if op is not None]
@@ -165,7 +161,6 @@ class ParamShift(CircuitGradient):
             circs = self.get_unique_circuits(operator)
 
             if len(circs) > 1:
-                # Understand how this happens
                 raise TypeError(
                     'Please define an operator with a single circuit representing '
                     'the quantum state.')
@@ -173,8 +168,11 @@ class ParamShift(CircuitGradient):
                 return operator
             circ = circs[0]
 
-            circ = ParamShift._unroll_to_supported_operations(circ)
-            operator = ParamShift._replace_operator_circuit(operator, circ)
+            if self.analytic:
+                # Unroll the circuit into a gate set for which the gradient may be computed
+                # using pi/2 shifts.
+                circ = ParamShift._unroll_to_supported_operations(circ)
+                operator = ParamShift._replace_operator_circuit(operator, circ)
 
             if param not in circ._parameter_table:
                 return ~Zero @ One
@@ -196,9 +194,7 @@ class ParamShift(CircuitGradient):
                 p_param = pshift_gate.params[param_index]
                 m_param = mshift_gate.params[param_index]
 
-                # Assumes the gate is a standard qiskit gate
-
-                if self._analytic:
+                if self.analytic:
                     shift_constant = 0.5
                     pshift_gate.params[param_index] = (p_param + (np.pi / (4 * shift_constant)))
                     mshift_gate.params[param_index] = (m_param - (np.pi / (4 * shift_constant)))
@@ -232,6 +228,16 @@ class ParamShift(CircuitGradient):
 
     @staticmethod
     def _prob_combo_fn(x, shift_constant):
+        """Implement the combo_fn used to evaluate probability gradients
+
+        Args:
+            x: Output of an operator evaluation
+            shift_constant: Shifting constant factor needed for proper rescaling
+
+        Returns: Array representing the probability gradients w.r.t. the given operator and
+                 parameters
+
+        """
         # In the probability gradient case, the amplitudes still need to be converted
         # into sampling probabilities.
         def get_primitives(item):
@@ -259,14 +265,20 @@ class ParamShift(CircuitGradient):
         elif isinstance(items[0], Iterable):
             return shift_constant * np.subtract(np.multiply(items[0], np.conj(items[0])),
                                                 np.multiply(items[1], np.conj(items[1])))
-
-        print('type error', x
-              )
         raise TypeError(
             'Probability gradients can only be evaluated from VectorStateFs or DictStateFns.')
 
     @staticmethod
     def _unroll_to_supported_operations(circuit):
+        """Unroll the given circuit into a gate set for which the gradients may be computed using
+           pi/2 shifts.
+
+        Args:
+            circuit: Quantum circuit to be unrolled into supported operations
+
+        Returns: Quantum circuit which is unrolled into supported operations
+
+        """
         supported = {'x', 'y', 'z', 'h', 'rx', 'ry', 'rz', 'p', 'u', 'cx', 'cy', 'cz'}
         unique_ops = set(circuit.count_ops().keys())
         if not unique_ops.issubset(supported):
@@ -276,12 +288,12 @@ class ParamShift(CircuitGradient):
     @staticmethod
     def _replace_operator_circuit(operator: OperatorBase,
                                   circuit: QuantumCircuit) -> OperatorBase:
-        """Replace a circuit element in an operator with a single element given as circuit.
+        """Replace a circuit element in an operator with a single element given as circuit
 
         Args:
             operator: Operator for which the circuit representing the quantum state shall be
-                replaced.
-            circuit: Circuit which shall replace the circuit in the given operator.
+                      replaced
+            circuit: Circuit which shall replace the circuit in the given operator
 
         Returns:
             Operator with replaced circuit quantum state function

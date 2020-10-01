@@ -41,8 +41,8 @@ from ..derivatives_base import DerivativeBase
 
 
 class LinComb(CircuitGradient):
-    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω using the linear combination method.
-    respectively the gradients of the sampling probabilities of the basis states of
+    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the sampling
+    probabilities of the basis states of
     a state |ψ(ω)〉w.r.t. ω.
     This method employs a linear combination of unitaries,
     see e.g. https://arxiv.org/pdf/1811.11184.pdf
@@ -56,7 +56,9 @@ class LinComb(CircuitGradient):
                                        List[Tuple[ParameterExpression,
                                                   ParameterExpression]]]] = None
                 ) -> OperatorBase:
-        """
+        """ Convert the given operator into an operator object that represents the gradient w.r.t.
+            params
+
         Args:
             operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
@@ -73,7 +75,6 @@ class LinComb(CircuitGradient):
 
         return self._prepare_operator(operator, params)
 
-    # pylint: disable=too-many-return-statements
     def _prepare_operator(self,
                           operator: OperatorBase,
                           params: Optional[Union[ParameterExpression, ParameterVector,
@@ -82,7 +83,9 @@ class LinComb(CircuitGradient):
                                                  List[Tuple[ParameterExpression,
                                                             ParameterExpression]]]] = None
                           ) -> OperatorBase:
-        """
+        """ Traverse through the given operator to get back the adapted operator representing the
+            gradient
+
         Args:
             operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
@@ -347,7 +350,7 @@ class LinComb(CircuitGradient):
                             Union[Tuple[ParameterExpression, ParameterExpression],
                                   List[Tuple[ParameterExpression, ParameterExpression]]]]
                         = None) -> OperatorBase:
-        """Generate the operators whose evaluation leads to the full QFI.
+        """Generate the operator states whose evaluation returns the Hessian (items).
 
         Args:
             state_op: The operator representing the quantum state for which we compute the hessian.
@@ -391,7 +394,7 @@ class LinComb(CircuitGradient):
         # create a copy of the original circuit with an additional working qubit register
         circuit = QuantumCircuit(*state_qc.qregs, qr_add0, qr_add1)
         circuit.data = state_qc.data
-        # Get the circuits needed to compute A_ij
+        # Get the circuits needed to compute the Hessian
         hessian_ops = []
         for param_a, param_b in tuples_list:
 
