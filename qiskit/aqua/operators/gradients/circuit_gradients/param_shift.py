@@ -15,7 +15,7 @@
 from collections.abc import Iterable
 from copy import deepcopy
 from functools import partial
-from typing import List, Union, Optional, Tuple
+from typing import List, Union, Optional, Tuple, Dict
 
 import numpy as np
 from qiskit import transpile, QuantumCircuit
@@ -31,7 +31,9 @@ from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
 
 class ParamShift(CircuitGradient):
     """Compute the gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the sampling
-    probabilities of the basis states of a state |ψ(ω)〉w.r.t. ω with the parameter shift method."""
+    probabilities of the basis states of a state |ψ(ω)〉w.r.t. ω with the parameter shift
+    method.
+    """
 
     def __init__(self,
                  analytic: bool = True,
@@ -114,6 +116,7 @@ class ParamShift(CircuitGradient):
             raise AquaError('The linear combination gradient does only support the computation '
                             'of 1st gradients and 2nd order gradients.')
 
+    # pylint: disable=too-many-return-statements
     def _parameter_shift(self,
                          operator: OperatorBase,
                          params: Union[ParameterExpression, ParameterVector, List]) -> OperatorBase:
@@ -228,17 +231,23 @@ class ParamShift(CircuitGradient):
                 return SummedOp(shifted_ops).reduce()
 
     @staticmethod
-    def _prob_combo_fn(x, shift_constant):
+    def _prob_combo_fn(x: Union[DictStateFn, VectorStateFn,
+                                List[Union[DictStateFn, VectorStateFn]]],
+                       shift_constant: float) -> Union[Dict, np.ndarray]:
         """Implement the combo_fn used to evaluate probability gradients
 
         Args:
             x: Output of an operator evaluation
             shift_constant: Shifting constant factor needed for proper rescaling
 
-        Returns: Array representing the probability gradients w.r.t. the given operator and
-                 parameters
+        Returns:
+            Array representing the probability gradients w.r.t. the given operator and parameters
+
+        Raises:
+            TypeError: if ``x`` is not DictStateFn, VectorStateFn or their list.
 
         """
+
         # In the probability gradient case, the amplitudes still need to be converted
         # into sampling probabilities.
         def get_primitives(item):
@@ -248,20 +257,16 @@ class ParamShift(CircuitGradient):
                 item = item.primitive.data
             return item
 
-        if not isinstance(x, Iterable):
-            x = get_primitives(x)
+        if isinstance(x, Iterable):
+            items = [get_primitives(item) for item in x]
         else:
-            items = []
-            for item in x:
-                items.append(get_primitives(item))
+            items = [get_primitives(x)]
         if isinstance(items[0], dict):
             prob_dict = {}
             for i, item in enumerate(items):
                 for key, prob_counts in item.items():
-                    if not key in prob_dict.keys():
-                        prob_dict[key] = shift_constant * ((-1) ** i) * prob_counts
-                    else:
-                        prob_dict[key] += shift_constant * ((-1) ** i) * prob_counts
+                    prob_dict[key] = prob_dict.get(key, 0) + \
+                                     shift_constant * ((-1) ** i) * prob_counts
             return prob_dict
         elif isinstance(items[0], Iterable):
             return shift_constant * np.subtract(np.multiply(items[0], np.conj(items[0])),
@@ -270,14 +275,15 @@ class ParamShift(CircuitGradient):
             'Probability gradients can only be evaluated from VectorStateFs or DictStateFns.')
 
     @staticmethod
-    def _unroll_to_supported_operations(circuit):
+    def _unroll_to_supported_operations(circuit: QuantumCircuit) -> QuantumCircuit:
         """Unroll the given circuit into a gate set for which the gradients may be computed using
            pi/2 shifts.
 
         Args:
             circuit: Quantum circuit to be unrolled into supported operations
 
-        Returns: Quantum circuit which is unrolled into supported operations
+        Returns:
+            Quantum circuit which is unrolled into supported operations
 
         """
         supported = {'x', 'y', 'z', 'h', 'rx', 'ry', 'rz', 'p', 'u', 'cx', 'cy', 'cz'}

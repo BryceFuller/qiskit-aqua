@@ -41,8 +41,8 @@ from ..derivative_base import DerivativeBase
 
 
 class LinComb(CircuitGradient):
-    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the sampling
-    probabilities of the basis states of
+    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the
+    sampling probabilities of the basis states of
     a state |ψ(ω)〉w.r.t. ω.
     This method employs a linear combination of unitaries,
     see e.g. https://arxiv.org/pdf/1811.11184.pdf
@@ -585,22 +585,19 @@ class LinComb(CircuitGradient):
                 item = item.primitive.data
             if isinstance(item, dict):
                 prob_dict = {}
-                for key in item:
-                    prob_counts = item[key] * np.conj(item[key])
+                for key, val in item.items():
+                    prob_counts = val * np.conj(val)
                     if int(key[0]) == 1:
                         prob_counts *= -1
-                    if key[1:] not in prob_dict:
-                        prob_dict[key[1:]] = prob_counts
-                    else:
-                        prob_dict[key[1:]] += prob_counts
+                    suffix = key[1:]
+                    prob_dict[suffix] = prob_dict.get(suffix, 0) + prob_counts
                 return prob_dict
             elif isinstance(item, Iterable):
                 # Generate the operator which computes the linear combination
                 lin_comb_op = (I ^ state_op.num_qubits) ^ Z
                 lin_comb_op = lin_comb_op.to_matrix()
                 return list(np.diag(
-                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))),
-                                  [0]).data))
+                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data))
             else:
                 raise TypeError(
                     'The state result should be either a DictStateFn or a VectorStateFn.')
@@ -623,26 +620,19 @@ class LinComb(CircuitGradient):
             if isinstance(item, VectorStateFn):
                 item = item.primitive.data
             if isinstance(item, Iterable):
-                # Generate the operator which computes the linear
-                # combination
-                lin_comb_op = 4 * (
-                        I ^ (state_op.num_qubits + 1)) ^ Z
+                # Generate the operator which computes the linear combination
+                lin_comb_op = 4 * (I ^ (state_op.num_qubits + 1)) ^ Z
                 lin_comb_op = lin_comb_op.to_matrix()
-                return list(
-                    np.diag(partial_trace(
-                        lin_comb_op.dot(
-                            np.outer(item, np.conj(item))),
-                        [0, 1]).data))
+                return list(np.diag(
+                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0, 1]).data))
             elif isinstance(item, dict):
                 prob_dict = {}
-                for key in item:
-                    prob_counts = item[key] * np.conj(item[key])
+                for key, val in item.values():
+                    prob_counts = val * np.conj(val)
                     if int(key[-1]) == 1:
                         prob_counts *= -1
-                    if key[:-2] not in prob_dict:
-                        prob_dict[key[:-2]] = prob_counts
-                    else:
-                        prob_dict[key[:-2]] += prob_counts
+                    prefix = key[:-2]
+                    prob_dict[prefix] = prob_dict.get(prefix, 0) + prob_counts
                 for key in prob_dict:
                     prob_dict[key] *= 4
                 return prob_dict
