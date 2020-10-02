@@ -68,6 +68,7 @@ ceil
 cfg
 chernoff
 chu
+chuang
 chuang's
 circ
 circuitop
@@ -454,6 +455,7 @@ optimizers
 opv
 orbsym
 orthonormal
+otimes
 outers
 outpath
 overfit
