@@ -41,8 +41,8 @@ from ..derivatives_base import DerivativeBase
 
 
 class LinComb(CircuitGradient):
-    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the sampling
-    probabilities of the basis states of
+    """Compute the state gradient d⟨ψ(ω)|O(θ)|ψ(ω)〉/ dω respectively the gradients of the
+    sampling probabilities of the basis states of
     a state |ψ(ω)〉w.r.t. ω.
     This method employs a linear combination of unitaries,
     see e.g. https://arxiv.org/pdf/1811.11184.pdf
@@ -75,6 +75,7 @@ class LinComb(CircuitGradient):
 
         return self._prepare_operator(operator, params)
 
+    # pylint: disable=too-many-return-statements
     def _prepare_operator(self,
                           operator: OperatorBase,
                           params: Optional[Union[ParameterExpression, ParameterVector,
@@ -598,8 +599,7 @@ class LinComb(CircuitGradient):
                 lin_comb_op = (I ^ state_op.num_qubits) ^ Z
                 lin_comb_op = lin_comb_op.to_matrix()
                 return list(np.diag(
-                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))),
-                                  [0]).data))
+                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0]).data))
             else:
                 raise TypeError(
                     'The state result should be either a DictStateFn or a VectorStateFn.')
@@ -624,14 +624,10 @@ class LinComb(CircuitGradient):
             if isinstance(item, Iterable):
                 # Generate the operator which computes the linear
                 # combination
-                lin_comb_op = 4 * (
-                        I ^ (state_op.num_qubits + 1)) ^ Z
+                lin_comb_op = 4 * (I ^ (state_op.num_qubits + 1)) ^ Z
                 lin_comb_op = lin_comb_op.to_matrix()
-                return list(
-                    np.diag(partial_trace(
-                        lin_comb_op.dot(
-                            np.outer(item, np.conj(item))),
-                        [0, 1]).data))
+                return list(np.diag(
+                    partial_trace(lin_comb_op.dot(np.outer(item, np.conj(item))), [0, 1]).data))
             elif isinstance(item, dict):
                 prob_dict = {}
                 for key in item:
