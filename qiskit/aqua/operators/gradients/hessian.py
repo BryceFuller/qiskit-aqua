@@ -94,7 +94,6 @@ class Hessian(HessianBase):
             AquaError: If the coefficent of the operator could not be reduced to 1.
                         AquaError: If the differentiation of a combo_fn requires JAX but the package
                         is not installed.
-            NotImplementedError: If operator is a TensoredOp  # TODO support this
             TypeError: If the operator does not include a StateFn given by a quantum circuit
             Exception: Unintended code is reached
         """

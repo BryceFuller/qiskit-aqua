@@ -137,11 +137,9 @@ class DerivativeBase(ConverterBase):
             ParameterExpression representing the gradient of param_expr w.r.t. param
         """
         if not isinstance(param_expr, ParameterExpression):
-            # TODO: return ParameterExpression
             return 0.0
 
         if param not in param_expr._parameter_symbols:
-            # TODO: return ParameterExpression
             return 0.0
 
         import sympy as sy
