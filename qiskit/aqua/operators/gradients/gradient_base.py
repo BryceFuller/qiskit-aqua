@@ -16,6 +16,7 @@ from typing import Union
 from qiskit.aqua.operators.gradients.circuit_gradients import CircuitGradient
 from qiskit.aqua.operators.gradients.derivative_base import DerivativeBase
 
+
 class GradientBase(DerivativeBase):
     """Convert an operator expression to the first-order gradient."""
 

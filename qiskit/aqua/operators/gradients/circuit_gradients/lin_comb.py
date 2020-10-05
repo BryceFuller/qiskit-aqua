@@ -51,10 +51,10 @@ class LinComb(CircuitGradient):
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[ParameterExpression, ParameterVector,
-                                                 List[ParameterExpression],
-                                                 Tuple[ParameterExpression, ParameterExpression],
-                                                 List[Tuple[ParameterExpression,
-                                                            ParameterExpression]]]] = None,
+                                       List[ParameterExpression],
+                                       Tuple[ParameterExpression, ParameterExpression],
+                                       List[Tuple[ParameterExpression, ParameterExpression]]]]
+                = None,
                 ) -> OperatorBase:
         """ Convert the given operator into an operator object that represents the gradient w.r.t.
             params
@@ -125,8 +125,8 @@ class LinComb(CircuitGradient):
                         return self._gradient_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
                                                      target_params=params)
                     elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                                 List[Tuple[ParameterExpression,
-                                                            ParameterExpression]])):
+                                             List[Tuple[ParameterExpression,
+                                                        ParameterExpression]])):
                         return self._hessian_states(state_op,
                                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                                     target_params=params)
@@ -144,8 +144,8 @@ class LinComb(CircuitGradient):
                             partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
                                     target_params=params))
                     elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                                 List[Tuple[ParameterExpression,
-                                                            ParameterExpression]])):
+                                             List[Tuple[ParameterExpression,
+                                                        ParameterExpression]])):
                         return state_op.traverse(
                             partial(self._hessian_states,
                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
@@ -167,8 +167,7 @@ class LinComb(CircuitGradient):
                                        List[ParameterExpression])):
                     return self._gradient_states(operator, target_params=params)
                 elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                                 List[Tuple[ParameterExpression,
-                                                            ParameterExpression]])):
+                                         List[Tuple[ParameterExpression, ParameterExpression]])):
                     return self._hessian_states(operator, target_params=params)
                 else:
                     raise AquaError(
@@ -503,9 +502,8 @@ class LinComb(CircuitGradient):
                                 hessian_circuit.cz(work_q1, work_q0)
                                 hessian_circuit.h(work_q1)
 
-                                term = state_op.coeff * \
-                                       np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) * \
-                                       CircuitStateFn(hessian_circuit)
+                                term = state_op.coeff * np.sqrt(np.abs(coeff_a) * np.abs(coeff_b)) \
+                                                      * CircuitStateFn(hessian_circuit)
 
                                 # Chain Rule Parameter Expression
                                 gate_param_a = param_occurence_a[0].params[param_occurence_a[1]]

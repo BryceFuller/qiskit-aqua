@@ -314,8 +314,8 @@ class LinCombFull(CircuitQFI):
 
                                 qfi_circuit.h(work_qubit)
                                 # Convert the quantum circuit into a CircuitStateFn
-                                term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * \
-                                       operator.coeff * CircuitStateFn(qfi_circuit)
+                                term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * operator.coeff
+                                term = term * CircuitStateFn(qfi_circuit)
 
                                 # Chain Rule Parameter Expression
 
