@@ -130,19 +130,6 @@ class LinComb(CircuitGradient):
                         return self._hessian_states(state_op,
                                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                                     target_params=params)
-                    # elif isinstance(params, list):
-                    #     if all(isinstance(param, ParameterExpression) for param in params):
-                    #         return self._gradient_states(state_op,
-                    #                                      meas_op=(~StateFn(Z) ^ operator[0]),
-                    #                                      target_params=params)
-                    #     elif all(isinstance(param, tuple) for param in params):
-                    #         return self._hessian_states(state_op,
-                    #                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
-                    #                                     target_params=params)
-                    #     else:
-                    #         raise AquaError(
-                    #             'The linear combination gradient does only support the computation '
-                    #             'of 1st gradients and 2nd order gradients.')
                     else:
                         raise AquaError(
                             'The linear combination gradient does only support the computation '
@@ -163,20 +150,7 @@ class LinComb(CircuitGradient):
                             partial(self._hessian_states,
                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                     target_params=params))
-                    # elif isinstance(params, list):
-                    #     if isinstance(params[0], tuple):
-                    #         return state_op.traverse(
-                    #             partial(self._hessian_states,
-                    #                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
-                    #                     target_params=params))
-                    #     elif isinstance(params[0], ParameterExpression):
-                    #         return state_op.traverse(
-                    #             partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
-                    #                     target_params=params))
-                    #     else:
-                    #         raise AquaError(
-                    #             'The linear combination gradient does only support the computation '
-                    #             'of 1st gradients and 2nd order gradients.')
+
                     else:
                         raise AquaError(
                             'The linear combination gradient does only support the computation '
@@ -189,19 +163,13 @@ class LinComb(CircuitGradient):
             if operator.is_measurement:
                 return operator.traverse(partial(self._prepare_operator, params=params))
             else:
-                if isinstance(params, (ParameterExpression, ParameterVector)):
+                if isinstance(params, (ParameterExpression, ParameterVector,
+                                       List[ParameterExpression])):
                     return self._gradient_states(operator, target_params=params)
-                elif isinstance(params, tuple):
+                elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
+                                                 List[Tuple[ParameterExpression,
+                                                            ParameterExpression]])):
                     return self._hessian_states(operator, target_params=params)
-                elif isinstance(params, list):
-                    if isinstance(params[0], tuple):
-                        return self._hessian_states(operator, target_params=params)
-                    elif isinstance(params[0], ParameterExpression):
-                        return self._gradient_states(operator, target_params=params)
-                    else:
-                        raise AquaError(
-                            'The linear combination gradient does only support the computation '
-                            'of 1st gradients and 2nd order gradients.')
                 else:
                     raise AquaError(
                         'The linear combination gradient does only support the computation '

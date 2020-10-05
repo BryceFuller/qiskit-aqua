@@ -149,8 +149,7 @@ class LinCombFull(CircuitQFI):
 
                     grad_state.h(work_q)
 
-                    state = np.sqrt(np.abs(coeff_i)) * \
-                            operator.coeff * CircuitStateFn(grad_state)
+                    state = np.sqrt(np.abs(coeff_i)) * operator.coeff * CircuitStateFn(grad_state)
 
                     # Chain Rule parameter expressions
                     gate_param = param_occurence[0].params[param_occurence[1]]
@@ -316,8 +315,7 @@ class LinCombFull(CircuitQFI):
                                 qfi_circuit.h(work_qubit)
                                 # Convert the quantum circuit into a CircuitStateFn
                                 term = np.sqrt(np.abs(coeff_i) * np.abs(coeff_j)) * \
-                                       operator.coeff * \
-                                       CircuitStateFn(qfi_circuit)
+                                       operator.coeff * CircuitStateFn(qfi_circuit)
 
                                 # Chain Rule Parameter Expression
 
