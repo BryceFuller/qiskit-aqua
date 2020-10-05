@@ -28,7 +28,9 @@ from ..list_ops.composed_op import ComposedOp
 from ..list_ops.list_op import ListOp
 from ..operator_base import OperatorBase
 from ..primitive_ops.primitive_op import PrimitiveOp
-from ..state_fns.operator_state_fn import OperatorStateFn
+from ..state_fns import StateFn, OperatorStateFn
+
+OperatorType = Union[StateFn, PrimitiveOp, ListOp]
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +166,7 @@ class DerivativeBase(ConverterBase):
         return float(expr_grad)  # if no free symbols left, convert to float
 
     @classmethod
-    def _erase_operator_coeffs(cls, operator: OperatorBase) -> OperatorBase:
+    def _erase_operator_coeffs(cls, operator: OperatorType) -> OperatorBase:
         """This method traverses an input operator and deletes all of the coefficients
 
         Args:
@@ -183,7 +185,7 @@ class DerivativeBase(ConverterBase):
         return operator
 
     @classmethod
-    def _factor_coeffs_out_of_composed_op(cls, operator: OperatorBase) -> OperatorBase:
+    def _factor_coeffs_out_of_composed_op(cls, operator: OperatorType) -> OperatorBase:
         """Factor all coefficients of ComposedOp out into a single global coefficient.
 
         Part of the automatic differentiation logic inside of Gradient and Hessian

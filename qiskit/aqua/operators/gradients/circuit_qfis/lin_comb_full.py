@@ -15,14 +15,14 @@
 import copy
 from collections.abc import Iterable
 from copy import deepcopy
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple
 
 import numpy as np
 from qiskit.aqua import AquaError
-from qiskit.aqua.operators import ListOp, OperatorBase
+from qiskit.aqua.operators import ListOp
 from qiskit.aqua.operators.operator_globals import I, Z, Y, X
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
-from qiskit.circuit import Gate
+from qiskit.circuit import Gate, Qubit
 from qiskit.circuit import (QuantumCircuit, QuantumRegister, ParameterVector,
                             ParameterExpression)
 from qiskit.circuit.library import RZGate, RXGate, HGate, XGate, SdgGate, SGate, ZGate, UGate
@@ -45,7 +45,7 @@ class LinCombFull(CircuitQFI):
                 operator: CircuitStateFn,
                 params: Optional[Union[ParameterExpression, ParameterVector,
                                        List[ParameterExpression]]] = None,
-                ) -> ListOp(List[OperatorBase]):
+                ) -> ListOp:
         r"""
         Args:
             operator: The operator corresponding to the quantum state |ψ(ω)〉for which we compute
@@ -80,7 +80,7 @@ class LinCombFull(CircuitQFI):
         phase_fix_states = []
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
-        additional_qubits = ([work_q], [])
+        additional_qubits: Tuple[List[Qubit], List[Qubit]] = ([work_q], [])
         # create a copy of the original state with an additional work_q register
         for param in params:
             param_gates = state_qc._parameter_table[param]

@@ -41,7 +41,7 @@ class OverlapDiag(CircuitQFI):
                 operator: Union[CircuitOp, CircuitStateFn],
                 params: Optional[Union[ParameterExpression, ParameterVector,
                                        List[ParameterExpression]]] = None
-                ) -> ListOp(List[OperatorBase]):
+                ) -> ListOp:
 
         r"""
         Args:

@@ -51,10 +51,10 @@ class LinComb(CircuitGradient):
     def convert(self,
                 operator: OperatorBase,
                 params: Optional[Union[ParameterExpression, ParameterVector,
-                                       List[ParameterExpression],
-                                       Tuple[ParameterExpression, ParameterExpression],
-                                       List[Tuple[ParameterExpression,
-                                                  ParameterExpression]]]] = None
+                                                 List[ParameterExpression],
+                                                 Tuple[ParameterExpression, ParameterExpression],
+                                                 List[Tuple[ParameterExpression,
+                                                            ParameterExpression]]]] = None,
                 ) -> OperatorBase:
         """ Convert the given operator into an operator object that represents the gradient w.r.t.
             params
@@ -120,26 +120,29 @@ class LinComb(CircuitGradient):
             if operator[0].is_measurement:
                 if len(operator.oplist) == 2:
                     state_op = operator[1]
-                    if isinstance(params, (ParameterExpression, ParameterVector)):
+                    if isinstance(params, (ParameterExpression, ParameterVector,
+                                           List[ParameterExpression])):
                         return self._gradient_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
                                                      target_params=params)
-                    elif isinstance(params, tuple):
+                    elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
+                                                 List[Tuple[ParameterExpression,
+                                                            ParameterExpression]])):
                         return self._hessian_states(state_op,
                                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                                     target_params=params)
-                    elif isinstance(params, list):
-                        if isinstance(params[0], ParameterExpression):
-                            return self._gradient_states(state_op,
-                                                         meas_op=(~StateFn(Z) ^ operator[0]),
-                                                         target_params=params)
-                        elif isinstance(params[0], tuple):
-                            return self._hessian_states(state_op,
-                                                        meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
-                                                        target_params=params)
-                        else:
-                            raise AquaError(
-                                'The linear combination gradient does only support the computation '
-                                'of 1st gradients and 2nd order gradients.')
+                    # elif isinstance(params, list):
+                    #     if all(isinstance(param, ParameterExpression) for param in params):
+                    #         return self._gradient_states(state_op,
+                    #                                      meas_op=(~StateFn(Z) ^ operator[0]),
+                    #                                      target_params=params)
+                    #     elif all(isinstance(param, tuple) for param in params):
+                    #         return self._hessian_states(state_op,
+                    #                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
+                    #                                     target_params=params)
+                    #     else:
+                    #         raise AquaError(
+                    #             'The linear combination gradient does only support the computation '
+                    #             'of 1st gradients and 2nd order gradients.')
                     else:
                         raise AquaError(
                             'The linear combination gradient does only support the computation '
@@ -148,29 +151,32 @@ class LinComb(CircuitGradient):
                     state_op = deepcopy(operator)
                     state_op.oplist.pop(0)
 
-                    if isinstance(params, (ParameterExpression, ParameterVector)):
+                    if isinstance(params, (ParameterExpression, ParameterVector,
+                                           List[ParameterExpression])):
                         return state_op.traverse(
                             partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
                                     target_params=params))
-                    elif isinstance(params, tuple):
+                    elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
+                                                 List[Tuple[ParameterExpression,
+                                                            ParameterExpression]])):
                         return state_op.traverse(
                             partial(self._hessian_states,
                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                     target_params=params))
-                    elif isinstance(params, list):
-                        if isinstance(params[0], tuple):
-                            return state_op.traverse(
-                                partial(self._hessian_states,
-                                        meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
-                                        target_params=params))
-                        elif isinstance(params[0], ParameterExpression):
-                            return state_op.traverse(
-                                partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
-                                        target_params=params))
-                        else:
-                            raise AquaError(
-                                'The linear combination gradient does only support the computation '
-                                'of 1st gradients and 2nd order gradients.')
+                    # elif isinstance(params, list):
+                    #     if isinstance(params[0], tuple):
+                    #         return state_op.traverse(
+                    #             partial(self._hessian_states,
+                    #                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
+                    #                     target_params=params))
+                    #     elif isinstance(params[0], ParameterExpression):
+                    #         return state_op.traverse(
+                    #             partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
+                    #                     target_params=params))
+                    #     else:
+                    #         raise AquaError(
+                    #             'The linear combination gradient does only support the computation '
+                    #             'of 1st gradients and 2nd order gradients.')
                     else:
                         raise AquaError(
                             'The linear combination gradient does only support the computation '
@@ -205,7 +211,7 @@ class LinComb(CircuitGradient):
         return operator
 
     def _gradient_states(self,
-                         state_op: OperatorBase,
+                         state_op: StateFn,
                          meas_op: Optional[OperatorBase] = None,
                          target_params: Optional[
                              Union[ParameterExpression, ParameterVector,
@@ -345,7 +351,7 @@ class LinComb(CircuitGradient):
             return op
 
     def _hessian_states(self,
-                        state_op: OperatorBase,
+                        state_op: StateFn,
                         meas_op: Optional[OperatorBase] = None,
                         target_params: Optional[
                             Union[Tuple[ParameterExpression, ParameterExpression],

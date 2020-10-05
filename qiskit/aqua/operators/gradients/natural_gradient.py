@@ -22,8 +22,7 @@ where R(x) represents the penalization term.
 import logging
 import os
 from collections.abc import Iterable
-from typing import List, Tuple
-from typing import Optional, Union
+from typing import List, Tuple, Callable, Optional, Union
 
 import numpy as np
 from qiskit.aqua.operators import (OperatorBase, ListOp, ComposedOp, CircuitStateFn)
@@ -136,7 +135,7 @@ class NaturalGradient(GradientBase):
     @staticmethod
     def _reg_term_search(a: np.ndarray,
                          c: np.ndarray,
-                         reg_method: callable,
+                         reg_method: Callable[[np.ndarray, np.ndarray, float], float],
                          lambda1: float = 1e-3,
                          lambda4: float = 1.,
                          tol: float = 1e-8) -> float:
@@ -161,7 +160,7 @@ class NaturalGradient(GradientBase):
             regularization term - lambda
         """
 
-        def _get_curvature(x_lambda: List[List]) -> float:
+        def _get_curvature(x_lambda: List[List]) -> Tuple[float, float]:
             """Calculate Menger curvature
 
             Menger, K. (1930).  Untersuchungen  ̈uber Allgemeine Metrik. Math. Ann.,103(1), 466–501
@@ -373,7 +372,7 @@ class NaturalGradient(GradientBase):
                                 lambda1: float = 1e-3,
                                 lambda4: float = 1.,
                                 alpha: float = 0.,
-                                tol_norm_x: Union[tuple, float] = (1e-8, 5.),
+                                tol_norm_x: Tuple[float, float] = (1e-8, 5.),
                                 tol_cond_a: float = 1000.) -> np.ndarray:
 
         """

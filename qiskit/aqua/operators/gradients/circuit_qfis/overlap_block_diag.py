@@ -19,7 +19,7 @@ from typing import List, Union, Optional
 import numpy as np
 from scipy.linalg import block_diag
 from qiskit.aqua import AquaError
-from qiskit.aqua.operators import OperatorBase, ListOp, CircuitOp
+from qiskit.aqua.operators import ListOp, CircuitOp
 from qiskit.aqua.operators.expectations import PauliExpectation
 from qiskit.aqua.operators.operator_globals import I, Z, Y, X, Zero
 from qiskit.aqua.operators.state_fns import StateFn, CircuitStateFn
@@ -45,7 +45,7 @@ class OverlapBlockDiag(CircuitQFI):
                 operator: Union[CircuitOp, CircuitStateFn],
                 params: Optional[Union[ParameterExpression, ParameterVector,
                                        List[ParameterExpression]]] = None
-                ) -> ListOp(List[OperatorBase]):
+                ) -> ListOp:
 
         r"""
         Args:
@@ -68,7 +68,7 @@ class OverlapBlockDiag(CircuitQFI):
                            operator: Union[CircuitOp, CircuitStateFn],
                            params: Optional[Union[ParameterExpression, ParameterVector,
                                                   List[ParameterExpression]]] = None
-                           ) -> ListOp(List[OperatorBase]):
+                           ) -> ListOp:
         r"""
         Args:
             operator: The operator corresponding to the quantum state |ψ(ω)〉for which we compute

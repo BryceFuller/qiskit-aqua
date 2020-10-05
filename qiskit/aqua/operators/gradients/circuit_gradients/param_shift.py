@@ -103,9 +103,9 @@ class ParamShift(CircuitGradient):
         elif isinstance(params, tuple):
             return self._parameter_shift(self._parameter_shift(operator, params[0]), params[1])
         elif isinstance(params, Iterable):
-            if isinstance(params[0], ParameterExpression):
+            if all(isinstance(param, ParameterExpression) for param in params):
                 return self._parameter_shift(operator, params)
-            elif isinstance(params[0], tuple):
+            elif all(isinstance(param, tuple) for param in params):
                 return ListOp(
                     [self._parameter_shift(self._parameter_shift(operator, pair[0]), pair[1])
                      for pair in params])
@@ -262,7 +262,7 @@ class ParamShift(CircuitGradient):
         else:
             items = [get_primitives(x)]
         if isinstance(items[0], dict):
-            prob_dict = {}
+            prob_dict: Dict[str, float] = {}
             for i, item in enumerate(items):
                 for key, prob_counts in item.items():
                     prob_dict[key] = prob_dict.get(key, 0) + \

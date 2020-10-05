@@ -34,7 +34,7 @@ class QFI(QFIBase):
                 operator: CircuitStateFn,
                 params: Optional[Union[ParameterExpression, ParameterVector,
                                        List[ParameterExpression]]] = None
-                ) -> ListOp(List[OperatorBase]):
+                ) -> ListOp:
         r"""
         Args:
             operator: The operator corresponding to the quantum state |ψ(ω)〉for which we compute
