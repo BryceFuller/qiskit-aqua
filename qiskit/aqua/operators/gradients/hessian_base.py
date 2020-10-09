@@ -19,8 +19,8 @@ from qiskit.aqua.operators.gradients.circuit_gradients.circuit_gradient \
 from qiskit.aqua.operators.gradients.derivative_base import DerivativeBase
 
 
-class HessianBase(DerivativeBase):
-    """Compute the Hessian of an expected value."""
+class HessianBase(DerivativeBase):  # pylint: disable=abstract-method
+    """Base class for the Hessian of an expected value."""
 
     def __init__(self,
                  hess_method: Union[str, CircuitGradient] = 'param_shift',
@@ -29,7 +29,7 @@ class HessianBase(DerivativeBase):
         Args:
             hess_method: The method used to compute the state/probability gradient. Can be either
                 ``'param_shift'`` or ``'lin_comb'`` or ``'fin_diff'``.
-                Deprecated for observable gradient.
+                Deprecated for gradients w.r.t observable parameters.
             kwargs (dict): Optional parameters for a CircuitGradient
 
         Raises:
@@ -52,8 +52,8 @@ class HessianBase(DerivativeBase):
             self._hess_method = LinComb()
 
         else:
-            raise ValueError("Unrecognized input provided for `method`. Please provide"
-                             " a CircuitGradientMethod object or one of the pre-defined string"
+            raise ValueError("Unrecognized input provided for `hess_method`. Please provide"
+                             " a CircuitGradient object or one of the pre-defined string"
                              " arguments: {'param_shift', 'fin_diff', 'lin_comb'}. ")
 
     @property

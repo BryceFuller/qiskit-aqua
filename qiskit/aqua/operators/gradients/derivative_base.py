@@ -19,7 +19,7 @@ from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from qiskit.aqua import QuantumInstance
-from qiskit.circuit import Parameter, ParameterExpression, ParameterVector
+from qiskit.circuit import ParameterExpression, ParameterVector
 from qiskit.providers import BaseBackend
 
 from ..converters import CircuitSampler
@@ -36,9 +36,10 @@ logger = logging.getLogger(__name__)
 
 
 class DerivativeBase(ConverterBase):
-    r"""
+    r"""Base class for differentiating opflow objects.
+
     Converter for differentiating opflow objects and handling
-    things like properly differentiating combo_fn's and enforcing prodct rules
+    things like properly differentiating combo_fn's and enforcing product rules
     when operator coefficients are parameterized.
 
     This is distinct from CircuitGradient converters which use quantum
@@ -94,24 +95,10 @@ class DerivativeBase(ConverterBase):
 
         Returns:
             callable(param_values): Function to compute a gradient, Hessian or QFI. The function
-            takes an Iterable as argument which holds the parameter values.
-
-        Raises:
-            ImportError: if 'retworkx>=0.5.0' is not installed.
+            takes an iterable as argument which holds the parameter values.
         """
         if not grad_params:
             grad_params = bind_params
-        if backend and (
-                (isinstance(backend, QuantumInstance) and (not backend.is_statevector)) or
-                (not isinstance(backend, QuantumInstance) and
-                 not backend.name().startswith('statevector'))
-        ):
-            try:
-                import retworkx
-                if retworkx.__version__ < '0.5.0':
-                    raise ImportError('Please update retworx to at least version 0.5.0')
-            except ModuleNotFoundError as ex:
-                raise ImportError('Please install retworx>=0.5.0') from ex
 
         def gradient_fn(p_values):
             p_values_dict = dict(zip(bind_params, p_values))
@@ -128,7 +115,7 @@ class DerivativeBase(ConverterBase):
 
     @staticmethod
     def parameter_expression_grad(param_expr: ParameterExpression,
-                                  param: Parameter) -> Union[ParameterExpression, float]:
+                                  param: ParameterExpression) -> Union[ParameterExpression, float]:
         """Get the derivative of a parameter expression w.r.t. the given parameter.
 
         Args:
@@ -170,19 +157,18 @@ class DerivativeBase(ConverterBase):
         """This method traverses an input operator and deletes all of the coefficients
 
         Args:
-            operator: An operator of type OperatorBase
+            operator: An operator type object.
 
         Returns:
             An operator which is equal to the input operator but whose coefficients
             have all been set to 1.0
-
+        Raises:
+            TypeError: If unknown operator type is reached.
         """
         if isinstance(operator, PrimitiveOp):
-            return operator / operator._coeff
-        elif isinstance(operator, OperatorBase):
-            op_coeff = operator._coeff
-            return (operator / op_coeff).traverse(cls._erase_operator_coeffs)
-        return operator
+            return operator / operator.coeff
+        op_coeff = operator.coeff  # type: ignore
+        return (operator / op_coeff).traverse(cls._erase_operator_coeffs)
 
     @classmethod
     def _factor_coeffs_out_of_composed_op(cls, operator: OperatorType) -> OperatorBase:
@@ -213,13 +199,12 @@ class DerivativeBase(ConverterBase):
             total_coeff = 1.0
             take_norm_of_coeffs = False
             for op in operator.oplist:
-
                 if take_norm_of_coeffs:
-                    total_coeff *= (op._coeff * np.conj(op._coeff))
+                    total_coeff *= (op.coeff * np.conj(op.coeff))  # type: ignore
                 else:
-                    total_coeff *= op._coeff
+                    total_coeff *= op.coeff  # type: ignore
                 if hasattr(op, 'primitive'):
-                    prim = op.primitive
+                    prim = op.primitive  # type: ignore
                     if isinstance(prim, ListOp):
                         raise ValueError("This operator was not properly decomposed. "
                                          "By this point, all operator measurements should "
@@ -230,10 +215,20 @@ class DerivativeBase(ConverterBase):
                             total_coeff *= (prim._coeff * np.conj(prim._coeff))
                         else:
                             total_coeff *= prim._coeff
+                # if isinstance(op, (StateFn, PrimitiveOp)):
+                #     if take_norm_of_coeffs:
+                #         total_coeff *= (op.coeff * np.conj(op.coeff))
+                #     else:
+                #         total_coeff *= op.coeff
+                # else:
+                #     raise ValueError("This operator was not properly decomposed. "
+                #                      "By this point, all operator measurements should "
+                #                      "contain single operators, otherwise the coefficient "
+                #                      "gradients will not be handled properly.")
 
-                if isinstance(op, OperatorStateFn) and op._is_measurement:
+                if isinstance(op, OperatorStateFn) and op.is_measurement:
                     take_norm_of_coeffs = True
-            return total_coeff * cls._erase_operator_coeffs(operator)
+            return cls._erase_operator_coeffs(operator).mul(total_coeff)
 
         else:
             return operator

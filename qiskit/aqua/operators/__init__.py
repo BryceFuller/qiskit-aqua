@@ -124,6 +124,7 @@ only diagonal Paulis.
    converters
    evolutions
    expectations
+   gradients
 
 """
 
@@ -184,5 +185,4 @@ __all__ = [
     'X', 'Y', 'Z', 'I', 'CX', 'S', 'H', 'T', 'Swap', 'CZ', 'Zero', 'One', 'Plus', 'Minus',
     # Gradients
     'DerivativeBase', 'GradientBase', 'Gradient', 'NaturalGradient',
-    'HessianBase', 'Hessian', 'QFIBase', 'QFI'
-]
+    'HessianBase', 'Hessian', 'QFIBase', 'QFI']

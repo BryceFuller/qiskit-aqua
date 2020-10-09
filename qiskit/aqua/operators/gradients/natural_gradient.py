@@ -1,6 +1,6 @@
 # This code is part of Qiskit.
 #
-# (C) Copyright IBM 2018, 2019.
+# (C) Copyright IBM 2018, 2020.
 #
 # This code is licensed under the Apache License, Version 2.0. You may
 # obtain a copy of this license in the LICENSE.txt file in the root directory
@@ -10,14 +10,7 @@
 # copyright notice, and modified files need to carry a notice indicating
 # that they have been altered from the originals.
 
-"""
-Given an ill-posed inverse problem
-    x = arg min{||Ax-C||^2} (1)
-one can use regularization schemes can be used to stabilize the system and find a numerical
-solution.
-    x_lambda = arg min{||Ax-C||^2 + lambda*R(x)} (2)
-where R(x) represents the penalization term.
-"""
+""" Natural Gradient. """
 
 import logging
 import os
@@ -39,7 +32,19 @@ logger = logging.getLogger(__name__)
 
 
 class NaturalGradient(GradientBase):
-    """Convert an operator expression to the first-order gradient."""
+    r"""Convert an operator expression to the first-order gradient.
+
+    Given an ill-posed inverse problem
+
+        x = arg min{||Ax-C||^2} (1)
+
+    one can use regularization schemes can be used to stabilize the system and find a numerical
+    solution
+
+        x_lambda = arg min{||Ax-C||^2 + lambda*R(x)} (2)
+
+    where R(x) represents the penalization term.
+    """
 
     def __init__(self,
                  grad_method: Union[str, CircuitGradient] = 'lin_comb',
@@ -52,12 +57,12 @@ class NaturalGradient(GradientBase):
                 ``'param_shift'`` or ``'lin_comb'`` or ``'fin_diff'``.
             qfi_method: The method used to compute the QFI. Can be either
                 ``'lin_comb_full'`` or ``'overlap_block_diag'`` or ``'overlap_diag'``.
-            regularization: Use the following regularization with an lstsq method to solve the
-                underlying SLE
+            regularization: Use the following regularization with a least square method to solve the
+                underlying system of linear equations
                 Can be either None or ``'ridge'`` or ``'lasso'`` or ``'perturb_diag'``
                 ``'ridge'`` and ``'lasso'`` use an automatic optimal parameter search
                 If regularization is None but the metric is ill-conditioned or singular then
-                a lstsq solver is used without regularization
+                a least square solver is used without regularization
             kwargs (dict): Optional parameters for a CircuitGradient
         """
         super().__init__(grad_method)
@@ -138,7 +143,7 @@ class NaturalGradient(GradientBase):
                          reg_method: Callable[[np.ndarray, np.ndarray, float], float],
                          lambda1: float = 1e-3,
                          lambda4: float = 1.,
-                         tol: float = 1e-8) -> float:
+                         tol: float = 1e-8) -> Tuple[float, np.ndarray]:
         """
         This method implements a search for a regularization parameter lambda by finding for the
         corner of the L-curve
@@ -157,10 +162,10 @@ class NaturalGradient(GradientBase):
             tol: termination threshold
 
         Returns:
-            regularization term - lambda
+            regularization coefficient, solution to the regularization inverse problem
         """
 
-        def _get_curvature(x_lambda: List[List]) -> Tuple[float, float]:
+        def _get_curvature(x_lambda: List) -> Union[int, float]:
             """Calculate Menger curvature
 
             Menger, K. (1930).  Untersuchungen  ̈uber Allgemeine Metrik. Math. Ann.,103(1), 466–501
@@ -184,8 +189,8 @@ class NaturalGradient(GradientBase):
             p_temp = 1
             c_k = 0
             for i in range(3):
-                p_temp *= (eps[np.mod(i + 1, 3)] - eps[i]) ** 2 + (
-                        eta[np.mod(i + 1, 3)] - eta[i]) ** 2
+                p_temp *= (eps[np.mod(i + 1, 3)] - eps[i]) ** 2 + (eta[np.mod(i + 1, 3)] - eta[i]) \
+                          ** 2
                 c_k += eps[i] * eta[np.mod(i + 1, 3)] - eps[np.mod(i + 1, 3)] * eta[i]
             c_k = 2 * c_k / max(1e-4, np.sqrt(p_temp))
             return c_k
@@ -389,7 +394,7 @@ class NaturalGradient(GradientBase):
             tol_cond_a: tolerance for the condition number of A
 
         Returns:
-            solution to the regularized SLE
+            solution to the regularized system of linear equations
 
         """
         if regularization == 'ridge':

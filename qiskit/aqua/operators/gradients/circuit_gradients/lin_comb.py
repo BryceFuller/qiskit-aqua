@@ -63,10 +63,10 @@ class LinComb(CircuitGradient):
             operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
                     If a ParameterExpression, ParameterVector or List[ParameterExpression] is given,
-                    then the 1st oder derivative of the operator is calculated.
+                    then the 1st order derivative of the operator is calculated.
                     If a Tuple[ParameterExpression, ParameterExpression] or
                     List[Tuple[ParameterExpression, ParameterExpression]]
-                    is given, then the 2nd oder derivative of the operator is calculated.
+                    is given, then the 2nd order derivative of the operator is calculated.
 
         Returns:
             An operator corresponding to the gradient resp. Hessian. The order is in accordance with
@@ -91,10 +91,10 @@ class LinComb(CircuitGradient):
             operator: The operator we are taking the gradient of: ⟨ψ(ω)|O(θ)|ψ(ω)〉
             params: The parameters we are taking the gradient wrt: ω
                     If a ParameterExpression, ParameterVector or List[ParameterExpression] is given,
-                    then the 1st oder derivative of the operator is calculated.
+                    then the 1st order derivative of the operator is calculated.
                     If a Tuple[ParameterExpression, ParameterExpression] or
                     List[Tuple[ParameterExpression, ParameterExpression]]
-                    is given, then the 2nd oder derivative of the operator is calculated.
+                    is given, then the 2nd order derivative of the operator is calculated.
 
         Returns:
             Adapted operator.
@@ -108,53 +108,61 @@ class LinComb(CircuitGradient):
 
         Raises:
             ValueError: If ``operator`` does not correspond to an expectation value.
+            TypeError: If the ``StateFn`` corresponding to the quantum state could not be extracted
+                       from ``operator``.
             AquaError: If third or higher order gradients are requested.
         """
 
         if isinstance(operator, ComposedOp):
             # Get the measurement and the state operator
-            if not isinstance(operator[0], StateFn) or not operator[0]._is_measurement:
+            if not isinstance(operator[0], StateFn) or not operator[0].is_measurement:
                 raise ValueError("The given operator does not correspond to an expectation value")
-            if not isinstance(operator[-1], StateFn) or operator[-1]._is_measurement:
+            if not isinstance(operator[-1], StateFn) or operator[-1].is_measurement:
                 raise ValueError("The given operator does not correspond to an expectation value")
             if operator[0].is_measurement:
                 if len(operator.oplist) == 2:
                     state_op = operator[1]
-                    if isinstance(params, (ParameterExpression, ParameterVector,
-                                           List[ParameterExpression])):
+                    if not isinstance(state_op, StateFn):
+                        raise TypeError('The StateFn representing the quantum state could not be'
+                                        'extracted.')
+                    if isinstance(params, (ParameterExpression, ParameterVector)) or \
+                            (isinstance(params, list) and all(isinstance(param, ParameterExpression)
+                                                              for param in params)):
                         return self._gradient_states(state_op, meas_op=(~StateFn(Z) ^ operator[0]),
                                                      target_params=params)
-                    elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                             List[Tuple[ParameterExpression,
-                                                        ParameterExpression]])):
+                    elif isinstance(params, tuple) or \
+                            (isinstance(params, list) and all(isinstance(param, tuple)
+                                                              for param in params)):
                         return self._hessian_states(state_op,
                                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
-                                                    target_params=params)
+                                                    target_params=params)  # type: ignore
                     else:
-                        raise AquaError(
-                            'The linear combination gradient does only support the computation '
-                            'of 1st gradients and 2nd order gradients.')
+                        raise AquaError('The linear combination gradient does only support the '
+                                        'computation of 1st gradients and 2nd order gradients.')
                 else:
                     state_op = deepcopy(operator)
                     state_op.oplist.pop(0)
+                    if not isinstance(state_op, StateFn):
+                        raise TypeError('The StateFn representing the quantum state could not be'
+                                        'extracted.')
 
-                    if isinstance(params, (ParameterExpression, ParameterVector,
-                                           List[ParameterExpression])):
+                    if isinstance(params, (ParameterExpression, ParameterVector)) or \
+                            (isinstance(params, list) and all(isinstance(param, ParameterExpression)
+                                                              for param in params)):
                         return state_op.traverse(
                             partial(self._gradient_states, meas_op=(~StateFn(Z) ^ operator[0]),
                                     target_params=params))
-                    elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                             List[Tuple[ParameterExpression,
-                                                        ParameterExpression]])):
+                    elif isinstance(params, tuple) or \
+                        (isinstance(params, list) and all(isinstance(param, tuple)
+                                                          for param in params)):
                         return state_op.traverse(
                             partial(self._hessian_states,
                                     meas_op=(4 * ~StateFn(Z ^ I) ^ operator[0]),
                                     target_params=params))
 
-                    else:
-                        raise AquaError(
-                            'The linear combination gradient does only support the computation '
-                            'of 1st gradients and 2nd order gradients.')
+                    raise AquaError(
+                        'The linear combination gradient does only support the computation '
+                        'of 1st gradients and 2nd order gradients.')
             else:
                 return operator.traverse(partial(self._prepare_operator, params=params))
         elif isinstance(operator, ListOp):
@@ -163,12 +171,14 @@ class LinComb(CircuitGradient):
             if operator.is_measurement:
                 return operator.traverse(partial(self._prepare_operator, params=params))
             else:
-                if isinstance(params, (ParameterExpression, ParameterVector,
-                                       List[ParameterExpression])):
+                if isinstance(params, (ParameterExpression, ParameterVector)) or \
+                        (isinstance(params, list) and all(isinstance(param, ParameterExpression)
+                                                          for param in params)):
                     return self._gradient_states(operator, target_params=params)
-                elif isinstance(params, (Tuple[ParameterExpression, ParameterExpression],
-                                         List[Tuple[ParameterExpression, ParameterExpression]])):
-                    return self._hessian_states(operator, target_params=params)
+                elif isinstance(params, tuple) or \
+                        (isinstance(params, list) and all(isinstance(param, tuple)
+                                                          for param in params)):
+                    return self._hessian_states(operator, target_params=params)  # type: ignore
                 else:
                     raise AquaError(
                         'The linear combination gradient does only support the computation '
@@ -202,16 +212,16 @@ class LinComb(CircuitGradient):
         """
         state_qc = deepcopy(state_op.primitive)
 
-        if not isinstance(target_params, Iterable):
+        if not isinstance(target_params, (list, np.ndarray)):
             target_params = [target_params]
 
         if len(target_params) > 1:
-            states = []
+            states = None
 
         # Define the working qubit to realize the linar combination of unitaries
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
-        additional_qubits = ([work_q], [])
+        additional_qubits: Tuple[List[Qubit], List[Qubit]] = ([work_q], [])
 
         for param in target_params:
             if param not in state_qc._parameter_table.get_keys():
@@ -309,7 +319,10 @@ class LinComb(CircuitGradient):
                             # Product Rule
                             op += state
                 if len(target_params) > 1:
-                    states += [op]
+                    if not states:
+                        states = [op]
+                    else:
+                        states += [op]
                 else:
                     return op
         if len(target_params) > 1:
@@ -320,19 +333,20 @@ class LinComb(CircuitGradient):
     def _hessian_states(self,
                         state_op: StateFn,
                         meas_op: Optional[OperatorBase] = None,
-                        target_params: Optional[
-                            Union[Tuple[ParameterExpression, ParameterExpression],
-                                  List[Tuple[ParameterExpression, ParameterExpression]]]]
-                        = None) -> OperatorBase:
+                        target_params: Optional[Union[Tuple[ParameterExpression,
+                                                            ParameterExpression],
+                                                      List[Tuple[ParameterExpression,
+                                                                 ParameterExpression]]]] = None
+                        ) -> OperatorBase:
         """Generate the operator states whose evaluation returns the Hessian (items).
 
         Args:
-            state_op: The operator representing the quantum state for which we compute the hessian.
+            state_op: The operator representing the quantum state for which we compute the Hessian.
             meas_op: The operator representing the observable for which we compute the gradient.
-            target_params: The parameters we are computing the hessian wrt: ω
+            target_params: The parameters we are computing the Hessian wrt: ω
 
         Returns:
-            Operators which give the hessian. If a parameter appears multiple times, one circuit is
+            Operators which give the Hessian. If a parameter appears multiple times, one circuit is
             created per parameterized gates to compute the product rule.
 
         Raises:
@@ -369,7 +383,7 @@ class LinComb(CircuitGradient):
         circuit = QuantumCircuit(*state_qc.qregs, qr_add0, qr_add1)
         circuit.data = state_qc.data
         # Get the circuits needed to compute the Hessian
-        hessian_ops = []
+        hessian_ops = None
         for param_a, param_b in tuples_list:
 
             if param_a not in state_qc._parameter_table.get_keys() or param_b \
@@ -545,7 +559,10 @@ class LinComb(CircuitGradient):
             if len(tuples_list) == 1:
                 return hessian_op
             else:
-                hessian_ops += [hessian_op]
+                if not hessian_ops:
+                    hessian_ops = [hessian_op]
+                else:
+                    hessian_ops += [hessian_op]
         return ListOp(hessian_ops)
 
     @staticmethod
@@ -734,11 +751,10 @@ class LinComb(CircuitGradient):
                     qubits: Optional[List[Qubit]] = None,
                     additional_qubits: Optional[Tuple[List[Qubit], List[Qubit]]] = None,
                     after: bool = False):
-
         """Insert a gate into the circuit.
 
         Args:
-            circuit: The circuit onto which the gare is added.
+            circuit: The circuit onto which the gate is added.
             reference_gate: A gate instance before or after which a gate is inserted.
             gate_to_insert: The gate to be inserted.
             qubits: The qubits on which the gate is inserted. If None, the qubits of the
@@ -760,11 +776,10 @@ class LinComb(CircuitGradient):
                     qubits = qubits or op[1]
                     if additional_qubits:
                         qubits = additional_qubits[0] + qubits + additional_qubits[1]
-                    op_to_insert = (gate_to_insert, qubits, [])
                     if after:
                         insertion_index = i + 1
                     else:
                         insertion_index = i
-                    circuit.data.insert(insertion_index, op_to_insert)
+                    circuit.data.insert(insertion_index, (gate_to_insert, qubits, []))
                     return
             raise AquaError('Could not insert the controlled gate, something went wrong!')

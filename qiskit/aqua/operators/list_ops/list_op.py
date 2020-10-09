@@ -13,8 +13,8 @@
 """ ListOp Operator Class """
 
 from functools import reduce
+from typing import List, Union, Optional, Callable, Iterator, Set, Dict, cast
 from numbers import Number
-from typing import List, Union, Optional, Callable, Iterator, Set, Dict
 
 import numpy as np
 from scipy.sparse import spmatrix
@@ -66,7 +66,6 @@ class ListOp(OperatorBase):
             abelian: Indicates whether the Operators in ``oplist`` are known to mutually commute.
             grad_combo_fn: The gradient of recombination function. If None, the gradient will
                 be computed automatically.
-
             Note that the default "recombination function" lambda above is essentially the
             identity - it accepts the list of values, and returns them in a list.
         """
@@ -300,17 +299,18 @@ class ListOp(OperatorBase):
             NotImplementedError: Attempting to call ListOp's eval from a non-distributive subclass.
 
         """
-        # The below code only works for distributive ListOps, e.g. ListOp and SummedOp
-
+        # pylint: disable=cyclic-import
         from ..state_fns.dict_state_fn import DictStateFn
         from ..state_fns.vector_state_fn import VectorStateFn
 
+        # The below code only works for distributive ListOps, e.g. ListOp and SummedOp
         if not self.distributive:
-            raise NotImplementedError(r'ListOp\'s eval function is only defined for distributive '
-                                      r'Listops.')
+            raise NotImplementedError("ListOp's eval function is only defined for distributive "
+                                      "ListOps.")
+
         evals = [(self.coeff * op).eval(front) for op in self.oplist]  # type: ignore
 
-        # Handle application of combo_fn for {Dict,Vector}StateFns
+        # Handle application of combo_fn for DictStateFn resp VectorStateFn operators
         if self._combo_fn != ListOp([])._combo_fn:
             if all(isinstance(op, DictStateFn) for op in evals) or \
                     all(isinstance(op, VectorStateFn) for op in evals):
@@ -406,11 +406,11 @@ class ListOp(OperatorBase):
             return ListOp(
                 [op.to_matrix_op(massive=massive) for op in self.oplist],  # type: ignore
                 combo_fn=self.combo_fn, coeff=self.coeff, abelian=self.abelian
-            ).reduce()
+                ).reduce()
         return self.__class__(
             [op.to_matrix_op(massive=massive) for op in self.oplist],  # type: ignore
             coeff=self.coeff, abelian=self.abelian
-        ).reduce()
+            ).reduce()
 
     def to_circuit_op(self) -> OperatorBase:
         """ Returns an equivalent Operator composed of only QuantumCircuit-based primitives,

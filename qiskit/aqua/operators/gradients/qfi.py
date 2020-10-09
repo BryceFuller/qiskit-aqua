@@ -23,11 +23,14 @@ from .qfi_base import QFIBase
 
 
 class QFI(QFIBase):
-    r"""Compute the Quantum Fisher Information (QFI) given a pure, parametrized quantum state.
+    r"""Compute the Quantum Fisher Information (QFI).
 
-    The QFI is:
+    Computes the QFI given a pure, parametrized quantum state, where QFI is:
+
+    .. code-block::
 
         [QFI]kl= Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉] * 4.
+
     """
 
     def convert(self,
@@ -37,7 +40,7 @@ class QFI(QFIBase):
                 ) -> ListOp:
         r"""
         Args:
-            operator: The operator corresponding to the quantum state |ψ(ω)〉for which we compute
+            operator: The operator corresponding to the quantum state \|ψ(ω)〉for which we compute
                 the QFI
             params: The parameters we are computing the QFI wrt: ω
 

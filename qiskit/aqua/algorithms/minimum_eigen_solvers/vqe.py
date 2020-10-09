@@ -15,31 +15,30 @@
 See https://arxiv.org/abs/1304.3061
 """
 
+from typing import Optional, List, Callable, Union, Dict, Any
 import logging
 import warnings
 from time import time
-from typing import Optional, List, Callable, Union, Dict, Any
-
 import numpy as np
+
 from qiskit import ClassicalRegister, QuantumCircuit
-from qiskit.aqua import QuantumInstance, AquaError
-from qiskit.aqua.algorithms import QuantumAlgorithm
-from qiskit.aqua.components.optimizers import Optimizer, SLSQP
-from qiskit.aqua.components.variational_forms import VariationalForm
-from qiskit.aqua.operators import (OperatorBase, ExpectationBase, ExpectationFactory, StateFn,
-                                   CircuitStateFn, LegacyBaseOperator, ListOp, I, CircuitSampler)
-from qiskit.aqua.operators.gradients import GradientBase
-from qiskit.aqua.utils.backend_utils import is_aer_provider
-from qiskit.aqua.utils.validation import validate_min
 from qiskit.circuit import Parameter
 from qiskit.circuit.library import RealAmplitudes
 from qiskit.providers import BaseBackend
-
-from .minimum_eigen_solver import MinimumEigensolver, MinimumEigensolverResult
+from qiskit.providers import Backend
+from qiskit.aqua import QuantumInstance, AquaError
+from qiskit.aqua.algorithms import QuantumAlgorithm
+from qiskit.aqua.operators import (OperatorBase, ExpectationBase, ExpectationFactory, StateFn,
+                                   CircuitStateFn, LegacyBaseOperator, ListOp, I, CircuitSampler)
+from qiskit.aqua.operators.gradients import GradientBase
+from qiskit.aqua.components.optimizers import Optimizer, SLSQP
+from qiskit.aqua.components.variational_forms import VariationalForm
+from qiskit.aqua.utils.validation import validate_min
+from qiskit.aqua.utils.backend_utils import is_aer_provider
 from ..vq_algorithm import VQAlgorithm, VQResult
+from .minimum_eigen_solver import MinimumEigensolver, MinimumEigensolverResult
 
 logger = logging.getLogger(__name__)
-
 
 # disable check for var_forms, optimizer setter because of pylint bug
 # pylint: disable=no-member
@@ -100,7 +99,8 @@ class VQE(VQAlgorithm, MinimumEigensolver):
                  aux_operators: Optional[List[Optional[Union[OperatorBase,
                                                              LegacyBaseOperator]]]] = None,
                  callback: Optional[Callable[[int, np.ndarray, float, float], None]] = None,
-                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
+                 quantum_instance: Optional[
+                     Union[QuantumInstance, BaseBackend, Backend]] = None) -> None:
         """
 
         Args:
@@ -128,7 +128,8 @@ class VQE(VQAlgorithm, MinimumEigensolver):
                 potentially the expectation values can be computed in parallel. Typically this is
                 possible when a finite difference gradient is used by the optimizer such that
                 multiple points to compute the gradient can be passed and if computed in parallel
-                improve overall execution time.
+                improve overall execution time. Deprecated if a gradient operator or function is
+                given.
             aux_operators: Optional list of auxiliary operators to be evaluated with the
                 eigenstate of the minimum eigenvalue main result and their expectation values
                 returned. For instance in chemistry these can be dipole operators, total particle
@@ -206,7 +207,8 @@ class VQE(VQAlgorithm, MinimumEigensolver):
         self._expect_op = None
 
     @QuantumAlgorithm.quantum_instance.setter
-    def quantum_instance(self, quantum_instance: Union[QuantumInstance, BaseBackend]) -> None:
+    def quantum_instance(self, quantum_instance: Union[QuantumInstance,
+                                                       BaseBackend, Backend]) -> None:
         """ set quantum_instance """
         super(VQE, self.__class__).quantum_instance.__set__(self, quantum_instance)
 

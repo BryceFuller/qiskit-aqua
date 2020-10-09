@@ -21,6 +21,12 @@ import numpy as np
 from ddt import ddt, data, idata, unpack
 from sympy import Symbol, cos
 
+try:
+    import jax.numpy as jnp
+    _HAS_JAX = True
+except ImportError:
+    _HAS_JAX = False
+
 from qiskit import Aer
 from qiskit import QuantumCircuit, QuantumRegister, BasicAer
 from qiskit.aqua import QuantumInstance
@@ -427,6 +433,7 @@ class TestGradients(QiskitAquaTestCase):
                                                  correct_values[i],
                                                  decimal=0)
 
+    @unittest.skipIf(not _HAS_JAX, 'Skipping test due to missing jax module.')
     @idata(product(['lin_comb', 'param_shift', 'fin_diff'], [True, False]))
     @unpack
     def test_jax_chain_rule(self, method: str, autograd: bool):
@@ -452,10 +459,9 @@ class TestGradients(QiskitAquaTestCase):
         qc.rx(params[1], q[0])
 
         def combo_fn(x):
-            import jax.numpy as jnp
             return jnp.power(x[0], 2) + jnp.cos(x[1])
 
-        def grad_combo_fn(x):  # should be `*x` to align with autograd
+        def grad_combo_fn(x):
             return np.array([2 * x[0], -np.sin(x[1])])
 
         op = ListOp([~StateFn(X) @ CircuitStateFn(primitive=qc, coeff=1.),
@@ -637,8 +643,8 @@ class TestGradients(QiskitAquaTestCase):
                                 seed_simulator=2,
                                 seed_transpiler=2)
         # Define the Hamiltonian
-        h2_hamiltonian = -1.05 * (I ^ I) + 0.39 * (I ^ Z) - 0.39 * (Z ^ I) - 0.01 * (
-                Z ^ Z) + 0.18 * (X ^ X)
+        h2_hamiltonian = -1.05 * (I ^ I) + 0.39 * (I ^ Z) - 0.39 * (Z ^ I) - 0.01 * (Z ^ Z) + 0.18 \
+            * (X ^ X)
         h2_energy = -1.85727503
 
         # Define the Ansatz
@@ -656,7 +662,7 @@ class TestGradients(QiskitAquaTestCase):
         wavefunction.rz(next(itr), 1)
 
         # Conjugate Gradient algorithm
-        optimizer = CG(maxiter=50)
+        optimizer = CG(maxiter=10)
 
         grad = Gradient(grad_method=method)
 

@@ -13,7 +13,6 @@
 """The module for Quantum the Fisher Information."""
 
 import copy
-from collections.abc import Iterable
 from copy import deepcopy
 from typing import List, Union, Optional, Tuple
 
@@ -71,13 +70,13 @@ class LinCombFull(CircuitQFI):
             raise TypeError(
                 'The gradient framework is compatible with states that are given as CircuitStateFn')
 
-        if not isinstance(params, Iterable):
+        if not isinstance(params, (list, np.ndarray)):
             params = [params]
         state_qc = copy.deepcopy(operator.primitive)
 
         # First, the operators are computed which can compensate for a potential phase-mismatch
         # between target and trained state, i.e.〈ψ|∂lψ〉
-        phase_fix_states = []
+        phase_fix_states = None
         qr_work = QuantumRegister(1, 'work_qubit')
         work_q = qr_work[0]
         additional_qubits: Tuple[List[Qubit], List[Qubit]] = ([work_q], [])
@@ -166,7 +165,10 @@ class LinCombFull(CircuitQFI):
                         phase_fix_state = state
                     else:
                         phase_fix_state += state
-            phase_fix_states += [phase_fix_state]
+            if not phase_fix_states:
+                phase_fix_states = [phase_fix_state]
+            else:
+                phase_fix_states += [phase_fix_state]
 
         # Get  4 * Re[〈∂kψ|∂lψ]
         qfi_operators = []
@@ -181,7 +183,7 @@ class LinCombFull(CircuitQFI):
 
         # Get the circuits needed to compute〈∂iψ|∂jψ〉
         for i, param_i in enumerate(params):  # loop over parameters
-            qfi_ops = []
+            qfi_ops = None
             for j, param_j in enumerate(params):
                 # Construct the circuits
                 param_gates_i = state_qc._parameter_table[param_i]
@@ -347,7 +349,10 @@ class LinCombFull(CircuitQFI):
                                    combo_fn=phase_fix_combo_fn)
                 # Add the phase fix quantities to the entries of the QFI
                 # Get 4 * Re[〈∂kψ|∂lψ〉−〈∂kψ|ψ〉〈ψ|∂lψ〉]
-                qfi_ops += [qfi_op + phase_fix]
+                if not qfi_ops:
+                    qfi_ops = [qfi_op + phase_fix]
+                else:
+                    qfi_ops += [qfi_op + phase_fix]
             qfi_operators.append(ListOp(qfi_ops))
         # Return the full QFI
         return ListOp(qfi_operators)
