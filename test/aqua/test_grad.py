@@ -290,13 +290,52 @@ class TestGradients(QiskitAquaTestCase):
         qc.rx(b, q[0])
 
         op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
-        state_hess = Hessian(method=method).convert(operator=op, params=params)
+        state_hess = Hessian(hess_method=method).convert(operator=op, params=params)
 
         values_dict = [{a: np.pi / 4, b: np.pi}, {a: np.pi / 4, b: np.pi / 4},
                        {a: np.pi / 2, b: np.pi / 4}]
         correct_values = [[-0.5 / np.sqrt(2), 1 / np.sqrt(2), 0],
                           [-0.5 / np.sqrt(2) + 0.5, -1 / 2., 0.5],
                           [1 / np.sqrt(2), 0, 1 / np.sqrt(2)]]
+
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
+
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_state_hessian_custom_combo_fn(self, method):
+        """Test the state Hessian with on an operator which includes
+            a user-defined combo_fn.
+
+        Tr(|psi><psi|Z) = sin(a)sin(b)
+        Tr(|psi><psi|X) = cos(a)
+        d^2<H>/da^2 = - 0.5 cos(a) + 1 sin(a)sin(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/db^2 = + 1 sin(a)sin(b)
+        """
+
+        ham = 0.5 * X - 1 * Z
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [(a, a), (a, b), (b, b)]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
+
+        op = ListOp([~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)], combo_fn= lambda x: x[0]**3 + 4*x[0])
+        state_hess = Hessian(hess_method=method).convert(operator=op, params=params)
+
+        values_dict = [{a: np.pi / 4, b: np.pi}, 
+                       {a: np.pi / 4, b: np.pi / 4},
+                       {a: np.pi / 2, b: np.pi / 4}]
+
+        correct_values = [[-1.28163104,  2.56326208,  1.06066017]
+                          [-0.04495626, -2.40716991,  1.8125    ]
+                          [ 2.82842712, -1.5,         1.76776695]]
 
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(),
@@ -487,7 +526,7 @@ class TestGradients(QiskitAquaTestCase):
         ham = coeff_0 * coeff_0 * X + coeff_1 * coeff_0 * Z
         op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
         gradient_coeffs = [(coeff_0, coeff_0), (coeff_0, coeff_1), (coeff_1, coeff_1)]
-        coeff_grad = Hessian(method=method).convert(op, gradient_coeffs)
+        coeff_grad = Hessian(hess_method=method).convert(op, gradient_coeffs)
         values_dict = [{coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi},
                        {coeff_0: 0.5, coeff_1: -1, a: np.pi / 4, b: np.pi / 4}]
 
@@ -587,6 +626,8 @@ class TestGradients(QiskitAquaTestCase):
             result = sampler.eval()
             np.testing.assert_array_almost_equal(result[0], correct_values[i], decimal=1)
 
+    
+    
     @idata(product(['statevector_simulator', 'qasm_simulator'],
                    ['lin_comb', 'param_shift', 'fin_diff']))
     @unpack
@@ -617,7 +658,7 @@ class TestGradients(QiskitAquaTestCase):
         # Conjugate Gradient algorithm
         optimizer = CG(maxiter=50)
 
-        grad = Gradient(method=method)
+        grad = Gradient(grad_method=method)
 
         # Gradient callable
         vqe = VQE(h2_hamiltonian, wavefunction, optimizer=optimizer, gradient=grad)
