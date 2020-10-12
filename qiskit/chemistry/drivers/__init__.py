@@ -51,6 +51,7 @@ Driver Base Class
    :nosignatures:
 
    BaseDriver
+   FermionicDriver
 
 Driver Common
 =============
@@ -59,8 +60,9 @@ Driver Common
    :toctree: ../stubs/
    :nosignatures:
 
-   UnitsType
+   Molecule
    HFMethodType
+   UnitsType
    BasisType
    InitialGuess
 
@@ -99,7 +101,11 @@ FCIDump file and again needs no special install.
    FCIDumpDriver
 
 """
-from ._basedriver import BaseDriver, UnitsType, HFMethodType
+
+from .base_driver import BaseDriver
+from .molecule import Molecule
+from .fermionic_driver import FermionicDriver, HFMethodType
+from .units_type import UnitsType
 from .fcidumpd import FCIDumpDriver
 from .gaussiand import GaussianDriver
 from .hdf5d import HDF5Driver
@@ -107,9 +113,11 @@ from .psi4d import PSI4Driver
 from .pyquanted import PyQuanteDriver, BasisType
 from .pyscfd import PySCFDriver, InitialGuess
 
-__all__ = ['BaseDriver',
+__all__ = ['HFMethodType',
+           'Molecule',
+           'BaseDriver',
+           'FermionicDriver',
            'UnitsType',
-           'HFMethodType',
            'FCIDumpDriver',
            'GaussianDriver',
            'HDF5Driver',
