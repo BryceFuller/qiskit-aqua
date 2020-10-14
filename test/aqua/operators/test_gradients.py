@@ -27,15 +27,15 @@ try:
 except ImportError:
     _HAS_JAX = False
 
-from qiskit import Aer
 from qiskit import QuantumCircuit, QuantumRegister, BasicAer
 from qiskit.aqua import QuantumInstance
 from qiskit.aqua import aqua_globals
 from qiskit.aqua.algorithms import VQE
 from qiskit.aqua.components.optimizers import CG
-from qiskit.aqua.operators import I, X, Z, StateFn, CircuitStateFn, ListOp, CircuitSampler
+from qiskit.aqua.operators import I, X, Y, Z, StateFn, CircuitStateFn, ListOp, CircuitSampler
 from qiskit.aqua.operators.gradients import Gradient, NaturalGradient, Hessian
 from qiskit.aqua.operators.gradients.qfi import QFI
+from qiskit.aqua.operators.gradients.circuit_qfis import LinCombFull, OverlapBlockDiag, OverlapDiag
 from qiskit.circuit import Parameter, ParameterExpression
 from qiskit.circuit import ParameterVector
 
@@ -58,12 +58,12 @@ class TestGradients(QiskitAquaTestCase):
         """
         ham = 0.5 * X - 1 * Z
         a = Parameter('a')
-        params = [a]
+        params = a
 
         q = QuantumRegister(1)
         qc = QuantumCircuit(q)
         qc.h(q)
-        qc.p(params[0], q[0])
+        qc.p(a, q[0])
         op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
 
         state_grad = Gradient(grad_method=method).convert(operator=op, params=params)
@@ -119,6 +119,90 @@ class TestGradients(QiskitAquaTestCase):
             np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
                                                  correct_values[i],
                                                  decimal=1)
+
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_gradient_rxx(self, method):
+        """Test the state gradient for XX rotation
+        """
+        ham = Z ^ X
+        a = Parameter('a')
+
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.h(q[0])
+        qc.rxx(a, q[0], q[1])
+
+        op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
+        params = [a]
+        state_grad = Gradient(grad_method=method).convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 4}, {a: np.pi / 2}]
+        correct_values = [[-0.707], [-1.]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
+
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_gradient_ryy(self, method):
+        # pylint: disable=wrong-spelling-in-comment
+        """Test the state gradient for YY rotation
+        """
+        ham = Y ^ Y
+        a = Parameter('a')
+
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.ryy(a, q[0], q[1])
+
+        op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
+        state_grad = Gradient(grad_method=method).convert(operator=op, params=a)
+        values_dict = [{a: np.pi / 8}, {a: np.pi}]
+        correct_values = [[0], [0]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
+
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_gradient_rzz(self, method):
+        # pylint: disable=wrong-spelling-in-comment
+        """Test the state gradient for ZZ rotation
+        """
+        ham = Z ^ X
+        a = Parameter('a')
+
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.h(q[0])
+        qc.rzz(a, q[0], q[1])
+
+        op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
+        params = [a]
+        state_grad = Gradient(grad_method=method).convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 4}, {a: np.pi / 2}]
+        correct_values = [[-0.707], [-1.]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
+
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_gradient_rzx(self, method):
+        """Test the state gradient for ZX rotation
+        """
+        ham = Z ^ Z
+        a = Parameter('a')
+
+        q = QuantumRegister(2)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rzx(a, q[0], q[1])
+
+        op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
+        params = [a]
+        state_grad = Gradient(grad_method=method).convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 8}, {a: np.pi / 2}]
+        correct_values = [[0.], [0.]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
 
     @data('lin_comb', 'param_shift', 'fin_diff')
     def test_state_gradient1(self, method):
@@ -193,7 +277,7 @@ class TestGradients(QiskitAquaTestCase):
         ham = 0.5 * X - 1 * Z
         a = Parameter('a')
         # b = Parameter('b')
-        params = [a]
+        params = a
         x = Symbol('x')
         expr = cos(x) + 1
         c = ParameterExpression({a: x}, expr)
@@ -222,7 +306,7 @@ class TestGradients(QiskitAquaTestCase):
 
         ham = X ^ Z
         a = Parameter('a')
-        params = [a]
+        params = a
 
         q = QuantumRegister(2)
         qc = QuantumCircuit(q)
@@ -308,6 +392,47 @@ class TestGradients(QiskitAquaTestCase):
             np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(),
                                                  correct_values[i], decimal=1)
 
+    @unittest.skipIf(not _HAS_JAX, 'Skipping test due to missing jax module.')
+    @data('lin_comb', 'param_shift', 'fin_diff')
+    def test_state_hessian_custom_combo_fn(self, method):
+        """Test the state Hessian with on an operator which includes
+            a user-defined combo_fn.
+
+        Tr(|psi><psi|Z) = sin(a)sin(b)
+        Tr(|psi><psi|X) = cos(a)
+        d^2<H>/da^2 = - 0.5 cos(a) + 1 sin(a)sin(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/dbda = - 1 cos(a)cos(b)
+        d^2<H>/db^2 = + 1 sin(a)sin(b)
+        """
+
+        ham = 0.5 * X - 1 * Z
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [(a, a), (a, b), (b, b)]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
+
+        op = ListOp([~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)],
+                    combo_fn=lambda x: x[0] ** 3 + 4 * x[0])
+        state_hess = Hessian(hess_method=method).convert(operator=op, params=params)
+
+        values_dict = [{a: np.pi / 4, b: np.pi},
+                       {a: np.pi / 4, b: np.pi / 4},
+                       {a: np.pi / 2, b: np.pi / 4}]
+
+        correct_values = [[-1.28163104, 2.56326208, 1.06066017],
+                          [-0.04495626, -2.40716991, 1.8125],
+                          [2.82842712, -1.5, 1.76776695]]
+
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(state_hess.assign_parameters(value_dict).eval(),
+                                                 correct_values[i], decimal=1)
+
     @data('lin_comb', 'param_shift', 'fin_diff')
     def test_state_hessian_custom_combo_fn(self, method):
         """Test the state Hessian with on an operator which includes
@@ -380,6 +505,38 @@ class TestGradients(QiskitAquaTestCase):
                 np.testing.assert_array_almost_equal(prob_grad_result,
                                                      correct_values[i][j], decimal=1)
 
+    def test_prob_hess_lin_comb(self):
+        """Test the probability Hessian using linear combination of unitaries method
+
+        d^2p0/da^2 = - sin(a)sin(b) / 2
+        d^2p1/da^2 =  sin(a)sin(b) / 2
+        d^2p0/dadb = cos(a)cos(b) / 2
+        d^2p1/dadb = - cos(a)cos(b) / 2
+        """
+
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [(a, a), (a, b)]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+        qc.rx(b, q[0])
+
+        op = CircuitStateFn(primitive=qc, coeff=1.)
+
+        prob_hess = Hessian(hess_method='lin_comb').convert(operator=op, params=params)
+        values_dict = [{a: np.pi / 4, b: 0}, {a: np.pi / 4, b: np.pi / 4},
+                       {a: np.pi / 2, b: np.pi}]
+        correct_values = [[[0, 0], [1 / (2 * np.sqrt(2)), - 1 / (2 * np.sqrt(2))]],
+                          [[- 1 / 4, 1 / 4], [1 / 4, - 1 / 4]],
+                          [[0, 0], [0, 0]]]
+        for i, value_dict in enumerate(values_dict):
+            for j, prob_hess_result in enumerate(prob_hess.assign_parameters(value_dict).eval()):
+                np.testing.assert_array_almost_equal(prob_hess_result,
+                                                     correct_values[i][j], decimal=1)
+
     @data('lin_comb_full', 'overlap_block_diag', 'overlap_diag')
     def test_qfi(self, method):
         """Test if the quantum fisher information calculation is correct
@@ -407,7 +564,7 @@ class TestGradients(QiskitAquaTestCase):
                                                  correct_values[i], decimal=1)
 
     @idata(product(['lin_comb', 'param_shift', 'fin_diff'],
-                   [None, 'lasso', 'perturb_diag', 'perturb_diag_elements']))
+                   [None, 'lasso', 'ridge', 'perturb_diag', 'perturb_diag_elements']))
     @unpack
     def test_natural_gradient(self, method, regularization):
         """Test the natural gradient"""
@@ -428,6 +585,49 @@ class TestGradients(QiskitAquaTestCase):
                                                                           params=params)
         values_dict = [{params[0]: np.pi / 4, params[1]: np.pi / 2}]
         correct_values = [[-2.36003979, 2.06503481]] if regularization == 'ridge' else [[-4.2, 0]]
+        for i, value_dict in enumerate(values_dict):
+            np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(),
+                                                 correct_values[i],
+                                                 decimal=0)
+
+    def test_natural_gradient2(self):
+        """Test the natural gradient 2"""
+        with self.assertRaises(TypeError):
+            _ = NaturalGradient().convert(None)
+
+    @idata(zip(['lin_comb_full', 'overlap_block_diag', 'overlap_diag'],
+               [LinCombFull, OverlapBlockDiag, OverlapDiag]))
+    @unpack
+    def test_natural_gradient3(self, qfi_method, circuit_qfi):
+        """Test the natural gradient 3"""
+        nat_grad = NaturalGradient(qfi_method=qfi_method)
+        self.assertIsInstance(nat_grad.qfi_method, circuit_qfi)
+
+    @idata(product(['lin_comb', 'param_shift', 'fin_diff'],
+                   ['lin_comb_full', 'overlap_block_diag', 'overlap_diag'],
+                   [None, 'ridge', 'perturb_diag', 'perturb_diag_elements']))
+    @unpack
+    def test_natural_gradient4(self, grad_method, qfi_method, regularization):
+        """Test the natural gradient 4"""
+
+        # Avoid regularization = lasso intentionally because it does not converge
+
+        ham = 0.5 * X - 1 * Z
+        a = Parameter('a')
+        params = a
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(a, q[0])
+
+        op = ~StateFn(ham) @ CircuitStateFn(primitive=qc, coeff=1.)
+        nat_grad = NaturalGradient(grad_method=grad_method,
+                                   qfi_method=qfi_method,
+                                   regularization=regularization).convert(operator=op,
+                                                                          params=params)
+        values_dict = [{a: np.pi / 4}]
+        correct_values = [[0.]] if regularization == 'ridge' else [[-1.41421342]]
         for i, value_dict in enumerate(values_dict):
             np.testing.assert_array_almost_equal(nat_grad.assign_parameters(value_dict).eval(),
                                                  correct_values[i],
@@ -567,7 +767,7 @@ class TestGradients(QiskitAquaTestCase):
 
         shots = 8000
         if method == 'fin_diff':
-            np.random.seed = 8
+            np.random.seed(8)
             state_grad = Gradient(grad_method=method, epsilon=shots ** (-1 / 6.)).convert(
                 operator=op,
                 params=params)
@@ -611,7 +811,7 @@ class TestGradients(QiskitAquaTestCase):
 
         shots = 8000
         if method == 'fin_diff':
-            np.random.seed = 8
+            np.random.seed(8)
             prob_grad = Gradient(grad_method=method, epsilon=shots ** (-1 / 6.)).convert(
                 operator=op,
                 params=params)
@@ -632,19 +832,55 @@ class TestGradients(QiskitAquaTestCase):
             result = sampler.eval()
             np.testing.assert_array_almost_equal(result[0], correct_values[i], decimal=1)
 
-    
-    
-    @idata(product(['statevector_simulator', 'qasm_simulator'],
-                   ['lin_comb', 'param_shift', 'fin_diff']))
-    @unpack
-    def test_vqe(self, backend, method):
+    @idata(['statevector_simulator', 'qasm_simulator'])
+    def test_gradient_wrapper(self, backend):
+        """Test the gradient wrapper for probability gradients
+        dp0/da = cos(a)sin(b) / 2
+        dp1/da = - cos(a)sin(b) / 2
+        dp0/db = sin(a)cos(b) / 2
+        dp1/db = - sin(a)cos(b) / 2
+        """
+        method = 'param_shift'
+        a = Parameter('a')
+        b = Parameter('b')
+        params = [a, b]
+
+        q = QuantumRegister(1)
+        qc = QuantumCircuit(q)
+        qc.h(q)
+        qc.rz(params[0], q[0])
+        qc.rx(params[1], q[0])
+
+        op = CircuitStateFn(primitive=qc, coeff=1.)
+
+        shots = 8000
+        backend = BasicAer.get_backend(backend)
+        q_instance = QuantumInstance(backend=backend, shots=shots)
+        if method == 'fin_diff':
+            np.random.seed(8)
+            prob_grad = Gradient(grad_method=method, epsilon=shots ** (-1 / 6.)).gradient_wrapper(
+                operator=op, bind_params=params, backend=q_instance)
+        else:
+            prob_grad = Gradient(grad_method=method).gradient_wrapper(operator=op,
+                                                                      bind_params=params,
+                                                                      backend=q_instance)
+        values = [[np.pi / 4, 0], [np.pi / 4, np.pi / 4], [np.pi / 2, np.pi]]
+        correct_values = [[[0, 0], [1 / (2 * np.sqrt(2)), - 1 / (2 * np.sqrt(2))]],
+                          [[1 / 4, -1 / 4], [1 / 4, - 1 / 4]],
+                          [[0, 0], [- 1 / 2, 1 / 2]]]
+        for i, value in enumerate(values):
+            result = prob_grad(value)
+            np.testing.assert_array_almost_equal(result, correct_values[i], decimal=1)
+
+    def test_vqe(self):
         """Test VQE with gradients"""
-        qi_sv = QuantumInstance(Aer.get_backend(backend),
-                                seed_simulator=2,
-                                seed_transpiler=2)
+        method = 'lin_comb'
+        backend = 'qasm_simulator'
+        q_instance = QuantumInstance(BasicAer.get_backend(backend), seed_simulator=79,
+                                     seed_transpiler=2)
         # Define the Hamiltonian
-        h2_hamiltonian = -1.05 * (I ^ I) + 0.39 * (I ^ Z) - 0.39 * (Z ^ I) - 0.01 * (Z ^ Z) + 0.18 \
-            * (X ^ X)
+        h2_hamiltonian = -1.05 * (I ^ I) + 0.39 * (I ^ Z) - 0.39 * (Z ^ I) \
+                         - 0.01 * (Z ^ Z) + 0.18 * (X ^ X)
         h2_energy = -1.85727503
 
         # Define the Ansatz
@@ -669,8 +905,8 @@ class TestGradients(QiskitAquaTestCase):
         # Gradient callable
         vqe = VQE(h2_hamiltonian, wavefunction, optimizer=optimizer, gradient=grad)
 
-        result = vqe.run(qi_sv)
-        np.testing.assert_almost_equal(result['optimal_value'], h2_energy, decimal=1)
+        result = vqe.run(q_instance)
+        np.testing.assert_almost_equal(result['optimal_value'], h2_energy, decimal=0)
 
 
 @ddt
