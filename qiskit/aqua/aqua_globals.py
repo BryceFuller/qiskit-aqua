@@ -33,6 +33,7 @@ class QiskitAquaGlobals:
         self._random_seed = None
         self._num_processes = QiskitAquaGlobals.CPU_COUNT
         self._random = None
+        self._massive = False
 
     @property
     def random_seed(self):
@@ -73,6 +74,16 @@ class QiskitAquaGlobals:
         if self._random is None:
             self._random = np.random.default_rng(self._random_seed)
         return self._random
+
+    @property
+    def massive(self) -> bool:
+        """Return massive to allow processing of large matrices or vectors."""
+        return self._massive
+
+    @massive.setter
+    def massive(self, massive: bool) -> None:
+        """Set massive to allow processing of large matrices or  vectors."""
+        self._massive = massive
 
 
 # Global instance to be used as the entry point for globals.
